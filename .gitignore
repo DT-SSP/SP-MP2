@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+*.db
+.env
+alembic.ini
+migrations/
+
+# 민감 정보 — 절대 커밋 금지
+google_config.py
+ssp-kpiapp-*.json
