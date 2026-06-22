@@ -13,7 +13,9 @@ from data.config import (
 from views.common import (
     parse as _parse, fmt as _fmt, pct as _pct,
     prev_month as _prev, drop_empty as _drop_empty, sort_by_order as _sort_corps,
+    C_NAVY as _C_NAVY, C_RED as _C_RED, C_LT_GRAY as _C_LT_GRAY,
     TH as _TH, TD_LBL as _TD_LBL, TD_NUM as _TD_NUM, TD_RED as _TD_RED,
+    TD_SUB_LBL as _TD_SUB_LBL, TD_SUB_NUM as _TD_SUB_NUM, TD_SUB_RED as _TD_SUB_RED,
     html_table as _html_table, memo_html as _memo_html, layout64 as _layout64,
 )
 
@@ -31,7 +33,7 @@ def _당월헤더(year, month, n):
 def _to_html_table(df):
     rows_html = ''
     for idx, row in df.iterrows():
-        bg    = ';background:#f9f9fb' if idx % 2 == 1 else ''
+        bg    = f';background:{_C_LT_GRAY}' if idx % 2 == 1 else ''
         cells = ''
         for i, val in enumerate(row):
             s = str(val)
@@ -41,7 +43,7 @@ def _to_html_table(df):
                 cells += f'<td style="{_TD_RED}{bg}">{s}</td>'
             else:
                 cells += f'<td style="{_TD_NUM}{bg}">{s}</td>'
-        rows_html += f'<tr>{cells}</tr>'
+        rows_html += f'<tr style="vertical-align:middle">{cells}</tr>'
 
     headers = ''.join(f'<th style="{_TH}">{c}</th>' for c in df.columns)
     return _html_table(f'<tr>{headers}</tr>', rows_html)
@@ -55,19 +57,17 @@ def _재무_to_html_table(df, 소계행, 헤더행):
     depths    = df['_depth'].tolist() if '_depth' in df.columns else [1] * len(df)
     render_df = df.drop(columns=['_depth'], errors='ignore')
 
-    td_hdr_num = 'background:#ede9f7;border-bottom:1px solid #d6ccee'
-    td_sub_num = 'padding:5px 10px;text-align:right;background:#f0edf8;font-weight:600;border-bottom:1px solid #e2e8f0'
-    td_sub_red = td_sub_num + ';color:#e53e3e'
+    _td_hdr_num = f'background:{_C_LT_GRAY};border-bottom:1px solid #DEE2E6'
     _pad    = {0: '8px',  1: '20px', 2: '36px'}
     _prefix = {0: '',     1: '&nbsp;&nbsp;&nbsp;', 2: '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'}
 
     rows_html = ''
-    for (idx, row), depth in zip(render_df.iterrows(), depths):
+    for (_, row), depth in zip(render_df.iterrows(), depths):
         d      = int(depth) if str(depth).lstrip('-').isdigit() else 1
         label  = str(row.iloc[0])
         is_hdr = label in 헤더행
         is_sub = label in 소계행
-        bg     = 'background:#f9f9fb' if (idx % 2 == 1 and not is_hdr and not is_sub) else ''
+        bg     = ''
         pad    = _pad.get(d, '20px')
         prefix = _prefix.get(d, '&nbsp;&nbsp;&nbsp;')
 
@@ -76,24 +76,24 @@ def _재무_to_html_table(df, 소계행, 헤더행):
             s = str(val)
             if is_hdr:
                 lbl_st = (f'padding:4px 8px;padding-left:{pad};text-align:left;'
-                          f'background:#ede9f7;font-weight:700;color:#5a3e8a;'
-                          f'border-bottom:1px solid #d6ccee')
+                          f'background:{_C_LT_GRAY};font-weight:700;color:{_C_NAVY};'
+                          f'border-bottom:1px solid #DEE2E6')
                 cells += (f'<td style="{lbl_st}">{prefix}{s}</td>' if i == 0
-                          else f'<td style="{td_hdr_num}"></td>')
+                          else f'<td style="{_td_hdr_num}"></td>')
             elif i == 0:
                 if is_sub:
                     lbl_st = (f'padding:5px 8px;padding-left:{pad};text-align:left;'
-                              f'background:#f0edf8;font-weight:600;'
+                              f'background:{_C_LT_GRAY};font-weight:600;'
                               f'border-bottom:1px solid #e2e8f0')
                 else:
                     lbl_st = (f'padding:5px 8px;padding-left:{pad};text-align:left;'
                               f'border-bottom:1px solid #e2e8f0;{bg}')
                 cells += f'<td style="{lbl_st}">{prefix}{s}</td>'
             elif s.startswith('-'):
-                cells += f'<td style="{td_sub_red if is_sub else _TD_RED+";"+bg}">{s}</td>'
+                cells += f'<td style="{_TD_SUB_RED if is_sub else _TD_RED+";"+bg}">{s}</td>'
             else:
-                cells += f'<td style="{td_sub_num if is_sub else _TD_NUM+";"+bg}">{s}</td>'
-        rows_html += f'<tr>{cells}</tr>'
+                cells += f'<td style="{_TD_SUB_NUM if is_sub else _TD_NUM+";"+bg}">{s}</td>'
+        rows_html += f'<tr style="vertical-align:middle">{cells}</tr>'
 
     headers = ''.join(f'<th style="{_TH}">{c}</th>' for c in render_df.columns)
     return _html_table(f'<tr>{headers}</tr>', rows_html)
@@ -107,7 +107,7 @@ def _재무_section(title, per_corp_dfs, 소계행, 헤더행, corp_labels, memo
     for s in safe:
         css += (f'#ft_{s}:checked~#fp_{s}{{display:block!important}}'
                 f'#ft_{s}:checked~.ftbar>#fl_{s}'
-                f'{{background:#6b46c1!important;color:white!important;border-color:#6b46c1!important}}')
+                f'{{background:{_C_NAVY}!important;color:white!important;border-color:{_C_NAVY}!important}}')
 
     inputs = ''.join(
         f'<input type="radio" id="ft_{s}" name="ftab" {"checked" if i == 0 else ""} '
@@ -115,10 +115,10 @@ def _재무_section(title, per_corp_dfs, 소계행, 헤더행, corp_labels, memo
         for i, s in enumerate(safe)
     )
 
-    tab_bar = '<div class="ftbar" style="display:flex;margin-bottom:6px;border-bottom:2px solid #6b46c1">'
+    tab_bar = f'<div class="ftbar" style="display:flex;margin-bottom:6px;border-bottom:2px solid {_C_NAVY}">'
     tab_bar += ''.join(
         f'<label id="fl_{s}" for="ft_{s}" style="padding:5px 16px;cursor:pointer;'
-        f'border:1px solid #d0c8e8;border-bottom:none;margin-right:2px;'
+        f'border:1px solid #DEE2E6;border-bottom:none;margin-right:2px;'
         f'font-size:0.9em;font-weight:500;border-radius:4px 4px 0 0;'
         f'background:white;color:#555">{corp}</label>'
         for corp, s in zip(corp_labels, safe)
@@ -188,8 +188,8 @@ def _현금_to_html_table(rows, sub_labels):
         if is_first:
             group_idx += 1
 
-        grp_bg = '#f9f9fb' if group_idx % 2 == 1 else '#ffffff'
-        sep    = 'border-top:2px solid #9f7aea;' if (is_first and group_idx > 0) else ''
+        grp_bg = _C_LT_GRAY if group_idx % 2 == 1 else '#ffffff'
+        sep    = f'border-top:2px solid {_C_NAVY};' if (is_first and group_idx > 0) else ''
         b_bot  = 'border-bottom:1px solid #e2e8f0'
 
         corp_val = row['사업장'] if is_first else ''
@@ -202,11 +202,11 @@ def _현금_to_html_table(rows, sub_labels):
 
         for h in sub_labels:
             s      = str(row[h])
-            color  = ';color:#e53e3e' if s.startswith('-') else ''
+            color  = f';color:{_C_RED}' if s.startswith('-') else ''
             cells += (f'<td style="padding:5px 10px;text-align:right;'
                       f'background:{grp_bg};{sep}{b_bot}{color}">{s}</td>')
 
-        rows_html += f'<tr>{cells}</tr>'
+        rows_html += f'<tr style="vertical-align:middle">{cells}</tr>'
 
     return _html_table(f'<tr>{headers}</tr>', rows_html)
 
@@ -375,27 +375,23 @@ def _build_원재료단가변동_table(year, month):
 
 
 def _원재료_to_html_table(df):
-    sub_lbl = _TD_LBL + ';background:#f0edf8;font-weight:600'
-    sub_num = _TD_NUM + ';background:#f0edf8;font-weight:600'
-    sub_red = sub_num + ';color:#e53e3e'
-
     headers   = ''.join(f'<th style="{_TH}">{c}</th>' for c in df.columns)
     rows_html = ''
     for idx, row in df.iterrows():
-        bg     = ';background:#f9f9fb' if idx % 2 == 1 else ''
+        bg     = f';background:{_C_LT_GRAY}' if idx % 2 == 1 else ''
         is_sub = str(row.iloc[0]) == '계'
         cells  = ''
         for i, val in enumerate(row):
             s   = str(val)
             neg = s.startswith('-')
             if is_sub:
-                style = (sub_red if neg else sub_num) if i >= 3 else sub_lbl
+                style = (_TD_SUB_RED if neg else _TD_SUB_NUM) if i >= 3 else _TD_SUB_LBL
             elif i < 3:
                 style = _TD_LBL + bg
             else:
                 style = (_TD_RED if neg else _TD_NUM) + bg
             cells += f'<td style="{style}">{s}</td>'
-        rows_html += f'<tr>{cells}</tr>'
+        rows_html += f'<tr style="vertical-align:middle">{cells}</tr>'
 
     return _html_table(f'<tr>{headers}</tr>', rows_html)
 
@@ -440,7 +436,8 @@ def _build_포함_table(get, 사업장_list, year, month):
     전전월_col = _월헤더(yr1, mo1)
     전월_col   = _월헤더(yr2, mo2)
     당월_col   = _당월헤더(year, month, len(사업장_list))
-    장_cols    = [f"{장} {_기호[i]}" for i, 장 in enumerate(사업장_list)]
+    _장_표시명 = {'원주': 'AT_국내', '중국': 'AT_중국', '멕시코': 'AT_멕시코'}
+    장_cols    = [f"{_장_표시명.get(장, 장)} {_기호[i]}" for i, 장 in enumerate(사업장_list)]
     columns    = ['구분', 전전월_col, 전월_col, '계획', 당월_col] + 장_cols + ['전월대비', '계획대비']
 
     rows, 매출 = [], {}
@@ -593,16 +590,23 @@ def _build_재무상태표_table(year, month):
             seen.add(key)
         행_순서_aug.append((g1, g2, g3))
 
+    # 각 g1 그룹에서 소계행(총계)이 맨 앞으로 오도록 재정렬 (p8 스타일)
+    g1_order = list(dict.fromkeys(t[0] for t in 행_순서_aug))
+    g1_groups: dict = {g: [] for g in g1_order}
+    for triple in 행_순서_aug:
+        g1_groups[triple[0]].append(triple)
+
+    행_순서_final: list = []
+    for g1 in g1_order:
+        group  = g1_groups[g1]
+        totals = [t for t in group if (t[1] in 소계행 or t[0] == t[1]) and not t[2]]
+        others = [t for t in group if t not in totals]
+        행_순서_final.extend(totals + others)
+
     per_corp_dfs = {}
     for db_corp, corp_disp in zip(db_corps, corp_labels):
-        rows    = []
-        prev_g1 = None
-        for g1, g2, g3 in 행_순서_aug:
-            if g1 != prev_g1 and g1 != g2:
-                rows.append({**빈행, '구분': g1, '_depth': 0})
-                헤더행.add(g1)
-            prev_g1 = g1
-
+        rows = []
+        for g1, g2, g3 in 행_순서_final:
             if g3 == _SUM:
                 label   = g2
                 depth   = 1
@@ -611,11 +615,16 @@ def _build_재무상태표_table(year, month):
                 전월_v  = sum(값(yr_전월, mo_전월, g1, g2, gv, db_corp) for gv in g3_list)
                 당월_v  = sum(값(year,    month,   g1, g2, gv, db_corp) for gv in g3_list)
             else:
-                label   = g3 if g3 else g2
-                depth   = 2 if g3 else (0 if g1 == g2 else 1)
-                전기_v  = 값(yr_전기, mo_전기, g1, g2, g3, db_corp)
-                전월_v  = 값(yr_전월, mo_전월, g1, g2, g3, db_corp)
-                당월_v  = 값(year,    month,   g1, g2, g3, db_corp)
+                label  = g3 if g3 else g2
+                if label in 소계행 or g1 == g2:
+                    depth = 0
+                elif g3:
+                    depth = 2
+                else:
+                    depth = 1
+                전기_v = 값(yr_전기, mo_전기, g1, g2, g3, db_corp)
+                전월_v = 값(yr_전월, mo_전월, g1, g2, g3, db_corp)
+                당월_v = 값(year,    month,   g1, g2, g3, db_corp)
 
             rows.append({
                 '구분':        label,
@@ -634,19 +643,13 @@ def _build_재무상태표_table(year, month):
 
 # ── 페이지 렌더 ───────────────────────────────────────────────
 
-def render_page(app):
-    today     = datetime.date.today()
-    연도_목록 = _get_연도_목록()
-
-    with app.sidebar:
-        app.divider()
-        app.subheader("조회 기간")
-        default_year_idx = 연도_목록.index(today.year) if today.year in 연도_목록 else len(연도_목록) - 1
-        year_state  = app.selectbox("연도", 연도_목록, index=default_year_idx)
-        month_state = app.selectbox("월", list(range(1, 13)), index=today.month - 1)
+def render_page(app, year_state, month_state):
 
     def _render_title():
-        app.title(f"{int(year_state.value)}년 {int(month_state.value)}월 실적요약")
+        app.markdown(
+            f'<h1 style="color:#404448">{int(year_state.value)}년 {int(month_state.value)}월 실적요약</h1>',
+            unsafe_allow_html=True,
+        )
     app.If(lambda: True, _render_title)
 
     tabs = app.tabs(["주요경영지표(해외법인 포함)", "주요경영지표(AT_국내)"])

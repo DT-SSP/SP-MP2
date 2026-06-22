@@ -10,31 +10,16 @@ from views.common import (
     prev_month as _prev,
     recent_months as _recent_months,
     TH as _TH, TD_NUM as _TD_NUM, TD_RED as _TD_RED,
-    ROW_ITEM, ROW_HDR_LBL, ROW_HDR_NUM, ROW_HDR_RED,
+    C_NAVY, C_ORANGE, C_RED, C_CHART_SEC, C_CHART_GRID,
+    ROW_GRP, ROW_ITEM, ROW_HDR_LBL, ROW_HDR_NUM, ROW_HDR_RED,
     html_table as _html_table, layout64 as _layout64,
 )
 
 # ── 공통 상수 ─────────────────────────────────────────────────────────────
 
-_TD_GRP = (
-    'padding:5px 10px;text-align:center;vertical-align:middle;'
-    'background:#f0edf8;font-weight:600;white-space:nowrap;'
-    'border-right:1px solid #d6ccee;border-bottom:1px solid #d6ccee'
-)
 _N_RECENT = 3
 _SUM_KW   = ('금액', '중량', '수량')
 
-# ── 연령별 재고현황 전용 스타일 ───────────────────────────────────────────
-
-_TD_LBL_V = ('padding:5px 10px;text-align:left;vertical-align:middle;'
-              'border-bottom:1px solid #e2e8f0')
-_TD_HDR_V = ('padding:5px 10px;text-align:left;vertical-align:middle;'
-              'background:#f0edf8;font-weight:700;border-bottom:1px solid #d6ccee')
-_TD_UNIT  = ('padding:4px 8px;text-align:center;vertical-align:middle;'
-              'color:#718096;font-size:0.85em;white-space:nowrap;'
-              'border-right:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0')
-_TD_PCT_C = ('padding:4px 10px;text-align:right;border-bottom:1px solid #e2e8f0;'
-             'color:#6b46c1;font-size:0.9em')
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -132,7 +117,9 @@ def _재고현황_to_html(group_rows, sum_rows, col_spec):
     past_years  = col_spec['past_years']
     recent_curr = col_spec['recent_curr']
 
-    th = f'<th style="{_TH}" colspan="2">구분</th>'
+    n_cols = len(past_years) + len(recent_curr) + 3  # 구분 + 연도/월 + 증감 + 증감률
+
+    th = f'<th style="{_TH}">구분</th>'
     for yr in past_years:
         th += f'<th style="{_TH}">\'{str(yr)[2:]}년말</th>'
     last_yr = None
@@ -160,17 +147,15 @@ def _재고현황_to_html(group_rows, sum_rows, col_spec):
 
     body = ''
     for g1, metrics in group_rows:
-        n = len(metrics)
-        for i, (g2, vals, decimal) in enumerate(metrics):
-            cells  = f'<td style="{_TD_GRP}" rowspan="{n}">{g1}</td>' if i == 0 else ''
-            cells += f'<td style="{ROW_ITEM}">{g2}</td>'
+        body += f'<tr><td colspan="{n_cols}" style="{ROW_GRP}">{g1}</td></tr>'
+        for g2, vals, decimal in metrics:
+            cells  = f'<td style="{ROW_ITEM}">{g2}</td>'
             cells += val_cells(vals, decimal)
             body  += f'<tr>{cells}</tr>'
 
-    n_sum = len(sum_rows)
-    for i, (label, vals, decimal) in enumerate(sum_rows):
-        cells  = f'<td style="{ROW_HDR_LBL}" rowspan="{n_sum}">재고자산 계</td>' if i == 0 else ''
-        cells += f'<td style="{ROW_HDR_LBL}">{label}</td>'
+    body += f'<tr><td colspan="{n_cols}" style="{ROW_HDR_LBL}">재고자산 계</td></tr>'
+    for label, vals, decimal in sum_rows:
+        cells  = f'<td style="{ROW_HDR_LBL}">{label}</td>'
         cells += val_cells(vals, decimal, num_s=ROW_HDR_NUM, red_s=ROW_HDR_RED)
         body  += f'<tr>{cells}</tr>'
 
@@ -315,27 +300,30 @@ def _build_원재료_rows(df, col_spec):
 
 
 def _원재료_to_html(rows, col_spec):
-    th  = f'<th style="{_TH}" colspan="2">원재료</th>'
-    for lbl in _col_labels(col_spec):
+    col_lbls = _col_labels(col_spec)
+    n_cols   = len(col_lbls) + 2  # 구분 + 날짜 컬럼들 + 전월대비
+
+    th = f'<th style="{_TH}">원재료</th>'
+    for lbl in col_lbls:
         th += f'<th style="{_TH}">{lbl}</th>'
     th += f'<th style="{_TH}">전월대비</th>'
 
     body = ''
     for row in rows:
-        kind      = row['kind']
-        sub_rows  = row['sub_rows']
-        n         = len(sub_rows)
-        lbl_s     = _TD_LBL_V if kind == 'detail' else _TD_HDR_V
-        num_s     = _TD_NUM   if kind == 'detail' else ROW_HDR_NUM
-        red_s     = _TD_RED   if kind == 'detail' else ROW_HDR_RED
+        kind     = row['kind']
+        sub_rows = row['sub_rows']
+        num_s    = _TD_NUM if kind == 'detail' else ROW_HDR_NUM
+        red_s    = _TD_RED if kind == 'detail' else ROW_HDR_RED
+        hdr_s    = ROW_HDR_LBL if kind == 'total' else ROW_GRP
 
-        for i, (unit, vals, mom_v, dec, is_pct) in enumerate(sub_rows):
-            cells  = f'<td rowspan="{n}" style="{lbl_s}">{row["label"]}</td>' if i == 0 else ''
-            cells += f'<td style="{_TD_UNIT}">{unit}</td>'
+        body += f'<tr><td colspan="{n_cols}" style="{hdr_s}">{row["label"]}</td></tr>'
+
+        for unit, vals, mom_v, dec, is_pct in sub_rows:
+            cells = f'<td style="{ROW_ITEM}">{unit}</td>'
             if is_pct:
                 for v in vals:
-                    cells += f'<td style="{_TD_PCT_C}">{_fmt_연령_pct(v)}</td>'
-                cells += f'<td style="{_TD_PCT_C}">{_fmt_연령_pct(mom_v, decimal=1)}</td>'
+                    cells += f'<td style="{num_s}">{_fmt_연령_pct(v)}</td>'
+                cells += f'<td style="{num_s}">{_fmt_연령_pct(mom_v, decimal=1)}</td>'
             else:
                 for v in vals:
                     cells += f'<td style="{num_s}">{_fmt(v, decimal=dec)}</td>'
@@ -421,10 +409,10 @@ def _단품_to_html(rows, col_spec, g1_label):
         body  += f'<tr>{cells}</tr>'
 
         if kind == '장기소계':
-            cells = f'<td style="{_TD_PCT_C}">(%)</td>'
+            cells = f'<td style="{ROW_ITEM}">(%)</td>'
             for v in row['pct_vals']:
-                cells += f'<td style="{_TD_PCT_C}">{_fmt_연령_pct(v)}</td>'
-            cells += f'<td style="{_TD_PCT_C}">{_fmt_연령_pct(row["pct_mom"], decimal=1)}</td>'
+                cells += f'<td style="{ROW_HDR_NUM}">{_fmt_연령_pct(v)}</td>'
+            cells += f'<td style="{ROW_HDR_NUM}">{_fmt_연령_pct(row["pct_mom"], decimal=1)}</td>'
             body  += f'<tr>{cells}</tr>'
 
     return _html_table(f'<tr>{th}</tr>', body)
@@ -489,19 +477,19 @@ def _chart_단품(x_labels, total_vals, 장기_vals, pct_vals, decimal=0):
 
     fig.add_trace(go.Bar(
         name='재고량', x=x_labels, y=total_vals,
-        marker_color='#4a5568', marker_line_width=0,
+        marker_color=C_NAVY, marker_line_width=0,
         text=[fmt_v(v) for v in total_vals],
         textposition='outside',
-        textfont=dict(color='#2d3748', size=11),
+        textfont=dict(color=C_NAVY, size=11),
     ))
     fig.add_trace(go.Scatter(
         name='장기재고', x=x_labels, y=장기_vals,
         mode='lines+markers+text',
-        line=dict(color='#ed8936', width=2),
-        marker=dict(size=8, color='white', line=dict(color='#ed8936', width=2)),
+        line=dict(color=C_RED, width=2),
+        marker=dict(size=8, color='white', line=dict(color=C_RED, width=2)),
         text=[f"{fmt_v(v)}({p:.0f}%)" for v, p in zip(장기_vals, pct_vals)],
         textposition='top center',
-        textfont=dict(size=10, color='#c05621'),
+        textfont=dict(size=10, color=C_RED),
     ))
 
     max_total = max(total_vals) if total_vals else 1
@@ -513,8 +501,8 @@ def _chart_단품(x_labels, total_vals, 장기_vals, pct_vals, decimal=0):
                     y=0.98, yanchor='top',
                     font=dict(size=11), bgcolor='rgba(255,255,255,0.8)',
                     borderwidth=0),
-        xaxis=dict(showgrid=False, tickfont=dict(size=11, color='#4a5568')),
-        yaxis=dict(showgrid=True, gridcolor='#f0edf8',
+        xaxis=dict(showgrid=False, tickfont=dict(size=11, color=C_NAVY)),
+        yaxis=dict(showgrid=True, gridcolor=C_CHART_GRID,
                    range=[0, max_total * 1.4], showticklabels=False),
         plot_bgcolor='white', paper_bgcolor='white', bargap=0.3,
     )
@@ -526,30 +514,30 @@ def _chart_종합(x_labels, 제품_v, 재공품_v, 원재료_v, 장기_v, pct_v)
 
     fig.add_trace(go.Bar(
         name='원재료(ea)', x=x_labels, y=원재료_v,
-        marker_color='#4a5568', marker_line_width=0,
+        marker_color=C_NAVY, marker_line_width=0,
         text=[_fmt(v, decimal=1) for v in 원재료_v],
         textposition='inside', textfont=dict(color='white', size=10),
     ))
     fig.add_trace(go.Bar(
         name='재공품', x=x_labels, y=재공품_v,
-        marker_color='#6b46c1', marker_line_width=0,
+        marker_color=C_CHART_SEC, marker_line_width=0,
         text=[_fmt(v, decimal=1) for v in 재공품_v],
         textposition='inside', textfont=dict(color='white', size=10),
     ))
     fig.add_trace(go.Bar(
         name='제품', x=x_labels, y=제품_v,
-        marker_color='#90cdf4', marker_line_width=0,
+        marker_color=C_ORANGE, marker_line_width=0,
         text=[_fmt(v, decimal=1) for v in 제품_v],
-        textposition='inside', textfont=dict(color='#2d3748', size=10),
+        textposition='inside', textfont=dict(color='white', size=10),
     ))
     fig.add_trace(go.Scatter(
         name='장기재고', x=x_labels, y=장기_v,
         mode='lines+markers+text',
-        line=dict(color='#ed8936', width=2),
-        marker=dict(size=8, color='white', line=dict(color='#ed8936', width=2)),
+        line=dict(color=C_RED, width=2),
+        marker=dict(size=8, color='white', line=dict(color=C_RED, width=2)),
         text=[f"{_fmt(v, decimal=1)}({p:.0f}%)" for v, p in zip(장기_v, pct_v)],
         textposition='top center',
-        textfont=dict(size=10, color='#c05621'),
+        textfont=dict(size=10, color=C_RED),
     ))
 
     max_total = max(a + b + c for a, b, c in zip(원재료_v, 재공품_v, 제품_v)) if 원재료_v else 1
@@ -561,8 +549,8 @@ def _chart_종합(x_labels, 제품_v, 재공품_v, 원재료_v, 장기_v, pct_v)
                     y=0.98, yanchor='top',
                     font=dict(size=11), bgcolor='rgba(255,255,255,0.8)',
                     borderwidth=0),
-        xaxis=dict(showgrid=False, tickfont=dict(size=11, color='#4a5568')),
-        yaxis=dict(showgrid=True, gridcolor='#f0edf8',
+        xaxis=dict(showgrid=False, tickfont=dict(size=11, color=C_NAVY)),
+        yaxis=dict(showgrid=True, gridcolor=C_CHART_GRID,
                    range=[0, max_total * 1.3], showticklabels=False),
         plot_bgcolor='white', paper_bgcolor='white', bargap=0.3,
     )
@@ -587,20 +575,13 @@ def _fig_to_iframe(fig):
 # ── render_page ──────────────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════════
 
-def render_page(app):
-    today     = datetime.date.today()
-    연도_목록 = _get_연도_목록()
-
-    with app.sidebar:
-        app.divider()
-        app.subheader("조회 기간")
-        default_year_idx = (연도_목록.index(today.year)
-                            if today.year in 연도_목록 else len(연도_목록) - 1)
-        year_state  = app.selectbox("연도", 연도_목록, index=default_year_idx)
-        month_state = app.selectbox("월", list(range(1, 13)), index=today.month - 1)
+def render_page(app, year_state, month_state):
 
     def _render_title():
-        app.title(f"{int(year_state.value)}년 {int(month_state.value)}월 재고자산")
+        app.markdown(
+            f'<h1 style="color:#404448">{int(year_state.value)}년 {int(month_state.value)}월 재고자산분석</h1>',
+            unsafe_allow_html=True,
+        )
     app.If(lambda: True, _render_title)
 
     tabs = app.tabs(["제품∙재공∙원재료 재고 현황", "연령별 재고현황"])

@@ -7,18 +7,10 @@ from views.common import (
     drop_empty as _drop_empty,
     prev_month as _prev,
     recent_months as _recent_months, build_col_hdrs as _build_col_hdrs,
-    TH as _TH, TD_NUM as _TD_NUM, TD_LBL as _TD_LBL, TD_RED as _TD_RED,
-    TD_SUB_LBL, TD_SUB_NUM,
-    ROW_SEC, ROW_HDR_LBL, ROW_HDR_NUM, ROW_HDR_RED, ROW_ITEM,
+    TH as _TH, TD_NUM as _TD_NUM, TD_LBL as _TD_LBL, TD_RED as _TD_RED, C_RED as _C_RED,
+    ROW_SEC, ROW_GRP, ROW_HDR_LBL, ROW_HDR_NUM, ROW_HDR_RED, ROW_ITEM,
     ROW_CAL_LBL, ROW_CAL_NUM, ROW_CAL_RED,
     html_table as _html_table, layout64 as _layout64,
-)
-
-# 외주용역비 그룹 라벨 셀 스타일
-_TD_GRP = (
-    'padding:5px 10px;text-align:center;vertical-align:middle;'
-    'background:#f0edf8;font-weight:600;white-space:nowrap;'
-    'border-right:1px solid #d6ccee;border-bottom:1px solid #d6ccee'
 )
 
 # 외주용역비 수량 키 감지 키워드 (구분2 값에 포함될 경우 qty로 판별)
@@ -241,19 +233,17 @@ def _build_외주용역비(year, month):
 
 
 def _외주용역비_to_html(groups, col_hdrs):
-    th = (f'<th style="{_TH}" colspan="2">구분</th>' +
+    n_cols = len(col_hdrs) + 2  # 구분 + 연도/월 컬럼들 + 전월비
+    th = (f'<th style="{_TH}">구분</th>' +
           ''.join(f'<th style="{_TH}">{h}</th>' for h in col_hdrs) +
           f'<th style="{_TH}">전월비</th>')
 
     body = ''
     for grp_name, metrics in groups:
-        n = len(metrics)
-        for i, (metric_name, vals, kind) in enumerate(metrics):
-            cells = ''
-            if i == 0:
-                cells += f'<td style="{_TD_GRP}" rowspan="{n}">{grp_name}</td>'
+        body += f'<tr><td colspan="{n_cols}" style="{ROW_GRP}">{grp_name}</td></tr>'
+        for metric_name, vals, kind in metrics:
             lbl_s = _TD_LBL if kind == 'rate' else ROW_ITEM
-            cells += f'<td style="{lbl_s}">{metric_name}</td>'
+            cells = f'<td style="{lbl_s}">{metric_name}</td>'
             last = len(vals) - 1
             for j, v in enumerate(vals):
                 s = (_TD_RED if v < 0 else _TD_NUM) if j == last else _TD_NUM
@@ -306,7 +296,7 @@ def _build_환차소급(year, month):
             yr_net += monthly_net
             prev_yr, prev_mo = _prev(yr, mo)
 
-            rows.append(('month_hdr', f"'{str(yr)[2:]}.{mo}월", 0.0, ''))
+            rows.append(('month_hdr', f"'{str(yr)[2:]}.{mo}월", monthly_net, ''))
 
             if 실적_t != 0.0:
                 rows.append(('실적',
@@ -321,8 +311,6 @@ def _build_환차소급(year, month):
                               f"'{str(yr)[2:]}.{mo}월 예상분",
                               예상분_t, make_note(yr, mo, '예상분')))
 
-            rows.append(('subtotal', '', monthly_net, ''))
-
         rows.append(('cum', f"'{str(yr)[2:]}년 환차소급 누계액", yr_net, ''))
 
     return rows
@@ -336,7 +324,10 @@ def _환차소급_to_html(rows):
     body = ''
     for kind, label, amount, note in rows:
         if kind == 'month_hdr':
-            cells = f'<td colspan="3" style="{ROW_SEC}">{label}</td>'
+            _sec_num = ROW_SEC + (f';text-align:right;color:{_C_RED}' if amount < 0 else ';text-align:right')
+            cells = (f'<td style="{ROW_SEC}">{label}</td>'
+                     f'<td style="{_sec_num}">{_fmt(amount)}</td>'
+                     f'<td style="{ROW_SEC}"></td>')
         elif kind == '취소':
             cells = (f'<td style="{ROW_ITEM}">{label}</td>'
                      f'<td style="{_TD_RED}">{_fmt(amount)}</td>'
@@ -345,11 +336,6 @@ def _환차소급_to_html(rows):
             cells = (f'<td style="{ROW_ITEM}">{label}</td>'
                      f'<td style="{_TD_NUM}">{_fmt(amount)}</td>'
                      f'<td style="{_TD_LBL}">{note}</td>')
-        elif kind == 'subtotal':
-            num_s = _TD_RED if amount < 0 else TD_SUB_NUM
-            cells = (f'<td style="{TD_SUB_LBL}"></td>'
-                     f'<td style="{num_s}">{_fmt(amount)}</td>'
-                     f'<td style="{TD_SUB_LBL}"></td>')
         else:  # cum
             num_s = ROW_CAL_RED if amount < 0 else ROW_CAL_NUM
             cells = (f'<td style="{ROW_CAL_LBL}">{label}</td>'
@@ -465,20 +451,13 @@ def _원주멕시코환차소급_to_html(rows, col_hdrs):
 
 # ── render_page ───────────────────────────────────────────────────────────
 
-def render_page(app):
-    today     = datetime.date.today()
-    연도_목록 = _get_연도_목록()
-
-    with app.sidebar:
-        app.divider()
-        app.subheader("조회 기간")
-        default_year_idx = (연도_목록.index(today.year)
-                            if today.year in 연도_목록 else len(연도_목록) - 1)
-        year_state  = app.selectbox("연도", 연도_목록, index=default_year_idx)
-        month_state = app.selectbox("월", list(range(1, 13)), index=today.month - 1)
+def render_page(app, year_state, month_state):
 
     def _render_title():
-        app.title(f"{int(year_state.value)}년 {int(month_state.value)}월 비용분석")
+        app.markdown(
+            f'<h1 style="color:#404448">{int(year_state.value)}년 {int(month_state.value)}월 비용분석</h1>',
+            unsafe_allow_html=True,
+        )
     app.If(lambda: True, _render_title)
 
     tabs = app.tabs(["멕시코向 운반비", "외주용역비", "멕시코向 환차소급"])

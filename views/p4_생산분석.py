@@ -198,19 +198,13 @@ def _불량_to_html(rows, col_hdrs):
 
 # ── render_page ───────────────────────────────────────────────────────────
 
-def render_page(app):
-    today     = datetime.date.today()
-    연도_목록 = _get_연도_목록()
-
-    with app.sidebar:
-        app.divider()
-        app.subheader("조회 기간")
-        default_year_idx = 연도_목록.index(today.year) if today.year in 연도_목록 else len(연도_목록) - 1
-        year_state  = app.selectbox("연도", 연도_목록, index=default_year_idx)
-        month_state = app.selectbox("월", list(range(1, 13)), index=today.month - 1)
+def render_page(app, year_state, month_state):
 
     def _render_title():
-        app.title(f"{int(year_state.value)}년 {int(month_state.value)}월 생산분석")
+        app.markdown(
+            f'<h1 style="color:#404448">{int(year_state.value)}년 {int(month_state.value)}월 생산분석</h1>',
+            unsafe_allow_html=True,
+        )
     app.If(lambda: True, _render_title)
 
     tabs = app.tabs(["생산실적", "불량 발생내역"])

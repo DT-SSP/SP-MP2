@@ -10,6 +10,7 @@ from views.common import (
     recent_months as _recent_months,
     build_col_hdrs as _build_col_hdrs,
     TH as _TH, TD_NUM as _TD_NUM, TD_RED as _TD_RED,
+    C_NAVY, C_ORANGE, C_CHART_SEC, C_CHART_GRID,
     TD_SUB_LBL as _TD_SUB_LBL, TD_SUB_NUM as _TD_SUB_NUM, TD_SUB_RED as _TD_SUB_RED,
     ROW_SEC,
     ROW_HDR_LBL, ROW_HDR_NUM, ROW_HDR_RED,
@@ -942,19 +943,19 @@ def _build_중국열후비중_chart(x_labels, data, 계_vals, 비중_vals):
     fig = go.Figure()
     fig.add_trace(go.Bar(
         name='연마', x=x_labels, y=data['연마'],
-        marker_color='#9ca3af', marker_line_width=0,
+        marker_color=C_CHART_SEC, marker_line_width=0,
         text=[_fmt(v, decimal=1) for v in data['연마']],
         textposition='inside', textfont=dict(color='white', size=11),
     ))
     fig.add_trace(go.Bar(
         name='열전', x=x_labels, y=data['열전'],
-        marker_color='#d97706', marker_line_width=0,
+        marker_color=C_ORANGE, marker_line_width=0,
         text=[_fmt(v, decimal=1) for v in data['열전']],
         textposition='inside', textfont=dict(color='white', size=11),
     ))
     fig.add_trace(go.Bar(
         name='열후', x=x_labels, y=data['열후'],
-        marker_color='#6b46c1', marker_line_width=0,
+        marker_color=C_NAVY, marker_line_width=0,
         text=[_fmt(v, decimal=1) for v in data['열후']],
         textposition='inside', textfont=dict(color='white', size=13),
     ))
@@ -962,11 +963,11 @@ def _build_중국열후비중_chart(x_labels, data, 계_vals, 비중_vals):
         name='열후비중',
         x=x_labels, y=비중_vals,
         mode='lines+markers+text',
-        line=dict(color='#1f2937', width=2),
-        marker=dict(color='white', size=7, line=dict(color='#1f2937', width=2)),
+        line=dict(color=C_NAVY, width=2),
+        marker=dict(color='white', size=7, line=dict(color=C_NAVY, width=2)),
         text=[f"{round(v)}%" for v in 비중_vals],
         textposition='top center',
-        textfont=dict(size=12, color='#1f2937'),
+        textfont=dict(size=12, color=C_NAVY),
         yaxis='y2',
     ))
 
@@ -991,18 +992,18 @@ def _build_중국열후비중_chart(x_labels, data, 계_vals, 비중_vals):
         margin=dict(l=10, r=45, t=15, b=60),
         legend=dict(orientation='h', y=-0.28, x=0.5, xanchor='center',
                     font=dict(size=12), bgcolor='rgba(0,0,0,0)'),
-        xaxis=dict(tickfont=dict(size=11, color='#4a5568'),
+        xaxis=dict(tickfont=dict(size=11, color=C_NAVY),
                    showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True),
-        yaxis=dict(showgrid=True, gridcolor='#f0edf8', gridwidth=1,
+        yaxis=dict(showgrid=True, gridcolor=C_CHART_GRID, gridwidth=1,
                    range=[0, max_계 * 2.5],
-                   tickfont=dict(size=11, color='#4a5568'),
+                   tickfont=dict(size=11, color=C_NAVY),
                    showline=False, zeroline=False),
         yaxis2=dict(overlaying='y', side='right',
                     range=[ymin2, ymax2],
                     tickvals=tick_vals,
                     ticktext=[f"{v}%" for v in tick_vals],
                     showgrid=False,
-                    tickfont=dict(size=11, color='#374151'),
+                    tickfont=dict(size=11, color=C_NAVY),
                     showline=False, zeroline=False),
         plot_bgcolor='white', paper_bgcolor='white',
         font=dict(size=12, family='sans-serif'),
@@ -1894,19 +1895,13 @@ def _중국인원현황_to_html(rows, col_headers):
 
 # ── render_page ───────────────────────────────────────────────────────────
 
-def render_page(app):
-    today = datetime.date.today()
-    연도_목록 = _get_연도_목록()
-
-    with app.sidebar:
-        app.divider()
-        app.subheader("조회 기간")
-        default_year_idx = 연도_목록.index(today.year) if today.year in 연도_목록 else len(연도_목록) - 1
-        year_state  = app.selectbox("연도", 연도_목록, index=default_year_idx)
-        month_state = app.selectbox("월", list(range(1, 13)), index=today.month - 1)
+def render_page(app, year_state, month_state):
 
     def _render_title():
-        app.title(f"{int(year_state.value)}년 {int(month_state.value)}월 해외법인")
+        app.markdown(
+            f'<h1 style="color:#404448">{int(year_state.value)}년 {int(month_state.value)}월 해외법인실적</h1>',
+            unsafe_allow_html=True,
+        )
     app.If(lambda: True, _render_title)
 
     tabs = app.tabs(["멕시코_SGAM", "중국_기차배건"])

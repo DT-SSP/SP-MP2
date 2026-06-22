@@ -12,7 +12,7 @@ from data.config import (
 from views.common import (
     parse as _parse, fmt as _fmt,
     prev_month as _prev, drop_empty as _drop_empty, sort_by_order as _sort,
-    TH as _TH, TD_NUM as _TD_NUM, TD_RED as _TD_RED,
+    TH as _TH, TD_NUM as _TD_NUM, TD_RED as _TD_RED, C_RED as _C_RED,
     ROW_SEC, ROW_GRP, ROW_HDR_LBL, ROW_HDR_NUM, ROW_HDR_RED,
     ROW_CAL_LBL, ROW_CAL_NUM, ROW_CAL_RED, ROW_ITEM,
     html_table as _html_table, layout64 as _layout64,
@@ -397,8 +397,8 @@ def _build_비용표(sheet, g1_cfgs, year, month):
             rows.append(('item', g2, [_fv(p), _fv(c), _fd(c - p), _fv(pl), _fd(c - pl)]))
             g1_prev += p; g1_curr += c; g1_plan += pl
 
-        rows.append(('calc', g1, [_fv(g1_prev), _fv(g1_curr), _fd(g1_curr - g1_prev),
-                                   _fv(g1_plan), _fd(g1_curr - g1_plan)]))
+        rows.append(('sec', g1, [_fv(g1_prev), _fv(g1_curr), _fd(g1_curr - g1_prev),
+                                  _fv(g1_plan), _fd(g1_curr - g1_plan)]))
         총_prev += g1_prev; 총_curr += g1_curr; 총_plan += g1_plan
 
     rows.append(('calc', '총합', [_fv(총_prev), _fv(총_curr), _fd(총_curr - 총_prev),
@@ -439,7 +439,13 @@ def _제조가공비_to_html(rows, col_headers):
     item_idx  = 0
 
     for row_type, label, vals in rows:
-        if row_type == 'calc':
+        if row_type == 'sec':
+            item_idx = 0
+            cells = f'<td style="{ROW_SEC}">{label}</td>'
+            for v in vals:
+                _sec_num = ROW_SEC + (f';text-align:right;color:{_C_RED}' if str(v).startswith('-') and v != '-' else ';text-align:right')
+                cells += f'<td style="{_sec_num}">{v}</td>'
+        elif row_type == 'calc':
             item_idx = 0
             cells = f'<td style="{ROW_CAL_LBL}">{label}</td>'
             for v in vals:
@@ -457,19 +463,13 @@ def _제조가공비_to_html(rows, col_headers):
 
 # ── render_page ───────────────────────────────────────────────────────────
 
-def render_page(app):
-    today     = datetime.date.today()
-    연도_목록 = _get_연도_목록()
-
-    with app.sidebar:
-        app.divider()
-        app.subheader("조회 기간")
-        default_year_idx = 연도_목록.index(today.year) if today.year in 연도_목록 else len(연도_목록) - 1
-        year_state  = app.selectbox("연도", 연도_목록, index=default_year_idx)
-        month_state = app.selectbox("월", list(range(1, 13)), index=today.month - 1)
+def render_page(app, year_state, month_state):
 
     def _render_title():
-        app.title(f"{int(year_state.value)}년 {int(month_state.value)}월 손익분석")
+        app.markdown(
+            f'<h1 style="color:#404448">{int(year_state.value)}년 {int(month_state.value)}월 손익분석</h1>',
+            unsafe_allow_html=True,
+        )
     app.If(lambda: True, _render_title)
 
     tabs = app.tabs(["손익요약", "전월∙계획 대비 손익차이", "원재료", "제조가공비", "판매비와 관리비"])
