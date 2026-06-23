@@ -20,8 +20,8 @@ from views.common import (
 )
 
 # ── 로컬 스타일 상수 ───────────────────────────────────────────────────────
-_TD_ANNO  = 'padding:4px 10px;text-align:right;border-bottom:1px solid #f0edf8;color:#718096;font-size:0.88em'
-_ROW_ANNO = 'padding:4px 10px 4px 10px;text-align:left;border-bottom:1px solid #f0edf8;color:#718096;font-size:0.88em'
+_TD_ANNO  = 'padding:4px 10px;text-align:right;border-bottom:1px solid #e2e8f0;color:#718096;font-size:0.88em'
+_ROW_ANNO = 'padding:4px 10px 4px 10px;text-align:left;border-bottom:1px solid #e2e8f0;color:#718096;font-size:0.88em'
 
 
 # ── 공통 헬퍼 ────────────────────────────────────────────────────────────
@@ -416,7 +416,7 @@ def _노무비현황_chart(col_labels, 급여_vals, 인당_vals):
                     font=dict(size=12), bgcolor='rgba(0,0,0,0)'),
         xaxis=dict(tickfont=dict(size=10), showgrid=False,
                    linecolor='#e2e8f0', linewidth=1, showline=True),
-        yaxis=dict(showgrid=True, gridcolor='#f0edf8',
+        yaxis=dict(showgrid=True, gridcolor='#E8EAED',
                    range=[0, max_급여 * 2.2],
                    tickfont=dict(size=10), showline=False, zeroline=False),
         yaxis2=dict(overlaying='y', side='right',
@@ -433,7 +433,7 @@ def _노무비현황_chart(col_labels, 급여_vals, 인당_vals):
 # ── 탭 3: 기능직 근태현황 ──────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════════
 
-_ROW_GRP_SPAN = 'padding:5px 10px;font-weight:700;background:#f0edf8;border-bottom:1px solid #d6ccee'
+_ROW_GRP_SPAN = 'padding:5px 10px;font-weight:700;background:#F1F3F5;border-bottom:1px solid #dee2e6'
 
 
 def _build_기능직근무시간(year, month):
@@ -515,7 +515,7 @@ def _build_기능직근무시간(year, month):
         def _g1fn(yr, mo, _g=g1): return val_g1(_g, yr, mo)
 
         if not g2s:
-            # 단독 행 (청취 근로시간, 심야근무 등)
+            # 단독 행 (정취 근로시간, 심야근무 등)
             rows.append(('standalone', g1, [get_cell(_g1fn, ck) for ck in col_keys]))
             def _인당fn(yr, mo, _g=g1):
                 n = 인원(yr, mo)
