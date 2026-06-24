@@ -206,43 +206,54 @@ def _멕시코손익_to_html(rows, col_headers):
 def _build_채권채무(year, month):
     df = load_sheet(Sheets.멕시코원주채권채무_DB)
     df = _drop_empty(df, '연도', '월')
-    for col in ['구분1', '구분2', '구분3']:
+    for col in ['구분1', '구분2', '구분3', '구분4']:
         df[col] = df[col].fillna('').astype(str).str.strip()
     df['_v'] = df['값'].apply(_parse)
     df_mo = df[(df['연도'] == year) & (df['월'] == month)].copy()
 
-    def _get(g1, g2, g3):
-        m = (df_mo['구분1'] == g1) & (df_mo['구분2'] == g2) & (df_mo['구분3'] == g3)
-        return float(df_mo.loc[m, '_v'].sum())
+    # 환율 (구분1='환율' 행에서 추출)
+    ex = df_mo[df_mo['구분1'] == '환율']['_v']
+    환율 = float(ex.iloc[0]) if not ex.empty else 1.0
 
-    def _sub(g1, g2):
-        m = (df_mo['구분1'] == g1) & (df_mo['구분2'] == g2)
-        return float(df_mo.loc[m, '_v'].sum())
+    # 데이터 행 (환율 제외)
+    data = df_mo[df_mo['구분1'] != '환율']
 
-    rows = []
-    rows.append(('total', '합계', [
-        _sub('USD', '채권'), _sub('USD', '채무'),
-        _sub('KRW', '채권'), _sub('KRW', '채무'),
-    ]))
+    def _sums(sub):
+        usd_채권 = float(sub[sub['구분4'] == '채권']['_v'].sum())
+        usd_채무 = float(sub[sub['구분4'] == '채무']['_v'].sum())
+        return [usd_채권, usd_채무,
+                usd_채권 * 환율 / 1e6, usd_채무 * 환율 / 1e6]
 
-    g2_list = df_mo['구분2'].drop_duplicates().tolist()
-    for g2 in g2_list:
-        col_usd, col_krw = (0, 2) if g2 == '채권' else (1, 3)
+    def _ordered(series):
+        seen, result = set(), []
+        for v in series:
+            if v and v not in seen:
+                result.append(v); seen.add(v)
+        return result
 
-        parent_vals = [None] * 4
-        parent_vals[col_usd] = _sub('USD', g2)
-        parent_vals[col_krw] = _sub('KRW', g2)
-        rows.append(('parent', g2, parent_vals))
+    rows = [('total', '합계', _sums(data))]
 
-        for g3 in df_mo[df_mo['구분2'] == g2]['구분3'].drop_duplicates().tolist():
-            if not g3:
-                continue
-            child_vals = [None] * 4
-            child_vals[col_usd] = _get('USD', g2, g3)
-            child_vals[col_krw] = _get('KRW', g2, g3)
-            rows.append(('child', g3, child_vals))
+    for g1 in _ordered(data['구분1']):
+        d1 = data[data['구분1'] == g1]
+        rows.append(('parent', g1, _sums(d1)))
 
-    return rows
+        if g1 == '기타':
+            # 기타는 구분2='기타' 하나뿐 → 구분3 items 직접 표시
+            d12 = d1[d1['구분2'] == '기타']
+            for g3 in _ordered(d12['구분3']):
+                rows.append(('child', g3, _sums(d12[d12['구분3'] == g3])))
+        else:
+            # 매출/매입 → 구분2 소계 → 구분3 items
+            for g2 in _ordered(d1['구분2']):
+                d12 = d1[d1['구분2'] == g2]
+                rows.append(('sub', g2, _sums(d12)))
+                for g3 in _ordered(d12['구분3']):
+                    rows.append(('child2', g3, _sums(d12[d12['구분3'] == g3])))
+
+    return rows, 환율
+
+
+_I2 = _I1 + _I1
 
 
 def _채권채무_to_html(rows):
@@ -253,26 +264,26 @@ def _채권채무_to_html(rows):
     body = ''
     for row_type, label, vals in rows:
         if row_type == 'total':
-            lbl_s = ROW_HDR_LBL
+            lbl_s, prefix = ROW_HDR_LBL, ''
         elif row_type == 'parent':
-            lbl_s = _TD_SUB_LBL
-        else:
-            lbl_s = ROW_ITEM
+            lbl_s, prefix = _TD_SUB_LBL, ''
+        elif row_type == 'sub':
+            lbl_s, prefix = ROW_ITEM, _I1
+        elif row_type == 'child2':
+            lbl_s, prefix = ROW_ITEM, _I2
+        else:  # 'child' (기타 하위)
+            lbl_s, prefix = ROW_ITEM, _I1
 
-        prefix = _I1 if row_type == 'child' else ''
         cells = f'<td style="{lbl_s}">{prefix}{label}</td>'
-
         for v in vals:
-            if v is None:
-                cells += f'<td style="{_TD_NUM}"></td>'
+            if row_type == 'total':
+                num_s = ROW_HDR_RED if v < 0 else ROW_HDR_NUM
+            elif row_type == 'parent':
+                num_s = _TD_SUB_RED if v < 0 else _TD_SUB_NUM
             else:
-                if row_type == 'total':
-                    num_s = ROW_HDR_RED if v < 0 else ROW_HDR_NUM
-                elif row_type == 'parent':
-                    num_s = _TD_SUB_RED if v < 0 else _TD_SUB_NUM
-                else:
-                    num_s = _TD_RED if v < 0 else _TD_NUM
-                cells += f'<td style="{num_s}">{_fmt(v) if v else ""}</td>'
+                num_s = _TD_RED if v < 0 else _TD_NUM
+            txt = _fmt(v)
+            cells += f'<td style="{num_s}">{txt if v else ""}</td>'
         body += f'<tr>{cells}</tr>'
 
     return _html_table(f'<tr>{th}</tr>', body)
@@ -1925,12 +1936,13 @@ def render_page(app, year_state, month_state):
                     app.markdown(_memo_block(memo_손익), unsafe_allow_html=True)
 
             # 2) 채권채무 현황
-            rows_채권채무 = _build_채권채무(year, month)
+            rows_채권채무, 환율_채권채무 = _build_채권채무(year, month)
             memo_채권채무 = _get_memo(Sheets.멕시코원주채권채무_메모, year, month)
             col_l2, col_r2 = app.columns([6, 4])
             with col_l2:
                 app.markdown(
-                    _sec_title('2) SGAM-원주 간 채권∙채무 현황', '[단위: USD, 백만원]')
+                    _sec_title('2) SGAM-원주 간 채권∙채무 현황',
+                               f'[단위: USD, 백만원(적용환율:{환율_채권채무:,.2f})]')
                     + _채권채무_to_html(rows_채권채무),
                     unsafe_allow_html=True,
                 )

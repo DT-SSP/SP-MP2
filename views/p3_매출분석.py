@@ -87,9 +87,8 @@ def _build_품목별매출(year, month):
     df = _drop_empty(df, '연도', '월')
     df['값'] = df['값'].apply(_parse)
 
-    vm = df.set_index(['구분1', '구분2', '연도', '월'])['값'].to_dict()
+    vm = df.set_index(['구분1', '구분2', '구분3', '연도', '월'])['값'].to_dict()
     prev_yr, prev_mo = _prev(year, month, 1)
-    yr1, yr2 = year - 2, year - 1
 
     # DB에서 품목 목록 자동 감지 (소급 제외) → config 순서대로 정렬, 미등록 품목은 뒤에
     db_품목 = [p for p in df[df['구분1'] == '매출액']['구분2'].unique()
@@ -102,106 +101,122 @@ def _build_품목별매출(year, month):
     # 합계 판매량: 단가 있는 품목 중 톤 단위 제외 (만개 단위만)
     합계_판매량_품목 = 단가_품목 - 품목별매출_톤_단위_품목
 
-    def raw_g(품목, yr, mo):
-        base = vm.get(('매출액', 품목, yr, mo), 0.0)
-        소급 = vm.get(('매출액', f'{품목}소급', yr, mo), 0.0)
-        return base + 소급
+    def g(품목, typ, yr, mo):
+        base = vm.get(('매출액', 품목, typ, yr, mo), 0.0)
+        soq  = vm.get(('매출액', f'{품목}소급', typ, yr, mo), 0.0)
+        return base + soq
 
-    def raw_q(품목, yr, mo):
-        return vm.get(('판매량', 품목, yr, mo), 0.0)  # DB 원값 그대로 (톤 or 개)
+    def q(품목, typ, yr, mo):
+        return vm.get(('판매량', 품목, typ, yr, mo), 0.0)
 
-    def yr_g(품목, yr):
-        return sum(raw_g(품목, yr, m) for m in range(1, 13))
+    def ann_g(품목):
+        return sum(g(품목, '계획', year, m) for m in range(1, 13))
 
-    def yr_q(품목, yr):
-        return sum(raw_q(품목, yr, m) for m in range(1, 13))
+    def ann_q(품목):
+        return sum(q(품목, '계획', year, m) for m in range(1, 13))
 
-    def ytd_g(품목):
-        return sum(raw_g(품목, year, m) for m in range(1, month + 1))
+    def ytd_g(품목, typ):
+        return sum(g(품목, typ, year, m) for m in range(1, month + 1))
 
-    def ytd_q(품목):
-        return sum(raw_q(품목, year, m) for m in range(1, month + 1))
+    def ytd_q(품목, typ):
+        return sum(q(품목, typ, year, m) for m in range(1, month + 1))
 
-    def dp(g, q):
-        return g / q if q else 0.0
+    def dp(금액, 판매량):
+        return 금액 / 판매량 if 판매량 else 0.0
 
+    M = 1e6
     rows = []
 
     for 품목 in 품목_list:
         rows.append(('section', 품목))
 
-        g1 = yr_g(품목, yr1) / 1e6
-        g2 = yr_g(품목, yr2) / 1e6
-        gp = raw_g(품목, prev_yr, prev_mo) / 1e6
-        gc = raw_g(품목, year, month) / 1e6
-        gy = ytd_g(품목) / 1e6
-        rows.append(('sub', '금액', g1, g2, gp, gc, gc - gp, gy))
+        ag    = ann_g(품목)
+        pg    = g(품목, '실적', prev_yr, prev_mo)
+        plg   = g(품목, '계획', year, month)
+        cg    = g(품목, '실적', year, month)
+        ytdpg = ytd_g(품목, '계획')
+        ytdrg = ytd_g(품목, '실적')
+
+        rows.append(('sub', '금액',
+                     ag/M, pg/M, plg/M, cg/M,
+                     (cg-plg)/M, (cg-pg)/M,
+                     ytdpg/M, ytdrg/M, (ytdrg-ytdpg)/M))
 
         if 품목 in 단가_품목:
-            is_톤 = (품목 in 품목별매출_톤_단위_품목)
-            sc = 1.0 if is_톤 else 1 / 1e4  # 톤: 그대로, 개: 만개 변환
-
-            q1 = yr_q(품목, yr1) * sc
-            q2 = yr_q(품목, yr2) * sc
-            qp = raw_q(품목, prev_yr, prev_mo) * sc
-            qc = raw_q(품목, year, month) * sc
-            qy = ytd_q(품목) * sc
-
-            # 단가 분모: 부산물은 톤→kg(*1000)으로 원/kg, 나머지는 개 그대로 원/개
+            is_톤 = 품목 in 품목별매출_톤_단위_품목
+            sc  = 1.0 if is_톤 else 1/1e4
             dsc = 1000 if is_톤 else 1
-            d1  = dp(yr_g(품목, yr1),              yr_q(품목, yr1)              * dsc)
-            d2  = dp(yr_g(품목, yr2),              yr_q(품목, yr2)              * dsc)
-            dp_ = dp(raw_g(품목, prev_yr, prev_mo), raw_q(품목, prev_yr, prev_mo) * dsc)
-            dc  = dp(raw_g(품목, year, month),      raw_q(품목, year, month)      * dsc)
-            dy  = dp(ytd_g(품목),                   ytd_q(품목)                  * dsc)
 
-            rows.append(('sub', '단가', d1, d2, dp_, dc, dc - dp_, dy))
+            aq    = ann_q(품목)
+            pq    = q(품목, '실적', prev_yr, prev_mo)
+            plq   = q(품목, '계획', year, month)
+            cq    = q(품목, '실적', year, month)
+            ytdpq = ytd_q(품목, '계획')
+            ytdrq = ytd_q(품목, '실적')
+
+            da    = dp(ag,    aq*dsc)
+            dpr   = dp(pg,    pq*dsc)
+            dpl   = dp(plg,   plq*dsc)
+            dc    = dp(cg,    cq*dsc)
+            dytdp = dp(ytdpg, ytdpq*dsc)
+            dytdr = dp(ytdrg, ytdrq*dsc)
+
+            rows.append(('sub', '단가',
+                         da, dpr, dpl, dc,
+                         dc - dpl, dc - dpr,
+                         dytdp, dytdr, dytdr - dytdp))
             rows.append(('sub', '판매량(톤)' if is_톤 else '판매량',
-                         q1, q2, qp, qc, qc - qp, qy))
+                         aq*sc, pq*sc, plq*sc, cq*sc,
+                         (cq-plq)*sc, (cq-pq)*sc,
+                         ytdpq*sc, ytdrq*sc, (ytdrq-ytdpq)*sc))
 
     # 합계
     rows.append(('section', '합계'))
 
-    def tot_g(yr, mo=None):
-        if mo is None:
-            return sum(yr_g(p, yr) for p in 품목_list)
-        return sum(raw_g(p, yr, mo) for p in 품목_list)
+    tag    = sum(ann_g(p) for p in 품목_list)
+    tpg    = sum(g(p, '실적', prev_yr, prev_mo) for p in 품목_list)
+    tplg   = sum(g(p, '계획', year, month) for p in 품목_list)
+    tcg    = sum(g(p, '실적', year, month) for p in 품목_list)
+    tytdpg = sum(ytd_g(p, '계획') for p in 품목_list)
+    tytdrg = sum(ytd_g(p, '실적') for p in 품목_list)
 
-    def tot_q(yr, mo=None):
-        if mo is None:
-            return sum(yr_q(p, yr) for p in 합계_판매량_품목)
-        return sum(raw_q(p, yr, mo) for p in 합계_판매량_품목)
+    taq    = sum(ann_q(p) for p in 합계_판매량_품목)
+    tpq    = sum(q(p, '실적', prev_yr, prev_mo) for p in 합계_판매량_품목)
+    tplq   = sum(q(p, '계획', year, month) for p in 합계_판매량_품목)
+    tcq    = sum(q(p, '실적', year, month) for p in 합계_판매량_품목)
+    tytdpq = sum(ytd_q(p, '계획') for p in 합계_판매량_품목)
+    tytdrq = sum(ytd_q(p, '실적') for p in 합계_판매량_품목)
 
-    def ytd_tot_g():
-        return sum(ytd_g(p) for p in 품목_list)
+    rows.append(('total', '금액',
+                 tag/M, tpg/M, tplg/M, tcg/M,
+                 (tcg-tplg)/M, (tcg-tpg)/M,
+                 tytdpg/M, tytdrg/M, (tytdrg-tytdpg)/M))
 
-    def ytd_tot_q():
-        return sum(ytd_q(p) for p in 합계_판매량_품목)
+    tda    = dp(tag,    taq)
+    tdpr   = dp(tpg,    tpq)
+    tdpl   = dp(tplg,   tplq)
+    tdc    = dp(tcg,    tcq)
+    tdytdp = dp(tytdpg, tytdpq)
+    tdytdr = dp(tytdrg, tytdrq)
 
-    tg1, tg2 = tot_g(yr1) / 1e6, tot_g(yr2) / 1e6
-    tgp, tgc = tot_g(prev_yr, prev_mo) / 1e6, tot_g(year, month) / 1e6
-    tgy = ytd_tot_g() / 1e6
+    rows.append(('total', '단가',
+                 tda, tdpr, tdpl, tdc,
+                 tdc - tdpl, tdc - tdpr,
+                 tdytdp, tdytdr, tdytdr - tdytdp))
+    rows.append(('total', '판매량',
+                 taq/1e4, tpq/1e4, tplq/1e4, tcq/1e4,
+                 (tcq-tplq)/1e4, (tcq-tpq)/1e4,
+                 tytdpq/1e4, tytdrq/1e4, (tytdrq-tytdpq)/1e4))
 
-    tq1, tq2 = tot_q(yr1) / 1e4, tot_q(yr2) / 1e4
-    tqp, tqc = tot_q(prev_yr, prev_mo) / 1e4, tot_q(year, month) / 1e4
-    tqy = ytd_tot_q() / 1e4
+    col_연간계획 = f"'{str(year)[2:]}년 계획"
+    prev_pfx     = f"'{str(prev_yr)[2:]}." if prev_yr != year else ""
+    col_전월실적 = f"{prev_pfx}{prev_mo}월 실적"
+    col_당월계획 = f"{month}월 계획"
+    col_당월실적 = f"{month}월 실적"
 
-    td1  = dp(tot_g(yr1),              tot_q(yr1))
-    td2  = dp(tot_g(yr2),              tot_q(yr2))
-    tdp_ = dp(tot_g(prev_yr, prev_mo), tot_q(prev_yr, prev_mo))
-    tdc  = dp(tot_g(year, month),      tot_q(year, month))
-    tdy  = dp(ytd_tot_g(),             ytd_tot_q())
-
-    rows.append(('total', '금액',   tg1, tg2, tgp, tgc, tgc - tgp, tgy))
-    rows.append(('total', '단가',   td1, td2, tdp_, tdc, tdc - tdp_, tdy))
-    rows.append(('total', '판매량', tq1, tq2, tqp, tqc, tqc - tqp, tqy))
-
-    col_yr1  = f"'{str(yr1)[2:]}년"
-    col_yr2  = f"'{str(yr2)[2:]}년"
-    col_전월 = f"'{str(prev_yr)[2:]}년 {prev_mo}월" if prev_yr != year else f"{prev_mo}월"
-    col_당월 = f"{month}월"
-
-    return rows, ['구분', col_yr1, col_yr2, col_전월, col_당월, '전월대비', '누계']
+    col_headers = ['구분', col_연간계획, col_전월실적, col_당월계획, col_당월실적,
+                   '계획비', '전월비', '누계_계획', '누계_실적', '누계_계획비']
+    return rows, col_headers
 
 
 def _품목별매출_to_html(rows, col_headers):
