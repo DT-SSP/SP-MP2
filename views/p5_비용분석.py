@@ -41,93 +41,123 @@ def _build_운반비(year, month):
     df = load_sheet(Sheets.운반실적및컨테이너단가_DB)
     df.columns = df.columns.str.strip()
     df = _drop_empty(df, '연도', '월')
-    df['값'] = df['값'].apply(_parse)
-    df['구분2'] = df['구분2'].astype(str).str.strip()
-    vm = df.set_index(['구분1', '구분2', '연도', '월'])['값'].to_dict()
 
-    # DB에서 수량 키와 비목 목록을 자동 감지
+    # 신규 컬럼 구조: 구분1, 조건, 업체, 연도, 월, 실적
+    val_col = '실적' if '실적' in df.columns else '값'
+    df[val_col]  = df[val_col].apply(_parse)
+    df['조건']   = df['조건'].fillna('').astype(str).str.strip()
+    df['업체']   = df['업체'].fillna('').astype(str).str.strip()
+
+    vm = df.set_index(['구분1', '조건', '업체', '연도', '월'])[val_col].to_dict()
+
     qty_key       = next(k for k in df['구분1'].unique() if '수량' in k)
     expense_items = list(dict.fromkeys(k for k in df['구분1'] if k != qty_key))
 
     연도_in_db = sorted(df['연도'].unique().tolist())
     prev_yr, prev_mo = _prev(year, month)
 
-    def get_types(yr, mo):
-        mask = (df['연도'] == yr) & (df['월'] == mo) & (df['구분2'] != '')
-        return sorted(df[mask]['구분2'].unique().tolist())
+    def raw(g1, cond, company, yr, mo):
+        return vm.get((g1, cond, company, yr, mo), 0.0)
 
-    prev_types = get_types(prev_yr, prev_mo)
-    curr_types = get_types(year, month)
+    def get_conds(yr, mo):
+        mask = (df['연도'] == yr) & (df['월'] == mo) & (df['조건'] != '')
+        return sorted(df[mask]['조건'].unique().tolist())
 
-    def raw(g1, g2, yr, mo):
-        return vm.get((g1, g2, yr, mo), 0.0)
+    def get_업체s(cond, yr, mo):
+        mask = (df['연도'] == yr) & (df['월'] == mo) & (df['조건'] == cond) & (df['업체'] != '')
+        return sorted(df[mask]['업체'].unique().tolist())
 
-    def container_cost(g2, yr, mo):
-        return sum(raw(item, g2, yr, mo) for item in expense_items)
+    def get_month_pairs(yr, mo):
+        """업체 있으면 (cond, 업체), 없으면 (cond, '') 형태로 컬럼 pair 목록 반환"""
+        pairs = []
+        for cond in get_conds(yr, mo):
+            businesses = get_업체s(cond, yr, mo)
+            if businesses:
+                for b in businesses:
+                    pairs.append((cond, b))
+            else:
+                pairs.append((cond, ''))
+        return pairs
 
-    def total_cost(g2, yr, mo):
-        return container_cost(g2, yr, mo) * raw(qty_key, g2, yr, mo)
+    def total_agg(g1, yr, mo):
+        return raw(g1, '', '', yr, mo)
 
-    def yr_avg(g1, yr):
-        vals = [raw(g1, '', yr, m) for m in range(1, 13) if (g1, '', yr, m) in vm]
+    prev_pairs = get_month_pairs(prev_yr, prev_mo)
+    curr_pairs = get_month_pairs(year, month)
+
+    def yr_avg_total(g1, yr):
+        vals = [raw(g1, '', '', yr, m) for m in range(1, 13) if (g1, '', '', yr, m) in vm]
         return sum(vals) / len(vals) if vals else 0.0
 
+    def container_cost_total(yr, mo):
+        return sum(total_agg(it, yr, mo) for it in expense_items)
+
+    def pair_cost(cond, company, yr, mo):
+        return sum(raw(it, cond, company, yr, mo) for it in expense_items)
+
     def yr_avg_cost(yr):
-        vals = [container_cost('', yr, m) for m in range(1, 13) if (qty_key, '', yr, m) in vm]
+        vals = [container_cost_total(yr, m) for m in range(1, 13) if (qty_key, '', '', yr, m) in vm]
         return sum(vals) / len(vals) if vals else 0.0
 
     def make_row(g1):
-        v = [yr_avg(g1, yr) for yr in 연도_in_db]
-        v += [raw(g1, g2, prev_yr, prev_mo) for g2 in prev_types]
-        v.append(raw(g1, '', prev_yr, prev_mo))
-        v += [raw(g1, g2, year, month) for g2 in curr_types]
-        v.append(raw(g1, '', year, month))
-        v.append(raw(g1, '', year, month) - raw(g1, '', prev_yr, prev_mo))
+        v  = [yr_avg_total(g1, yr) for yr in 연도_in_db]
+        v += [raw(g1, c, b, prev_yr, prev_mo) for c, b in prev_pairs]
+        v.append(total_agg(g1, prev_yr, prev_mo))
+        v += [raw(g1, c, b, year, month) for c, b in curr_pairs]
+        v.append(total_agg(g1, year, month))
+        v.append(total_agg(g1, year, month) - total_agg(g1, prev_yr, prev_mo))
         return v
 
-    def make_cost():
-        v = [yr_avg_cost(yr) for yr in 연도_in_db]
-        v += [container_cost(g2, prev_yr, prev_mo) for g2 in prev_types]
-        v.append(container_cost('', prev_yr, prev_mo))
-        v += [container_cost(g2, year, month) for g2 in curr_types]
-        v.append(container_cost('', year, month))
-        v.append(container_cost('', year, month) - container_cost('', prev_yr, prev_mo))
+    def make_cost_row():
+        v  = [yr_avg_cost(yr) for yr in 연도_in_db]
+        v += [pair_cost(c, b, prev_yr, prev_mo) for c, b in prev_pairs]
+        v.append(container_cost_total(prev_yr, prev_mo))
+        v += [pair_cost(c, b, year, month) for c, b in curr_pairs]
+        v.append(container_cost_total(year, month))
+        v.append(container_cost_total(year, month) - container_cost_total(prev_yr, prev_mo))
         return v
 
-    def make_total():
-        v = [yr_avg(qty_key, yr) * yr_avg_cost(yr) for yr in 연도_in_db]
-        v += [total_cost(g2, prev_yr, prev_mo) for g2 in prev_types]
-        v.append(total_cost('', prev_yr, prev_mo))
-        v += [total_cost(g2, year, month) for g2 in curr_types]
-        v.append(total_cost('', year, month))
-        v.append(total_cost('', year, month) - total_cost('', prev_yr, prev_mo))
+    def make_total_row():
+        def tot(yr, mo):
+            return container_cost_total(yr, mo) * total_agg(qty_key, yr, mo)
+        def pair_tot(c, b, yr, mo):
+            return pair_cost(c, b, yr, mo) * raw(qty_key, c, b, yr, mo)
+        v  = [yr_avg_total(qty_key, yr) * yr_avg_cost(yr) for yr in 연도_in_db]
+        v += [pair_tot(c, b, prev_yr, prev_mo) for c, b in prev_pairs]
+        v.append(tot(prev_yr, prev_mo))
+        v += [pair_tot(c, b, year, month) for c, b in curr_pairs]
+        v.append(tot(year, month))
+        v.append(tot(year, month) - tot(prev_yr, prev_mo))
         return v
 
     rows = [
         ('qty',      qty_key,            make_row(qty_key)),
-        ('subtotal', '컨테이너당 운반비',  make_cost()),
+        ('subtotal', '컨테이너당 운반비', make_cost_row()),
         *[('item',   g1,                 make_row(g1)) for g1 in expense_items],
-        ('total',    '총 비용',           make_total()),
+        ('total',    '총 비용',           make_total_row()),
     ]
 
     col_spec = {
         'annual_yrs': 연도_in_db,
-        'prev': (prev_yr, prev_mo, prev_types),
-        'curr': (year, month, curr_types),
+        'prev': (prev_yr, prev_mo, prev_pairs),
+        'curr': (year, month, curr_pairs),
     }
     return rows, col_spec
 
 
 def _운반비_to_html(rows, col_spec):
     annual_yrs = col_spec['annual_yrs']
-    prev_yr, prev_mo, prev_types = col_spec['prev']
-    curr_yr, curr_mo, curr_types = col_spec['curr']
+    prev_yr, prev_mo, prev_pairs = col_spec['prev']
+    curr_yr, curr_mo, curr_pairs = col_spec['curr']
 
-    n_prev = len(prev_types) + 1
-    n_curr = len(curr_types) + 1
+    n_prev = len(prev_pairs) + 1   # pairs + '-'
+    n_curr = len(curr_pairs) + 1
 
     def mo_label(yr, mo):
         return f"'{str(yr)[2:]}.{mo}월" if yr != curr_yr else f"{mo}월"
+
+    def pair_label(cond, company):
+        return f"{cond}/{company}" if company else cond
 
     th1 = f'<th style="{_TH}" rowspan="2">구분</th>'
     for yr in annual_yrs:
@@ -137,12 +167,12 @@ def _운반비_to_html(rows, col_spec):
     th1 += f'<th style="{_TH}" rowspan="2">전월대비</th>'
 
     th2 = ''
-    for g2 in prev_types:
-        th2 += f'<th style="{_TH}">{g2}</th>'
-    th2 += f'<th style="{_TH}">합계</th>'
-    for g2 in curr_types:
-        th2 += f'<th style="{_TH}">{g2}</th>'
-    th2 += f'<th style="{_TH}">합계</th>'
+    for c, b in prev_pairs:
+        th2 += f'<th style="{_TH}">{pair_label(c, b)}</th>'
+    th2 += f'<th style="{_TH}">-</th>'
+    for c, b in curr_pairs:
+        th2 += f'<th style="{_TH}">{pair_label(c, b)}</th>'
+    th2 += f'<th style="{_TH}">-</th>'
 
     thead = f'<tr>{th1}</tr><tr>{th2}</tr>'
 
