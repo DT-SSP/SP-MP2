@@ -4,5 +4,6 @@ gspread>=6.0.0
 google-auth>=2.0.0
 requests>=2.28.0
 pandas>=2.0.0
+pyarrow>=14.0.0
 uvicorn>=0.20.0
 bcrypt>=4.0.0

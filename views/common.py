@@ -4,6 +4,8 @@ import pandas as pd
 # ── 데이터 유틸 (기존 로직 동일) ───────────────────────────────────────────
 
 def parse(s):
+    if pd.isna(s):  # None, NaN, pd.NA → 0
+        return 0.0
     if isinstance(s, (int, float)):
         return float(s)
     s = str(s).strip().replace(',', '').replace(' ', '')

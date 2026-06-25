@@ -8,6 +8,9 @@ venv/
 alembic.ini
 migrations/
 
+# 디스크 캐시 (parquet)
+.sheet_cache/
+
 # 민감 정보 — 절대 커밋 금지
 google_config.py
-ssp-kpiapp-*.json
+dx-dashboard-*.json
