@@ -1,6 +1,7 @@
 import datetime
 import logging
 import os
+import threading
 from typing import Optional
 from sqlmodel import SQLModel, Field
 
@@ -9,9 +10,15 @@ import violit as vl
 from violit.context import layout_ctx
 
 from data.config import Sheets
-from data.loader import load_sheet, preload_all
+from data.loader import load_sheet, preload_all, refresh_all
 from views import p1_실적요약, p2_손익분석, p3_매출분석, p4_생산분석
 from views import p5_비용분석, p6_재고자산, p7_기타, p8_해외법인
+
+# 데이터 새로고침 버튼을 볼 수 있는 관리자 아이디 목록
+_ADMIN_USERS: set[str] = {"gawon.yi"}
+
+_REFRESH_STATE: dict = {"status": "idle"}  # idle | running | done | error
+_REFRESH_LOCK = threading.Lock()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 
@@ -25,6 +32,19 @@ class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     username: str
     hashed_password: str
+
+
+def _run_refresh_bg():
+    all_sheets = [v for k, v in vars(Sheets).items()
+                  if not k.startswith("_") and isinstance(v, tuple)]
+    try:
+        refresh_all(all_sheets, max_workers=2)
+        _REFRESH_STATE["status"] = "done"
+    except Exception as e:
+        logging.error(f"[refresh] 실패: {e}")
+        _REFRESH_STATE["status"] = "error"
+    finally:
+        _REFRESH_LOCK.release()
 
 
 app = vl.App(title="AT사업본부 경영실적 대시보드",container_width="100%", db="./app.db")
@@ -69,6 +89,35 @@ def _sidebar_controls():
             app.auth.logout()
             app.switch_page("Login")
         app.button("로그아웃", on_click=_do_logout)
+
+        # 관리자 전용: 데이터 새로고침
+        user = app.auth.current_user()
+        if user and user.username in _ADMIN_USERS:
+            status = _REFRESH_STATE["status"]
+            if status == "running":
+                app.markdown(
+                    '<p style="font-size:0.8em;color:#888;margin:4px 0">⏳ 데이터 갱신 중...<br>'
+                    '<span style="font-size:0.9em">완료 후 페이지를 새로고침하세요</span></p>',
+                    unsafe_allow_html=True,
+                )
+            elif status == "done":
+                app.markdown(
+                    '<p style="font-size:0.8em;color:#16a34a;margin:4px 0">✅ 갱신 완료!</p>',
+                    unsafe_allow_html=True,
+                )
+                app.button("확인", on_click=lambda: _REFRESH_STATE.update({"status": "idle"}))
+            elif status == "error":
+                app.markdown(
+                    '<p style="font-size:0.8em;color:#dc2626;margin:4px 0">❌ 갱신 실패 (서버 로그 확인)</p>',
+                    unsafe_allow_html=True,
+                )
+                app.button("확인", on_click=lambda: _REFRESH_STATE.update({"status": "idle"}))
+            else:
+                def _do_refresh():
+                    if _REFRESH_LOCK.acquire(blocking=False):
+                        _REFRESH_STATE["status"] = "running"
+                        threading.Thread(target=_run_refresh_bg, daemon=True).start()
+                app.button("데이터 새로고침", on_click=_do_refresh)
     finally:
         layout_ctx.reset(_token)
 
