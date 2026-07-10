@@ -3,12 +3,12 @@ import pandas as pd
 from data.loader import load_sheet
 from data.config import (
     Sheets,
-    AT_국내_사업장,
     CORP_ORDER, 재무_CORP_ORDER, 재무_사업장_표시명,
     현금_CORP_ORDER, 현금_사업장_표시명, 현금_구분_순서,
     재무_소계행,
     SONIK_구분_순서, SONIK_표시명, SONIK_단위, SONIK_소수점, SONIK_PCT_대상,
     품목_구분_순서, 품목_단위, 품목_소수점, 품목_PCT_대상, 품목_PCT_소수점, 품목_PCT_품목, 품목_품목_순서,
+    회전일_CORP_ORDER, 회전일_구분_순서, 회전일_사업장_표시명, 선재_국내_사업장, 현금_소계행
 )
 from views.common import (
     parse as _parse, fmt as _fmt, pct as _pct,
@@ -134,16 +134,16 @@ def _재무_section(title, per_corp_dfs, 소계행, 헤더행, corp_labels, memo
     return _layout64(title, tab_html, memo, unit)
 
 
-def _build_현금전환주기_table(year, month):
-    df = load_sheet(Sheets.현금전환주기_DB)
+def _build_회전일_table(year, month):
+    df = load_sheet(Sheets.회전일_DB)
     df['값']  = df['값'].apply(_parse)
     df = _drop_empty(df, '연도', '월')
 
     yr_전기, mo_전기 = year - 1, 12
     yr_전월, mo_전월 = _prev(year, month, 1)
 
-    db_corps    = _sort_corps(df['사업장'].unique().tolist(), 현금_CORP_ORDER)
-    corp_labels = [현금_사업장_표시명.get(c, c) for c in db_corps]
+    db_corps    = _sort_corps(df['사업장'].unique().tolist(), 회전일_CORP_ORDER)
+    corp_labels = [회전일_사업장_표시명.get(c, c) for c in db_corps]
 
     sub_labels = [
         f"'{str(year - 1)[2:]}년",
@@ -159,7 +159,7 @@ def _build_현금전환주기_table(year, month):
 
     rows = []
     for db_corp, corp_disp in zip(db_corps, corp_labels):
-        for i, 항목 in enumerate(현금_구분_순서):
+        for i, 항목 in enumerate(회전일_구분_순서):
             전기_v = 값(yr_전기, mo_전기, db_corp, 항목)
             전월_v = 값(yr_전월, mo_전월, db_corp, 항목)
             당월_v = 값(year,    month,   db_corp, 항목)
@@ -176,7 +176,7 @@ def _build_현금전환주기_table(year, month):
     return rows, sub_labels
 
 
-def _현금_to_html_table(rows, sub_labels):
+def _회전일_to_html_table(rows, sub_labels):
     headers = (f'<th style="{_TH}">사업장</th>'
                f'<th style="{_TH}">구분</th>'
                + ''.join(f'<th style="{_TH}">{h}</th>' for h in sub_labels))
@@ -210,6 +210,7 @@ def _현금_to_html_table(rows, sub_labels):
 
     return _html_table(f'<tr>{headers}</tr>', rows_html)
 
+'''
 
 def _build_매출채권현황_table(year, month):
     df = load_sheet(Sheets.매출채권현황_DB)
@@ -395,6 +396,7 @@ def _원재료_to_html_table(df):
 
     return _html_table(f'<tr>{headers}</tr>', rows_html)
 
+'''
 
 # ── 데이터 로드 ───────────────────────────────────────────────
 
@@ -436,11 +438,11 @@ def _build_포함_table(get, 사업장_list, year, month):
     전전월_col = _월헤더(yr1, mo1)
     전월_col   = _월헤더(yr2, mo2)
     당월_col   = _당월헤더(year, month, len(사업장_list))
-    _장_표시명 = {'원주': 'AT_국내', '중국': 'AT_중국', '멕시코': 'AT_멕시코'}
+    _장_표시명 = {'본사': '선재_국내', '남통': '선재_남통', '천진': '선재_천진', '타이': '선재_타이'}
     장_cols    = [f"{_장_표시명.get(장, 장)} {_기호[i]}" for i, 장 in enumerate(사업장_list)]
     columns    = ['구분', 전전월_col, 전월_col, '계획', 당월_col] + 장_cols + ['전월대비', '계획대비']
 
-    rows, 매출 = [], {}
+    rows, 매출액 = [], {}
 
     for g in SONIK_구분_순서:
         div      = SONIK_단위[g]
@@ -451,8 +453,8 @@ def _build_포함_table(get, 사업장_list, year, month):
         장별     = {장: get('실적', year, month, 장=장, 구분=g) for 장 in 사업장_list}
         당월_v   = sum(장별.values())
 
-        if g == '매출':
-            매출 = {'전전월': 전전월_v, '전월': 전월_v, '계획': 계획_v, '당월': 당월_v, **장별}
+        if g == '매출액':
+            매출액 = {'전전월': 전전월_v, '전월': 전월_v, '계획': 계획_v, '당월': 당월_v, **장별}
 
         rows.append({
             '구분':     SONIK_표시명[g],
@@ -465,11 +467,11 @@ def _build_포함_table(get, 사업장_list, year, month):
             **{장_cols[i]: _fmt(장별[장] / div, decimal=dec) for i, 장 in enumerate(사업장_list)},
         })
 
-        if g in SONIK_PCT_대상 and 매출.get('당월'):
-            전전월_p = _pct(전전월_v, 매출['전전월'])
-            전월_p   = _pct(전월_v,   매출['전월'])
-            계획_p   = _pct(계획_v,   매출['계획'])
-            당월_p   = _pct(당월_v,   매출['당월'])
+        if g in SONIK_PCT_대상 and 매출액.get('당월'):
+            전전월_p = _pct(전전월_v, 매출액['전전월'])
+            전월_p   = _pct(전월_v,   매출액['전월'])
+            계획_p   = _pct(계획_v,   매출액['계획'])
+            당월_p   = _pct(당월_v,   매출액['당월'])
             rows.append({
                 '구분':     '%',
                 전전월_col: _fmt(전전월_p,        is_pct=True),
@@ -478,14 +480,14 @@ def _build_포함_table(get, 사업장_list, year, month):
                 당월_col:   _fmt(당월_p,          is_pct=True),
                 '전월대비': _fmt(당월_p - 전월_p,  is_pct=True),
                 '계획대비': _fmt(당월_p - 계획_p,  is_pct=True),
-                **{장_cols[i]: _fmt(_pct(장별[장], 매출.get(장, 0)), is_pct=True)
+                **{장_cols[i]: _fmt(_pct(장별[장], 매출액.get(장, 0)), is_pct=True)
                    for i, 장 in enumerate(사업장_list)},
             })
 
     return pd.DataFrame({col: [r.get(col, '') for r in rows] for col in columns})
 
 
-def _build_국내_table(get, year, month, 사업장=AT_국내_사업장):
+def _build_국내_table(get, year, month, 사업장=선재_국내_사업장):
     yr2, mo2 = _prev(year, month, 1)
     전월_col  = _월헤더(yr2, mo2)
 
@@ -493,7 +495,7 @@ def _build_국내_table(get, year, month, 사업장=AT_국내_사업장):
                '당월_계획', '당월_실적', '당월_계획대비', '당월_전월대비',
                '누적_계획', '누적_실적', '누적_계획대비']
 
-    rows, 매출 = [], {}
+    rows, 매출액 = [], {}
 
     for g in SONIK_구분_순서:
         div      = SONIK_단위[g]
@@ -504,8 +506,8 @@ def _build_국내_table(get, year, month, 사업장=AT_국내_사업장):
         누적계획  = sum(get('계획', year, m, 장=사업장, 구분=g) for m in range(1, month + 1))
         누적실적  = sum(get('실적', year, m, 장=사업장, 구분=g) for m in range(1, month + 1))
 
-        if g == '매출':
-            매출 = {'전월': 전월_v, '당월계획': 당월계획, '당월실적': 당월실적,
+        if g == '매출액':
+            매출액 = {'전월': 전월_v, '당월계획': 당월계획, '당월실적': 당월실적,
                     '누적계획': 누적계획, '누적실적': 누적실적}
 
         rows.append({
@@ -520,12 +522,12 @@ def _build_국내_table(get, year, month, 사업장=AT_국내_사업장):
             '누적_계획대비': _fmt((누적실적 - 누적계획) / div, decimal=dec),
         })
 
-        if g in SONIK_PCT_대상 and 매출.get('당월실적'):
-            전월_p     = _pct(전월_v,    매출['전월'])
-            당월계획_p  = _pct(당월계획, 매출['당월계획'])
-            당월실적_p  = _pct(당월실적, 매출['당월실적'])
-            누적계획_p  = _pct(누적계획, 매출['누적계획'])
-            누적실적_p  = _pct(누적실적, 매출['누적실적'])
+        if g in SONIK_PCT_대상 and 매출액.get('당월실적'):
+            전월_p     = _pct(전월_v,    매출액['전월'])
+            당월계획_p  = _pct(당월계획, 매출액['당월계획'])
+            당월실적_p  = _pct(당월실적, 매출액['당월실적'])
+            누적계획_p  = _pct(누적계획, 매출액['누적계획'])
+            누적실적_p  = _pct(누적실적, 매출액['누적실적'])
             rows.append({
                 '구분':          '%',
                 전월_col:        _fmt(전월_p,                   is_pct=True),
@@ -541,17 +543,18 @@ def _build_국내_table(get, year, month, 사업장=AT_국내_사업장):
     return pd.DataFrame({col: [r.get(col, '') for r in rows] for col in columns})
 
 
-def _build_재무상태표_table(year, month):
-    df = load_sheet(Sheets.재무상태표_DB)
+def _build_현금흐름표_연결_table(year, month):
+    df = load_sheet(Sheets.현금흐름표_연결_DB)
     df['값']  = df['값'].apply(_parse)
     df = _drop_empty(df, '연도', '월')
+    df['구분2'] = df['구분2'].fillna('').astype(str).str.strip()
     df['구분3'] = df['구분3'].fillna('').astype(str).str.strip()
 
     yr_전기, mo_전기 = year - 1, 12
     yr_전월, mo_전월 = _prev(year, month, 1)
 
-    db_corps    = _sort_corps(df['사업장'].unique().tolist(), 재무_CORP_ORDER)
-    corp_labels = [재무_사업장_표시명.get(c, c) for c in db_corps]
+    db_corps    = _sort_corps(df['사업장'].unique().tolist(), 현금_사업장_표시명)
+    corp_labels = [현금_사업장_표시명.get(c, c) for c in db_corps]
 
     sub_labels = [
         f"'{str(year - 1)[2:]}년",
@@ -570,7 +573,7 @@ def _build_재무상태표_table(year, month):
         return val_map.get((yr, mo, g1, g2, g3, 장), 0.0)
 
     columns = ['구분', '_depth'] + sub_labels
-    소계행  = 재무_소계행
+    소계행  = 현금_소계행
     헤더행  = set()
     빈행    = {col: '' for col in columns}
 
@@ -640,6 +643,86 @@ def _build_재무상태표_table(year, month):
 
     return per_corp_dfs, 소계행, 헤더행, corp_labels
 
+def _build_재무상태표_table(year, month):
+    df = load_sheet(Sheets.재무상태표_DB)
+    df['값']  = df['값'].apply(_parse)
+    df = _drop_empty(df, '연도', '월')
+
+    yr_전기, mo_전기 = year - 1, 12
+    yr_전월, mo_전월 = _prev(year, month, 1)
+
+    db_corps    = _sort_corps(df['사업장'].unique().tolist(), 재무_CORP_ORDER)
+    corp_labels = [재무_사업장_표시명.get(c, c) for c in db_corps]
+
+    sub_labels = [
+        f"'{str(year - 1)[2:]}년",
+        f"'{str(yr_전월)[2:]}.{mo_전월}월",
+        f"{month}월",
+        '전월비',
+    ]
+
+    anchor  = df[(df['연도'] == year) & (df['월'] == month) & (df['사업장'] == db_corps[0])]
+    행_순서 = list(dict.fromkeys(zip(anchor['구분1'], anchor['구분2'])))
+
+    # 반복 필터 대신 O(1) 조회 dict
+    val_map = df.set_index(['연도', '월', '구분1', '구분2', '사업장'])['값'].to_dict()
+
+    def 값(yr, mo, g1, g2, 장):
+        return val_map.get((yr, mo, g1, g2, 장), 0.0)
+
+    columns = ['구분', '_depth'] + sub_labels
+    소계행  = 재무_소계행
+    헤더행  = set()
+    빈행    = {col: '' for col in columns}
+
+    _SUM = '__SUM__'
+    행_순서_aug, seen = [], set()
+    for g1, g2 in 행_순서:
+        key = (g1, g2)
+        행_순서_aug.append((g1, g2))
+
+    # 각 g1 그룹에서 소계행(총계)이 맨 앞으로 오도록 재정렬 (p8 스타일)
+    g1_order = list(dict.fromkeys(t[0] for t in 행_순서_aug))
+    g1_groups: dict = {g: [] for g in g1_order}
+    for triple in 행_순서_aug:
+        g1_groups[triple[0]].append(triple)
+
+    행_순서_final: list = []
+    for g1 in g1_order:
+        group  = g1_groups[g1]
+        totals = [t for t in group if (t[1] in 소계행 or t[0] == t[1])]
+        others = [t for t in group if t not in totals]
+        행_순서_final.extend(totals + others)
+
+    per_corp_dfs = {}
+    for db_corp, corp_disp in zip(db_corps, corp_labels):
+        rows = []
+        for g1, g2 in 행_순서_final:
+            label = g2
+            
+            if label in 소계행 or g1 == g2:
+                depth = 0
+            else:
+                depth = 1
+                
+            전기_v = 값(yr_전기, mo_전기, g1, g2, db_corp)
+            전월_v = 값(yr_전월, mo_전월, g1, g2, db_corp)
+            당월_v = 값(year,    month,   g1, g2, db_corp)
+
+            rows.append({
+                '구분':        label,
+                '_depth':      depth,
+                sub_labels[0]: _fmt(전기_v),
+                sub_labels[1]: _fmt(전월_v),
+                sub_labels[2]: _fmt(당월_v),
+                sub_labels[3]: _fmt(당월_v - 전월_v),
+            })
+        per_corp_dfs[corp_disp] = pd.DataFrame(
+            {col: [r.get(col, '') for r in rows] for col in columns}
+        )
+
+    return per_corp_dfs, 소계행, 헤더행, corp_labels
+
 
 # ── 페이지 렌더 ───────────────────────────────────────────────
 
@@ -652,8 +735,9 @@ def render_page(app, year_state, month_state):
         )
     app.If(lambda: True, _render_title)
 
-    tabs = app.tabs(["주요경영지표(해외법인 포함)", "주요경영지표(AT_국내)"])
-
+    #tabs = app.tabs(["주요경영지표(해외법인 포함)", "주요경영지표(선재_국내)"])
+    tabs = app.tabs(["주요경영지표(해외법인 포함)"])
+    
     with tabs[0]:
         def _render_포함():
             year, month = int(year_state.value), int(month_state.value)
@@ -663,17 +747,26 @@ def render_page(app, year_state, month_state):
             app.markdown(_section("1) 손익", _build_포함_table(get, 사업장_list, year, month), memo1),
                          unsafe_allow_html=True)
 
-            per_corp_dfs, 소계행, 헤더행, corp_labels = _build_재무상태표_table(year, month)
-            memo2 = _get_memo(Sheets.재무상태표_메모, year, month)
-            app.markdown(_재무_section("2) 재무상태표", per_corp_dfs, 소계행, 헤더행, corp_labels, memo2),
+            df_현금, 소계행_현금, 헤더행_현금, 사업장_현금 = _build_현금흐름표_연결_table(year, month)
+            memo2 = _get_memo(Sheets.현금흐름표_연결_메모, year, month)
+            app.markdown(_재무_section("2) 현금흐름표_연결", df_현금, 소계행_현금, 헤더행_현금, 사업장_현금, memo2),
                          unsafe_allow_html=True)
 
-            rows_현금, sub_현금 = _build_현금전환주기_table(year, month)
-            memo3 = _get_memo(Sheets.현금전환주기_메모, year, month)
-            app.markdown(_layout64("3) 현금전환주기",
-                                   _현금_to_html_table(rows_현금, sub_현금),
+            per_corp_dfs, 소계행, 헤더행, corp_labels = _build_재무상태표_table(year, month)
+            memo3 = _get_memo(Sheets.재무상태표_메모, year, month)
+            app.markdown(_재무_section("3) 재무상태표", per_corp_dfs, 소계행, 헤더행, corp_labels, memo3),
+                         unsafe_allow_html=True)
+            
+            rows_회전, sub_회전 = _build_회전일_table(year, month)
+            memo3 = _get_memo(Sheets.회전일_메모, year, month)
+            app.markdown(_layout64("4) 회전일",
+                                   _회전일_to_html_table(rows_회전, sub_회전),
                                    memo3, '[단위: 일]'),
                          unsafe_allow_html=True)
+            
+        app.If(lambda: True, _render_포함)
+
+'''
 
             df_채권, 소계행_채권, 헤더행_채권 = _build_매출채권현황_table(year, month)
             memo4 = _get_memo(Sheets.매출채권현황_메모, year, month)
@@ -703,3 +796,5 @@ def render_page(app, year_state, month_state):
             app.markdown(_section("1) 손익_전월비/계획비", _build_국내_table(get, year, month), memo),
                          unsafe_allow_html=True)
         app.If(lambda: True, _render_국내)
+        
+'''

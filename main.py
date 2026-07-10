@@ -1,3 +1,7 @@
+import mimetypes
+mimetypes.add_type('application/javascript', '.js')
+mimetypes.add_type('text/css', '.css')
+
 import datetime
 import logging
 import os
@@ -11,11 +15,12 @@ from violit.context import layout_ctx
 
 from data.config import Sheets
 from data.loader import load_sheet, preload_all, refresh_all
-from views import p1_실적요약, p2_손익분석, p3_매출분석, p4_생산분석
-from views import p5_비용분석, p6_재고자산, p7_기타, p8_해외법인
+from views import p1_실적요약
+#from views import p2_손익분석, p3_매출분석, p4_생산분석
+#from views import p5_비용분석, p6_재고자산, p7_기타, p8_해외법인
 
 # 데이터 새로고침 버튼을 볼 수 있는 관리자 아이디 목록
-_ADMIN_USERS: set[str] = {"gawon.yi"}
+_ADMIN_USERS: set[str] = {"gawon.yi", "jaeseok.heo"}
 
 _REFRESH_STATE: dict = {"status": "idle"}  # idle | running | done | error
 _REFRESH_LOCK = threading.Lock()
@@ -47,7 +52,7 @@ def _run_refresh_bg():
         _REFRESH_LOCK.release()
 
 
-app = vl.App(title="AT사업본부 경영실적 대시보드",container_width="100%", db="./app.db")
+app = vl.App(title="선재사업본부 경영실적 대시보드",container_width="100%", db="./app.db")
 app.setup_auth(User, require_auth=False)
 
 
@@ -122,6 +127,7 @@ def _sidebar_controls():
         layout_ctx.reset(_token)
 
 
+
 with app.sidebar:
     app.If(app.auth.is_authenticated, _sidebar_controls)
 
@@ -132,7 +138,7 @@ def login_page():
         # 변경점: 타이틀 색상을 세아 다크 네이비(#323C47)로 변경하고, 자물쇠 아이콘에 오렌지(#EA5421) 포인트 추가
         app.markdown(
             '<div style="text-align:center;padding:48px 0 28px">'
-            '<p style="font-size:1.4em;font-weight:700;color:#323C47;margin:0"><span style="color:#EA5421;">🔒</span> AT사업본부 경영실적 대시보드</p>'
+            '<p style="font-size:1.4em;font-weight:700;color:#323C47;margin:0"><span style="color:#EA5421;">🔒</span> 선재사업본부 경영실적 대시보드</p>'
             '<p style="color:#666;font-size:0.9em;margin:8px 0 0">권한이 있는 임직원만 열람할 수 있습니다.</p>'
             '</div>',
             unsafe_allow_html=True,
@@ -175,7 +181,23 @@ def _protected(render_fn):
         render_fn(app, year_state, month_state)
     return _page
 
+def _public(render_fn):
+    def _page():
+        render_fn(app, year_state, month_state)
+    return _page
 
+app.navigation([
+    vl.Page(login_page,                              title="Login"),
+    vl.Page(_protected(p1_실적요약.render_page),     title="1. 실적요약")
+])
+
+'''
+app.navigation([
+    vl.Page(_public(p1_실적요약.render_page),        title="1. 실적요약")
+])
+'''
+
+'''
 app.navigation([
     vl.Page(login_page,                              title="Login"),
     vl.Page(_protected(p1_실적요약.render_page),     title="1. 실적요약"),
@@ -187,6 +209,7 @@ app.navigation([
     vl.Page(_protected(p7_기타.render_page),         title="7. 기타"),
     vl.Page(_protected(p8_해외법인.render_page),     title="8. 해외법인실적"),
 ])
+'''
 
 if __name__ == "__main__":
     app.run(port=int(os.environ.get("PORT", 8000)))

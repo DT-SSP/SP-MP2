@@ -1,138 +1,142 @@
 class SheetID:
-    손익       = "1CONVkBHAxTkEOfO_26bi97OoPJbnODPVO50KLqkROW4"
-    재무상태표 = "164sR9n53SN1221dLvnTY5n46Rg6qNokAbmStvtk_lXI"
-    현금전환주기 = "1xZduo38YxboPN1OZsT8oNXyXKGKzdh9FmuJNA1mCLlg"
-    매출채권현황 = "14abx6TFJqUvFjApOkrUKIckcY97xYrUXf2y7V3AR9_0"
-    품목손익 = "1NX2cIJUKGR7FegBBc6BS3J24Qlzv-mleymalRxE424c"
-    원재료단가변동 = "1QAFDXqkawn8OnNCPLxlFxNuLTzO5Z1e4QFO4oQ5bMZY"
-    손익요약 = "1qKZR6D-5H2l5AFDWXVozIPtIUPWIfEZO1pXavzYBtOM"
-    거래처강종별입고현황 = "1NRQfWOMhZ_ZtFKJF60o1qI5_QQ_lCvMEyrFDonpDqv4"
-    원소재투입비중 = "1iCBTgC30I4Edz4ftyxlVNAT6YnIO42kAQSGWAR7wasw"
-    제조가공비 = "1RST6NIBM5QJZYllzn935PtHb4vtky3XjfXyJPeQGqX8"
-    판관비 = "1HGA7NFIkZRAst-TDxTZvkxEyZPDEAOL4AAaalAU0Uq8"
-    품목별매출 = "1fn-Mfy_mw8OWxi-K_pVb4pQScnM9Ch5su7OL27ZZDNA"
-    판매구성 = "1BUh2TGkleSKRSzNdrTqRLyzC-hkeRYkegw15r-toZvw"
-    부산물매출 = "1ZDOathrkyHllx9JIBf3MlZkYmMVEsJfGKFtCy-96nKA"
-    생산실적 = "165hiBH1ltEpcNl5DUBUzXF_cNhCEJqVhi-D465y-d18"
-    불량발생내역 = "1T5ihofUnwcT9OOzJJiexMqtF6QNce-eC7Aup7wOFCns"
-    운반실적및컨테이너당단가 = "1inNrcjaonzsPY4a2_Kw3pcDRwhTIZBlrwFj-Ljkyk_0"
-    외주용역비 = "17L_0kCWZb-LTHn5lwlMR8diJ0JRoNdIzdf1nLVrw7zo"
-    멕시코향환차소급 = "1_a1-9pa_ZcMbFmwt_R8nPI80IgkWAc8a8S2AEdWr3IY"
-    원주멕시코환차소급 = "1LGLvU0YJI3IsW14i_LxlDUdkI2AeZ2r_NpoHG0j4IWo"
-    재고현황 = "1zx_P9s1AfEjcq7yyOmpLjFroJvpnkpdDi7Sqpp7xZhs"
-    연령별재고현황 = "1H12aJS3Iq9vbrNdIECfGeSASELh42O8BWJgxhky31ow"
-    인원현황 = "1Ax-V1dXuSmmo2ETSNbWN9bO22_8zxZRaqhDykNWAPLk"
-    노무비현황 = "1RAvuv7J-AKrXXriCuyVLr_yTw_isP6R_UAErfs1WrUw"
-    기능직근태현황 = "1MZ1MLJd64etF-fNDluxANA-x1_TKRid92K0cawas1Hc"
-    성과격려 = "1IJJAg9Ef3-NHQVClJx1yMiN_xZLXls1lq84O5HRfK3s"
-    멕시코손익 = "1zaanIkGiXDrlK2hd3nmoGDqymx5_gzttsoR8dbPjeY0"
-    멕시코원주채권채무 = "1XFj5KQ4v9GyrN0TmY4CfWesQp1ACm1OkqvGeZrhP25I"
-    중국손익 = "1Vp9bKFVVCH_8zfvlMuB7vPtOvv0L3qg_-vOTYczejR4"
-    중국재무상태표 = "1cusL4zztjNYZMWqwPKSHBHQl-KwQnJUuuiDRE9ea5jU"
-    중국판매구성 = "16I-tll7K4WmXZByH49OMsvwnrQx-QPyUdJ7B8ZVU4ec"
-    중국원재료입고 = "11eZV9T8pv9-TMgHO6kIBjLzuJuWL-w6CP1iJckZxlYc"
-    중국제조가공비 = "1uV2hT6UDkk3-SAzW4uzxuw4gc3WsGEueX6R2Jnsxowc"
-    중국판관비 = "1GNmQHROr8tkEINRvUvVPAq64baaDqFwnoKDbTYus_VM"
-    중국재고자산 = "1nbDdZu_jOlUl4fIegiM4BscEdoVrZTWL7P9U6ZRAfaM"
-    중국생산실적 = "1YnXQ3Ex8YlQtu9bcWBXeCvFzQtW2ZUft51wOWbXFaag"
-    중국인력현황 = "19wU_dSLzPcSuY4Q7jnF8DcBvBu3H_Ony2pYZrb6JkT4"
-
+    손익       = "1KIMLUU0w990j6i6fMYrytKTH4AEiR4982hGvNCa2s_E" 
+    현금흐름표_연결 = "11ZtiG01vGbHeyoHrqRi2sc9hNV6OpmYZcD_x8KFFbJc"
+    재무상태표 = "1WtOKqUrG2z_7H5GalohvF4ahSvmMugcxGbG4gCYFEi0"
+    회전일 = "1jydPIPGB1DrNlaE0-3y9LkSUkU8DhNbUMYZlSwejnew"
+    품목손익 = "1XVDkDWMtlPwsVMwn1wCcTge3faGa1PduSv9M4vXdzGA"
+    수정원가기준손익 = "12zbrNl30wsK0wszRQZVu6LoP7ekiqVyC6HWpH-k1PbI"
+    원재료입고기초단가차이 = "1KFgYVyt1O2usB0beCWcKKGkfZl2LKWdXjhEtzdg0dpk"
+    원재료입고단가차이_거래처기준 = "1e6N6Y6R6NpVt6ZZ5jSyI07VumCHk7P5Xnd7wmQz0pbc"
+    제품수불표 = "1kzH1fCNsk3m49xuEHT_fDtJDicS0D-_TwTfcB8KkhVY"
+    현금흐름표_별도 = "1YqUxJdOv8_nHwqueNsESjKCceNmMK322621uPYAZGnk"
+    안정성 = "1ZTuNSVXQcWe3BvaIAwhWg2wJF_89qM0sGNiTdmmUNVk"
+    수익성 = "1Ee5F3uhSTgGCsKWc6H9yYtaXM7sn69zUY6mwseJ4Tbs"
+    판매계획및실적 = "18Tba-bVA3IcX3-8jcAqMVU3IXOz353zVLzEnxYMyrCE"
+    손익요약표 = "1sDTrth-44HIWsh7FmeSGy49UWqSCfWyozE9H34I8uig"
 
 class Sheets:
-    # 1,5. 손익
-    손익_DB      = (SheetID.손익, "1. 손익_DB")
-    손익_메모      = (SheetID.손익, "1. 손익_메모")
-    손익_국내_메모 = (SheetID.손익, "1. 손익(국내)_메모")
+    ## 실적요약파트
+    # 1,6. 손익
+    손익_DB      = (SheetID.손익, "1. 손익_연결_DB")
+    손익_메모      = (SheetID.손익, "1. 손익_연결_메모")
+    손익_국내_메모 = (SheetID.손익, "1. 손익_별도_메모")
 
-    # 2. 재무상태표
-    재무상태표_DB  = (SheetID.재무상태표, "2. 재무상태표_DB")
-    재무상태표_메모 = (SheetID.재무상태표, "2. 재무상태표_메모")
+    # 2. 현금흐름표
+    현금흐름표_연결_DB  = (SheetID.현금흐름표_연결, "2. 현금흐름표_연결_DB")
+    현금흐름표_연결_메모 = (SheetID.현금흐름표_연결, "2. 현금흐름표_연결_메모")
 
-    # 3. 현금전환주기
-    현금전환주기_DB = (SheetID.현금전환주기, "3. 현금전환주기_DB")
-    현금전환주기_메모 = (SheetID.현금전환주기, "3. 현금전환주기_메모")
+    # 3, 13. 재무상태표
+    재무상태표_DB = (SheetID.재무상태표, "3. 재무상태표_연결_DB")
+    재무상태표_메모 = (SheetID.재무상태표, "3. 재무상태표_연결_메모")
+    재무상태표_국내_메모 = (SheetID.재무상태표, "3. 재무상태표_별도_메모")
 
-    # 4. 매출채권 현황
-    매출채권현황_DB = (SheetID.매출채권현황, "4. 매출채권_DB")
-    매출채권현황_메모 = (SheetID.매출채권현황, "4. 매출채권_메모")
+    # 4, 15. 회전일
+    회전일_DB = (SheetID.회전일, "4.회전일_연결_DB")
+    회전일_메모 = (SheetID.회전일, "4. 회전일_연결_메모")
+    회전일_국내_메모 = (SheetID.회전일, "4. 회전일_별도_메모")
     
-    # 6. 품목손익
-    품목손익_DB = (SheetID.품목손익, "6. 품목손익_DB")
-    품목손익_메모 = (SheetID.품목손익, "6. 품목손익_메모")
+    # 7. 품목손익
+    품목손익_DB = (SheetID.품목손익, "7.품목손익_별도_DB")
+    품목손익_메모 = (SheetID.품목손익, "7. 품목손익_별도_메모")
 
-    # 7. 원재료단가변동
-    원재료단가변동_DB = (SheetID.원재료단가변동, "7. 원재료단가변동_DB")
-    원재료단가변동_메모 = (SheetID.원재료단가변동, "7. 원재료단가변동_메모")
-
-    # 8. 손익요약
-    손익요약_DB  = (SheetID.손익요약, "8. 손익요약_DB")
-    손익요약_메모 = (SheetID.손익요약, "8. 손익요약_메모")
-
-    # 11-1. 거래처 및 강종별 입고 현황
-    거래처강종별입고현황_DB  = (SheetID.거래처강종별입고현황, "11-1. 거래처 및 강종별 입고 현황_DB")
-    거래처강종별입고현황_메모 = (SheetID.거래처강종별입고현황, "11-1. 거래처 및 강종별 입고 현황_메모")
-
-    # 11-2. 원소재 투입 비중
-    원소재투입비중_DB  = (SheetID.원소재투입비중, "11-2. 원소재 투입 비중_DB")
-    원소재투입비중_메모 = (SheetID.원소재투입비중, "11-2. 원소재 투입 비중_메모")
-
-    # 12. 제조가공비
-    제조가공비_DB  = (SheetID.제조가공비, "12. 제조가공비_DB")
-    제조가공비_메모 = (SheetID.제조가공비, "12. 제조가공비_메모")
-
-    # 13. 판관비
-    판관비_DB  = (SheetID.판관비, "13. 판관비_DB")
-    판관비_메모 = (SheetID.판관비, "13. 판관비_메모")
-
-    # 14. 품목별 매출
-    품목별매출_DB = (SheetID.품목별매출, "14. 품목별 매출_DB")
-    품목별매출_메모 = (SheetID.품목별매출, "14. 품목별 매출_메모")
-
-    # 15, 17, 18. 판매구성
-    판매구성_DB = (SheetID.판매구성, "15,17,18. 판매구성_DB")
-    판매구성_메모 = (SheetID.판매구성, "15,17,18. 판매구성_메모")
-
-    # 16. 부산물 매출
-    부산물매출_DB = (SheetID.부산물매출, "16-1. 부산물 매출 판매 현황_DB") 
-    부산물매출_메모 = (SheetID.부산물매출, "16-1. 부산물 매출 판매 현황_메모")
-    부산물증량_DB = (SheetID.부산물매출, "16-2. 총 투입량 대비 부산물 중량 변동 추이_DB")
-    부산물증량_메모 = (SheetID.부산물매출, "16-2. 총 투입량 대비 부산물 중량 변동 추이_메모")
-    부산물판매_DB = (SheetID.부산물매출, "16-3. 전월대비 부산물 판매 차이_DB")
-    부산물판매_메모 = (SheetID.부산물매출, "16-3. 전월대비 부산물 판매 차이_메모")
+    # 8. 수정원가기준손익
+    수정원가기준손익_DB = (SheetID.수정원가기준손익, "8. 수정원가기준_손익_별도_DB")
     
-    # 20. 생산실적
-    월평균생산실적_DB = (SheetID.생산실적, "20. 월평균 생산 실적_DB")
-    월평균생산실적_메모 = (SheetID.생산실적, "20. 월평균 생산 실적_메모")
+    # 9. 원재료입고기초단가차이
+    원재료입고기초단가차이_DB  = (SheetID.원재료입고기초단가차이, "9. 원재료 입고-기초 단가 차이_DB")
 
-    # 21. 사내, 사외 불량내역 발생
-    사내불량발생현황_DB = (SheetID.불량발생내역, "21-1. 사내 불량 발생 현황_DB")
-    사내불량발생현황_메모 = (SheetID.불량발생내역, "21-1. 사내 불량 발생 현황_메모")
-    사외불량발생현황_DB = (SheetID.불량발생내역, "21-2. 사외 불량 발생 현황_DB")
-    사외불량발생현황_메모 = (SheetID.불량발생내역, "21-2. 사외 불량 발생 현황_메모")
+    # 10. 원재료입고단가차이_거래처기준
+    원재료입고단가차이_거래처기준_DB  = (SheetID.원재료입고단가차이_거래처기준, "10. 원재료 입고 단가차이_거래처 기준_DB")
 
-    # 22. 운반 실적 및 컨테이너당 단가 추이
-    운반실적및컨테이너단가_DB = (SheetID.운반실적및컨테이너당단가, "22. 운반 실적 및 컨테이너당 단가 추이_DB")
-    운반실적및컨테이너단가_메모 = (SheetID.운반실적및컨테이너당단가, "22. 운반 실적 및 컨테이너당 단가 추이_메모")
+    # 11. 제품수불표
+    제품수불표_DB  = (SheetID.제품수불표, "11. 제품수불표_DB")
 
-    # 23. 외주용역비
-    외주용역비_DB = (SheetID.외주용역비, "23. 외주용역비_DB")
-    외주용역비_메모 = (SheetID.외주용역비, "23. 외주용역비_메모")
+    # 12. 현금흐름표
+    현금흐름표_별도_DB  = (SheetID.현금흐름표_별도, "12. 현금흐름표_별도_DB")
+    현금흐름표_별도_메모 = (SheetID.현금흐름표_별도, "12. 현금흐름표_별도_메모")
 
-    # 24-1. 멕시코향 환차소급
-    멕시코향환차소급_DB = (SheetID.멕시코향환차소급, "24-1. 멕시코향 환차소급_DB")
-    멕시코향환차소급_메모 = (SheetID.멕시코향환차소급, "24-1. 멕시코향 환차소급_메모")
+    # 14. 안정성
+    안정성_DB = (SheetID.안정성, "14. 안정성_별도_DB")
+    안정성_메모 = (SheetID.안정성, "14. 안정성_별도_메모")
 
-    # 24-2. 원주-멕시코 월별 환차소급
-    원주멕시코환차소급_DB = (SheetID.원주멕시코환차소급, "24-2. 원주멕시코 환차소급_DB")
-    원주멕시코환차소급_메모 = (SheetID.원주멕시코환차소급, "24-2. 원주멕시코 환차소급_메모")
+    # 16.수익성
+    수익성_DB = (SheetID.수익성, "14. 수익성_별도_DB")
+    수익성_메모 = (SheetID.수익성, "14. 수익성_별도_메모")
 
-    # 25. 제품, 재공, 원재료 재고 현황
-    재고현황_DB = (SheetID.재고현황, "25. 제품, 재공, 원재료 재고 현황_DB")
-    재고현황_메모 = (SheetID.재고현황, "25. 제품, 재공, 원재료 재고 현황_메모")
+    # 17. 판매계획및실적
+    판매계획및실적_DB  = (SheetID.판매계획및실적, "17. 판매계획 및 실적_DB")
+    판매계획및실적_메모 = (SheetID.판매계획및실적, "17. 판매계획 및 실적_메모")
 
-    # 26. 연령별 재고 현황
-    연령별재고현황_DB = (SheetID.연령별재고현황, "26. 연령별 재고 현황_DB")
-    연령별재고현황_메모 = (SheetID.연령별재고현황, "26. 연령별 재고 현황_메모")
+'''
+    ##손익분석파트
+
+    # 19. 손익요약표
+    손익요약표_DB = (SheetID.손익요약표, "19. 손익요약표_별도_DB")
+    손익요약표_메모 = (SheetID.손익요약표, "19. 손익요약표_별도_메모")
+
+    # 21. 수출환율차이
+    수출환율차이_DB = (SheetID.수출환율차이, "수출 환율 차이")
+    수출환율차이_메모 = (SheetID.수출환율차이, "수출 환율 차이_메모")
+
+    # 22. QD
+    QD_DB = (SheetID.QD, "22. QD 실적 차이_DB") 
+    
+    # 23. 포스코 對 JFE 입고가격
+    포스코JFE입고가격_DB = (SheetID.포스코JFE입고가격, "23. 포스코 對 JFE 입고가격_DB")
+    포스코JFE입고가격_메모 = (SheetID.포스코JFE입고가격, "23. 포스코 對 JFE 입고가격_메모")
+
+    # 24. 포스코 JFE 투입비중
+    포스코JFE투입비중_DB = (SheetID.포스코JFE투입비중, "24. 포스코 JFE 투입비중_DB")
+    포스코JFE투입비중_메모 = (SheetID.포스코JFE투입비중, "24. 포스코 JFE 투입비중_메모")
+
+    # 25. 메이커별 입고 추이
+    메이커별입고추이_DB = (SheetID.메이커별입고추이, "25. 메이커별 입고추이_DB")
+    메이커별입고추이_메모 = (SheetID.메이커별입고추이, "25. 메이커별 입고추이_메모")
+
+    # 26. 제조 가공비
+    제조가공비_DB = (SheetID.제조가공비, "제조가공비")
+    제조가공비_메모 = (SheetID.제조가공비, "제조가공비_메모")
+
+    # 27.판매비와 관리비
+    판매비와관리비_DB = (SheetID.판매비와관리비, "판매비와 관리비")
+    판매비와관리비_메모 = (SheetID.판매비와관리비, "판매비와 관리비 _메모")
+
+    # 28.성과급 및 격려금
+    성과급및격려금_DB = (SheetID.성과급및격려금, "28. 성과급 및 격려금_DB")
+    성과급및격려금_메모 = (SheetID.성과급및격려금, "28. 성과급 및 격려금_메모")
+
+    # 29.통상임금
+    통상임금_DB = (SheetID.통상임금, "29. 통상임금_DB")
+
+    # 30~39. 매출
+    계획대비매출실적_DB = (SheetID.매출, "30.계획대비 매출 실적_DB")
+    계획대비매출실적_메모 = (SheetID.매출, "30.계획대비 매출 실적_메모")
+    등급별판매구성_DB = (SheetID.매출, "31.등급별 판매구성_DB")
+    등급별판매구성_메모 = (SheetID.매출, "31.등급별 판매구성_메모")
+    CHQ제품판매현황_B급제외_DB = (SheetID.매출, "32.CHQ 제품판매현황_B급 제외_DB")
+    CHQ제품판매현황_B급제외_메모 = (SheetID.매출, "32.CHQ 제품판매현황_B급 제외_메모")
+    CHQ제품판매현황_산업중국재_DB = (SheetID.매출, "33.CHQ 제품판매현황_산업중국재_DB")
+    CHQ제품판매현황_산업중국재_메모 = (SheetID.매출, "33.CHQ 제품판매현황_산업중국재_메모")
+    CD제품판매현황_B급제외_DB = (SheetID.매출, "34.CD 제품판매현황_B급 제외_DB")
+    CD제품판매현황_B급제외_메모 = (SheetID.매출, "34.CD 제품판매현황_B급 제외_메모")
+    CD제품판매현황_산업중국재_DB = (SheetID.매출, "35.CD 제품판매현황_산업중국재_DB")
+    CD제품판매현황_산업중국재_메모 = (SheetID.매출, "35.CD 제품판매현황_산업중국재_메모")
+    비가공품판매현황_DB = (SheetID.매출, "36.비가공품 판매현황_DB")
+    비가공품판매현황_메모 = (SheetID.매출, "36.비가공품 판매현황_메모")
+    동일거래매입매출현황_DB = (SheetID.매출, "37.동일거래 매입매출현황_DB")
+    동일거래매입매출현황_메모 = (SheetID.매출, "37.동일거래 매입매출현황_메모")
+    PSI지표_매입매출포함_DB = (SheetID.매출, "38. PSI 지표_매입매출 포함_DB")
+    PSI지표_매입매출제외_DB = (SheetID.매출, "38. PSI 지표_매입매출 제외_DB")
+
+
+    # 40~42.생산 및 부적합
+    전체생산실적_DB = (SheetID.생산및부적합, "40. 전체 생산실적_DB")
+    전체생산실적_메모 = (SheetID.생산및부적합, "40. 전체 생산실적_메모")
+    부적합발생추이_포항_충주_충주2_DB = (SheetID.생산및부적합, "41~42. 부적합 발생추이 (포항,충주,충주2)_DB")
+    부적합발생추이_포항_메모 = (SheetID.생산및부적합, "41. 부적합 발생추이 (포항)_메모_")
+    부적합발생추이_충주_충주2_메모 = (SheetID.생산및부적합, "41. 부적합 발생추이 (충주1, 충주2)_메모_")
+
+    #여기까지함
 
     # 27. 인원 현황
     인원현황_DB = (SheetID.인원현황, "27. 인원 현황_DB")
@@ -201,25 +205,35 @@ class Sheets:
     중국인력현황_메모 = (SheetID.중국인력현황, "42. 인력현황_메모")
     # 추가 시트는 여기에
 
+'''
 
-AT_국내_사업장 = '원주'
+선재_국내_사업장 = '본사'
 
-CORP_ORDER      = ['AT_국내', 'AT_중국', 'AT_멕시코']  # 손익 사업장 순서
-재무_CORP_ORDER      = ['AT_국내', 'AT_중국', 'AT_멕시코']          # 재무상태표 DB 사업장 순서
-재무_사업장_표시명   = {'AT_국내': 'AT_국내', 'AT_중국': 'AT_중국', 'AT_멕시코': 'AT_멕시코'}
+# 1,6 손익
+CORP_ORDER      = ['선재_국내', '선재_남통', '선재_천진', '선재_타이']  # 손익 사업장 순서
 
-현금_CORP_ORDER     = ['국내', '중국', '멕시코']                    # 현금전환주기 DB 구분2 순서
-현금_사업장_표시명  = {'국내': 'AT_국내', '중국': 'AT_중국', '멕시코': 'AT_멕시코'}
+# 2. 현금흐름표(연결)
+현금_CORP_ORDER     = ['전체', '본사', '남통', '천진', '태국']                    # 현금흐름표 DB 구분2 순서
+현금_사업장_표시명  = {'전체': '선재_전체', '본사': '선재_국내', '남통': '선재_남통', '천진': '선재_천진', '태국': '선재_태국'}
 현금_구분_순서      = ['매출채권', '재고자산', '매입채무', '현금전환주기']
+현금_소계행 = {'영업활동현금흐름', '투자활동현금흐름', '재무활동현금흐름', '현금성자산의 증감', '기초현금', '기말현금'}
 
-# ── 2. 재무상태표 테이블 설정 ──────────────────────────────────────────
+# 3, 13. 재무상태표 테이블 설정
 재무_소계행 = {'자산총계', '부채총계', '자본총계', '부채 및 자본 총계'}
+재무_CORP_ORDER      = ['선재_국내', '선재_남통', '선재_천진', '선재_태국']          # 재무상태표 DB 사업장 순서
+재무_사업장_표시명   = {'특수강': '선재_국내', '남통': '선재_남통', '천진': '선재_천진', '태국': '선재_태국'} 
+
+# 4. 현금흐름표(연결)
+회전일_CORP_ORDER     = ['계', '특수강', '남통', '태국']                    # 현금흐름표 DB 구분2 순서
+회전일_사업장_표시명  = {'계': '선재_전체', '특수강': '선재_국내', '남통': '선재_남통', '태국': '선재_태국'}
+회전일_구분_순서      = ['매출채권', '재고자산', '매입채무', '현금전환주기']
+
 
 # ── 1, 5. 손익 테이블 설정 ──────────────────────────────────────────
-SONIK_구분_순서  = ['매출', '판매량', '영업이익', '순금융비용', '경상이익']
-SONIK_표시명     = {'매출': '매출액', '판매량': '판매량', '영업이익': '영업이익',
+SONIK_구분_순서  = ['매출액', '판매량', '영업이익', '순금융비용', '경상이익']
+SONIK_표시명     = {'매출액': '매출액', '판매량': '판매량', '영업이익': '영업이익',
                    '순금융비용': '순금융비용', '경상이익': '경상이익'}
-SONIK_단위      = {'매출': 1e6, '판매량': 1e4, '영업이익': 1e6,
+SONIK_단위      = {'매출액': 1e6, '판매량': 1e4, '영업이익': 1e6,
                    '순금융비용': 1e6, '경상이익': 1e6}
 SONIK_소수점    = {'판매량': 1}              # 소수점 자릿수 (미지정 시 0)
 SONIK_PCT_대상  = {'영업이익', '경상이익'}   # % 행 추가할 항목
