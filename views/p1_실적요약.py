@@ -49,7 +49,7 @@ def _to_html_table(df):
     return _html_table(f'<tr>{headers}</tr>', rows_html)
 
 
-def _section(title, table_df, memo='', unit='[단위: 만개, 백만원, %]'):
+def _section(title, table_df, memo='', unit='[단위: 톤, 백만원, %]'):
     return _layout64(title, _to_html_table(table_df), memo, unit)
 
 
@@ -101,23 +101,24 @@ def _재무_to_html_table(df, 소계행, 헤더행):
 
 def _재무_section(title, per_corp_dfs, 소계행, 헤더행, corp_labels, memo='', unit='[단위: 백만원]'):
     safe = [c.replace(' ', '_') for c in corp_labels]
+    prefix = "bs"  # 재무상태표 고유 접두사 (Balance Sheet)
 
-    hide_sel = ', '.join(f'#fp_{s}' for s in safe)
+    hide_sel = ', '.join(f'#fp_{prefix}_{s}' for s in safe)
     css = f'{hide_sel}{{display:none}}'
     for s in safe:
-        css += (f'#ft_{s}:checked~#fp_{s}{{display:block!important}}'
-                f'#ft_{s}:checked~.ftbar>#fl_{s}'
+        css += (f'#ft_{prefix}_{s}:checked~#fp_{prefix}_{s}{{display:block!important}}'
+                f'#ft_{prefix}_{s}:checked~.ftbar>#fl_{prefix}_{s}'
                 f'{{background:{_C_NAVY}!important;color:white!important;border-color:{_C_NAVY}!important}}')
 
     inputs = ''.join(
-        f'<input type="radio" id="ft_{s}" name="ftab" {"checked" if i == 0 else ""} '
+        f'<input type="radio" id="ft_{prefix}_{s}" name="ftab_{prefix}" {"checked" if i == 0 else ""} '
         f'style="position:absolute;opacity:0;pointer-events:none">'
         for i, s in enumerate(safe)
     )
 
     tab_bar = f'<div class="ftbar" style="display:flex;margin-bottom:6px;border-bottom:2px solid {_C_NAVY}">'
     tab_bar += ''.join(
-        f'<label id="fl_{s}" for="ft_{s}" style="padding:5px 16px;cursor:pointer;'
+        f'<label id="fl_{prefix}_{s}" for="ft_{prefix}_{s}" style="padding:5px 16px;cursor:pointer;'
         f'border:1px solid #DEE2E6;border-bottom:none;margin-right:2px;'
         f'font-size:0.9em;font-weight:500;border-radius:4px 4px 0 0;'
         f'background:white;color:#555">{corp}</label>'
@@ -126,7 +127,88 @@ def _재무_section(title, per_corp_dfs, 소계행, 헤더행, corp_labels, memo
     tab_bar += '</div>'
 
     panels = ''.join(
-        f'<div id="fp_{s}">{_재무_to_html_table(per_corp_dfs[corp], 소계행, 헤더행)}</div>'
+        f'<div id="fp_{prefix}_{s}">{_재무_to_html_table(per_corp_dfs[corp], 소계행, 헤더행)}</div>'
+        for corp, s in zip(corp_labels, safe)
+    )
+
+    tab_html = f'<style>{css}</style>' + inputs + tab_bar + panels
+    return _layout64(title, tab_html, memo, unit)
+
+def _현금흐름표_연결_to_html_table(df, 소계행, 헤더행):
+    depths    = df['_depth'].tolist() if '_depth' in df.columns else [1] * len(df)
+    render_df = df.drop(columns=['_depth'], errors='ignore')
+
+    _td_hdr_num = f'background:{_C_LT_GRAY};border-bottom:1px solid #DEE2E6'
+    _pad    = {0: '8px',  1: '20px', 2: '36px'}
+    _prefix = {0: '',     1: '&nbsp;&nbsp;&nbsp;', 2: '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'}
+
+    rows_html = ''
+    for (_, row), depth in zip(render_df.iterrows(), depths):
+        d      = int(depth) if str(depth).lstrip('-').isdigit() else 1
+        label  = str(row.iloc[0])
+        is_hdr = label in 헤더행
+        is_sub = label in 소계행
+        bg     = ''
+        pad    = _pad.get(d, '20px')
+        prefix = _prefix.get(d, '&nbsp;&nbsp;&nbsp;')
+
+        cells = ''
+        for i, val in enumerate(row):
+            s = str(val)
+            if is_hdr:
+                lbl_st = (f'padding:4px 8px;padding-left:{pad};text-align:left;'
+                          f'background:{_C_LT_GRAY};font-weight:700;color:{_C_NAVY};'
+                          f'border-bottom:1px solid #DEE2E6')
+                cells += (f'<td style="{lbl_st}">{prefix}{s}</td>' if i == 0
+                          else f'<td style="{_td_hdr_num}"></td>')
+            elif i == 0:
+                if is_sub:
+                    lbl_st = (f'padding:5px 8px;padding-left:{pad};text-align:left;'
+                              f'background:{_C_LT_GRAY};font-weight:600;'
+                              f'border-bottom:1px solid #e2e8f0')
+                else:
+                    lbl_st = (f'padding:5px 8px;padding-left:{pad};text-align:left;'
+                              f'border-bottom:1px solid #e2e8f0;{bg}')
+                cells += f'<td style="{lbl_st}">{prefix}{s}</td>'
+            elif s.startswith('-'):
+                cells += f'<td style="{_TD_SUB_RED if is_sub else _TD_RED+";"+bg}">{s}</td>'
+            else:
+                cells += f'<td style="{_TD_SUB_NUM if is_sub else _TD_NUM+";"+bg}">{s}</td>'
+        rows_html += f'<tr style="vertical-align:middle">{cells}</tr>'
+
+    headers = ''.join(f'<th style="{_TH}">{c}</th>' for c in render_df.columns)
+    return _html_table(f'<tr>{headers}</tr>', rows_html)
+
+
+def _현금흐름표_연결_section(title, per_corp_dfs, 소계행, 헤더행, corp_labels, memo='', unit='[단위: 백만원]'):
+    safe = [c.replace(' ', '_') for c in corp_labels]
+    prefix = "cf"  # 현금흐름표 고유 접두사 (Cash Flow)
+
+    hide_sel = ', '.join(f'#fp_{prefix}_{s}' for s in safe)
+    css = f'{hide_sel}{{display:none}}'
+    for s in safe:
+        css += (f'#ft_{prefix}_{s}:checked~#fp_{prefix}_{s}{{display:block!important}}'
+                f'#ft_{prefix}_{s}:checked~.ftbar>#fl_{prefix}_{s}'
+                f'{{background:{_C_NAVY}!important;color:white!important;border-color:{_C_NAVY}!important}}')
+
+    inputs = ''.join(
+        f'<input type="radio" id="ft_{prefix}_{s}" name="ftab_{prefix}" {"checked" if i == 0 else ""} '
+        f'style="position:absolute;opacity:0;pointer-events:none">'
+        for i, s in enumerate(safe)
+    )
+
+    tab_bar = f'<div class="ftbar" style="display:flex;margin-bottom:6px;border-bottom:2px solid {_C_NAVY}">'
+    tab_bar += ''.join(
+        f'<label id="fl_{prefix}_{s}" for="ft_{prefix}_{s}" style="padding:5px 16px;cursor:pointer;'
+        f'border:1px solid #DEE2E6;border-bottom:none;margin-right:2px;'
+        f'font-size:0.9em;font-weight:500;border-radius:4px 4px 0 0;'
+        f'background:white;color:#555">{corp}</label>'
+        for corp, s in zip(corp_labels, safe)
+    )
+    tab_bar += '</div>'
+
+    panels = ''.join(
+        f'<div id="fp_{prefix}_{s}">{_현금흐름표_연결_to_html_table(per_corp_dfs[corp], 소계행, 헤더행)}</div>'
         for corp, s in zip(corp_labels, safe)
     )
 
@@ -134,10 +216,14 @@ def _재무_section(title, per_corp_dfs, 소계행, 헤더행, corp_labels, memo
     return _layout64(title, tab_html, memo, unit)
 
 
+
 def _build_회전일_table(year, month):
     df = load_sheet(Sheets.회전일_DB)
     df['값']  = df['값'].apply(_parse)
     df = _drop_empty(df, '연도', '월')
+
+    # 천진 사업장 제외
+    df = df[df['사업장'] != '천진']
 
     yr_전기, mo_전기 = year - 1, 12
     yr_전월, mo_전월 = _prev(year, month, 1)
@@ -405,6 +491,9 @@ def _load_손익():
     df['값']  = df['값'].apply(_parse)
     df = _drop_empty(df, '연도', '월')
 
+    # 천진 사업장 제외
+    df = df[df['사업장'] != '천진']
+
     사업장_list = _sort_corps(df['사업장'].unique().tolist(), CORP_ORDER)
 
     def get(계실, yr, mo, 장=None, 구분=None):
@@ -438,7 +527,7 @@ def _build_포함_table(get, 사업장_list, year, month):
     전전월_col = _월헤더(yr1, mo1)
     전월_col   = _월헤더(yr2, mo2)
     당월_col   = _당월헤더(year, month, len(사업장_list))
-    _장_표시명 = {'본사': '선재_국내', '남통': '선재_남통', '천진': '선재_천진', '타이': '선재_타이'}
+    _장_표시명 = {'본사': '선재_국내', '남통': '선재_남통', '타이': '선재_타이'}
     장_cols    = [f"{_장_표시명.get(장, 장)} {_기호[i]}" for i, 장 in enumerate(사업장_list)]
     columns    = ['구분', 전전월_col, 전월_col, '계획', 당월_col] + 장_cols + ['전월대비', '계획대비']
 
@@ -550,10 +639,14 @@ def _build_현금흐름표_연결_table(year, month):
     df['구분2'] = df['구분2'].fillna('').astype(str).str.strip()
     df['구분3'] = df['구분3'].fillna('').astype(str).str.strip()
 
+    # 전체, 천진 사업장 제외
+    df = df[df['사업장'] != '전체']
+    df = df[df['사업장'] != '천진']
+
     yr_전기, mo_전기 = year - 1, 12
     yr_전월, mo_전월 = _prev(year, month, 1)
 
-    db_corps    = _sort_corps(df['사업장'].unique().tolist(), 현금_사업장_표시명)
+    db_corps    = _sort_corps(df['사업장'].unique().tolist(), 현금_CORP_ORDER)
     corp_labels = [현금_사업장_표시명.get(c, c) for c in db_corps]
 
     sub_labels = [
@@ -563,11 +656,12 @@ def _build_현금흐름표_연결_table(year, month):
         '전월비',
     ]
 
-    anchor  = df[(df['연도'] == year) & (df['월'] == month) & (df['사업장'] == db_corps[0])]
-    행_순서 = list(dict.fromkeys(zip(anchor['구분1'], anchor['구분2'], anchor['구분3'])))
+    # 특정 사업장이 아닌, 해당 월의 전체 데이터 기준으로 표의 뼈대(행 순서) 생성
+    target = df[(df['연도'] == year) & (df['월'] == month)]
+    행_순서 = list(dict.fromkeys(zip(target['구분1'], target['구분2'], target['구분3'])))
 
-    # 반복 필터 대신 O(1) 조회 dict
-    val_map = df.set_index(['연도', '월', '구분1', '구분2', '구분3', '사업장'])['값'].to_dict()
+    # 구분4를 무시하고 동일한 기준의 값들을 모두 합산(sum)하여 딕셔너리로 변환
+    val_map = df.groupby(['연도', '월', '구분1', '구분2', '구분3', '사업장'])['값'].sum().to_dict()
 
     def 값(yr, mo, g1, g2, g3, 장):
         return val_map.get((yr, mo, g1, g2, g3, 장), 0.0)
@@ -575,59 +669,28 @@ def _build_현금흐름표_연결_table(year, month):
     columns = ['구분', '_depth'] + sub_labels
     소계행  = 현금_소계행
     헤더행  = set()
-    빈행    = {col: '' for col in columns}
-
-    # g3 서브행만 있고 부모 행(empty g3)이 없는 (g1,g2) → 합산 행 자동 삽입
-    has_empty_g3 = {(g1, g2) for g1, g2, g3 in 행_순서 if not g3}
-    sub_g3_map   = {}
-    for g1, g2, g3 in 행_순서:
-        if g3:
-            sub_g3_map.setdefault((g1, g2), []).append(g3)
-
-    _SUM = '__SUM__'
-    행_순서_aug, seen = [], set()
-    for g1, g2, g3 in 행_순서:
-        key = (g1, g2)
-        if g3 and key not in has_empty_g3 and key not in seen:
-            행_순서_aug.append((g1, g2, _SUM))
-            seen.add(key)
-        행_순서_aug.append((g1, g2, g3))
-
-    # 각 g1 그룹에서 소계행(총계)이 맨 앞으로 오도록 재정렬 (p8 스타일)
-    g1_order = list(dict.fromkeys(t[0] for t in 행_순서_aug))
-    g1_groups: dict = {g: [] for g in g1_order}
-    for triple in 행_순서_aug:
-        g1_groups[triple[0]].append(triple)
-
-    행_순서_final: list = []
-    for g1 in g1_order:
-        group  = g1_groups[g1]
-        totals = [t for t in group if (t[1] in 소계행 or t[0] == t[1]) and not t[2]]
-        others = [t for t in group if t not in totals]
-        행_순서_final.extend(totals + others)
 
     per_corp_dfs = {}
     for db_corp, corp_disp in zip(db_corps, corp_labels):
         rows = []
-        for g1, g2, g3 in 행_순서_final:
-            if g3 == _SUM:
-                label   = g2
-                depth   = 1
-                g3_list = sub_g3_map[(g1, g2)]
-                전기_v  = sum(값(yr_전기, mo_전기, g1, g2, gv, db_corp) for gv in g3_list)
-                전월_v  = sum(값(yr_전월, mo_전월, g1, g2, gv, db_corp) for gv in g3_list)
-                당월_v  = sum(값(year,    month,   g1, g2, gv, db_corp) for gv in g3_list)
+        for g1, g2, g3 in 행_순서:
+            # 구분이 비어있으면 상위 구분을 라벨로 사용
+            if not g2 and not g3:
+                label = g1
+                depth = 0
+            elif not g3:
+                label = g2
+                depth = 1
             else:
-                label  = g3 if g3 else g2
-                if label in 소계행 or g1 == g2:
-                    depth = 0
-                elif g3:
-                    depth = 2
-                else:
-                    depth = 1
-                전기_v = 값(yr_전기, mo_전기, g1, g2, g3, db_corp)
-                전월_v = 값(yr_전월, mo_전월, g1, g2, g3, db_corp)
-                당월_v = 값(year,    month,   g1, g2, g3, db_corp)
+                label = g3
+                depth = 2
+
+            if label in 소계행:
+                depth = 0
+
+            전기_v = 값(yr_전기, mo_전기, g1, g2, g3, db_corp)
+            전월_v = 값(yr_전월, mo_전월, g1, g2, g3, db_corp)
+            당월_v = 값(year,    month,   g1, g2, g3, db_corp)
 
             rows.append({
                 '구분':        label,
@@ -637,6 +700,7 @@ def _build_현금흐름표_연결_table(year, month):
                 sub_labels[2]: _fmt(당월_v),
                 sub_labels[3]: _fmt(당월_v - 전월_v),
             })
+            
         per_corp_dfs[corp_disp] = pd.DataFrame(
             {col: [r.get(col, '') for r in rows] for col in columns}
         )
@@ -647,6 +711,9 @@ def _build_재무상태표_table(year, month):
     df = load_sheet(Sheets.재무상태표_DB)
     df['값']  = df['값'].apply(_parse)
     df = _drop_empty(df, '연도', '월')
+
+    # 천진 사업장 제외
+    df = df[df['사업장'] != '천진']
 
     yr_전기, mo_전기 = year - 1, 12
     yr_전월, mo_전월 = _prev(year, month, 1)
@@ -723,6 +790,116 @@ def _build_재무상태표_table(year, month):
 
     return per_corp_dfs, 소계행, 헤더행, corp_labels
 
+def _build_품목손익_별도_table(year, month):
+    df = load_sheet(Sheets.품목손익_DB)
+    df['값'] = df['값'].apply(_parse)
+    df = _drop_empty(df, '연도', '월')
+
+    target = df[(df['연도'] == year) & (df['월'] == month)]
+    val_map = target.set_index(['구분1', '구분2'])['값'].to_dict()
+
+    def get_val(g1, g2):
+        return val_map.get((g1, g2), 0.0)
+
+    품목_cols = ['CHQ', 'CD', 'STS', 'BTB', 'PB']
+    구분_목록 = ['매출액', '판매량', '영업이익', '경상이익']
+    단위 = {'매출액': 1e6, '판매량': 1, '영업이익': 1e6, '경상이익': 1e6}
+    
+    rows = []
+    매출액_dict = {}
+
+    for g1 in 구분_목록:
+        div = 단위.get(g1, 1)
+        row = {'구분': g1}
+        
+        합_raw = get_val(g1, '합계')
+        row['합계'] = _fmt(합_raw / div, decimal=0)
+
+        raw_vals = {}
+        for p in 품목_cols:
+            v = get_val(g1, p)
+            raw_vals[p] = v
+            if g1 == '판매량' and v == 0:
+                row[p] = ''
+            else:
+                row[p] = _fmt(v / div, decimal=0)
+        
+        if g1 == '매출액':
+            매출액_dict = {'합계': 합_raw}
+            매출액_dict.update(raw_vals)
+
+        rows.append(row)
+
+        if g1 in ['영업이익', '경상이익']:
+            pct_row = {'구분': f'%({g1[:2]})'}
+            
+            매출_합 = 매출액_dict.get('합계', 0)
+            pct_row['합계'] = _fmt(_pct(합_raw, 매출_합), is_pct=True, decimal=1) if 매출_합 else '-'
+
+            for p in 품목_cols:
+                매출_p = 매출액_dict.get(p, 0)
+                이익_p = raw_vals.get(p, 0)
+                if 매출_p and 이익_p != 0.0:
+                    pct_row[p] = _fmt(_pct(이익_p, 매출_p), is_pct=True, decimal=1)
+                else:
+                    pct_row[p] = ''
+            rows.append(pct_row)
+
+    columns = ['구분', '합계'] + 품목_cols
+    return pd.DataFrame({col: [r.get(col, '') for r in rows] for col in columns})
+
+def _build_수정원가기준손익_별도_table(year, month):
+    df = load_sheet(Sheets.수정원가기준손익_DB)
+    df['값'] = df['값'].apply(_parse)
+    df = _drop_empty(df, '연도', '월')
+
+    target = df[(df['연도'] == year) & (df['월'] == month)]
+    val_map = target.set_index(['구분1', '구분2'])['값'].to_dict()
+
+    def get_val(g1, g2):
+        return val_map.get((g1, g2), 0.0)
+
+    품목_cols = ['계', 'CHQ', 'CD', 'STS', 'BTB', 'PB', '내수', '수출']
+    구분_목록 = ['매출액', '판매량', 'X등급 및 재고평가', '영업이익', '한계이익']
+    
+    rows = []
+    매출액_dict = {}
+
+    for g1 in 구분_목록:
+        row = {'구분': g1}
+        
+        # 매출액 저장 (이익률 계산용)
+        if g1 == '매출액':
+            for p in 품목_cols:
+                매출액_dict[p] = get_val(g1, p)
+        
+        for p in 품목_cols:
+            v = get_val(g1, p)
+            if g1 == '판매량' and v == 0:
+                row[p] = ''
+            else:
+                row[p] = _fmt(v, decimal=0)
+                
+        rows.append(row)
+
+        # 영업이익, 한계이익 다음 행에 이익률(%) 추가
+        if g1 in ['영업이익', '한계이익']:
+            pct_label = f'%({g1[:2]})'
+            pct_row = {'구분': pct_label}
+            
+            for p in 품목_cols:
+                매출_p = 매출액_dict.get(p, 0)
+                이익_p = get_val(g1, p)
+                
+                if 매출_p and 이익_p != 0.0:
+                    pct_row[p] = _fmt(_pct(이익_p, 매출_p), is_pct=True, decimal=1)
+                else:
+                    pct_row[p] = ''
+            rows.append(pct_row)
+
+    columns = ['구분'] + 품목_cols
+    return pd.DataFrame({col: [r.get(col, '') for r in rows] for col in columns})
+
 
 # ── 페이지 렌더 ───────────────────────────────────────────────
 
@@ -735,8 +912,7 @@ def render_page(app, year_state, month_state):
         )
     app.If(lambda: True, _render_title)
 
-    #tabs = app.tabs(["주요경영지표(해외법인 포함)", "주요경영지표(선재_국내)"])
-    tabs = app.tabs(["주요경영지표(해외법인 포함)"])
+    tabs = app.tabs(["주요경영지표(해외법인 포함)", "주요경영지표(선재_국내)"])
     
     with tabs[0]:
         def _render_포함():
@@ -749,7 +925,7 @@ def render_page(app, year_state, month_state):
 
             df_현금, 소계행_현금, 헤더행_현금, 사업장_현금 = _build_현금흐름표_연결_table(year, month)
             memo2 = _get_memo(Sheets.현금흐름표_연결_메모, year, month)
-            app.markdown(_재무_section("2) 현금흐름표_연결", df_현금, 소계행_현금, 헤더행_현금, 사업장_현금, memo2),
+            app.markdown(_현금흐름표_연결_section("2) 현금흐름표 (연결)", df_현금, 소계행_현금, 헤더행_현금, 사업장_현금, memo2),
                          unsafe_allow_html=True)
 
             per_corp_dfs, 소계행, 헤더행, corp_labels = _build_재무상태표_table(year, month)
@@ -758,43 +934,30 @@ def render_page(app, year_state, month_state):
                          unsafe_allow_html=True)
             
             rows_회전, sub_회전 = _build_회전일_table(year, month)
-            memo3 = _get_memo(Sheets.회전일_메모, year, month)
+            memo4 = _get_memo(Sheets.회전일_메모, year, month)
             app.markdown(_layout64("4) 회전일",
                                    _회전일_to_html_table(rows_회전, sub_회전),
-                                   memo3, '[단위: 일]'),
+                                   memo4, '[단위: 일]'),
                          unsafe_allow_html=True)
             
-        app.If(lambda: True, _render_포함)
-
-'''
-
-            df_채권, 소계행_채권, 헤더행_채권 = _build_매출채권현황_table(year, month)
-            memo4 = _get_memo(Sheets.매출채권현황_메모, year, month)
-            app.markdown(_layout64("4) 매출채권현황",
-                                   _재무_to_html_table(df_채권, 소계행_채권, 헤더행_채권),
-                                   memo4, '[단위: 백만원]'),
-                         unsafe_allow_html=True)
-
-            df_품목 = _build_품목손익_table(year, month)
-            memo5 = _get_memo(Sheets.품목손익_메모, year, month)
-            app.markdown(_section("5) 품목손익", df_품목, memo5),
-                         unsafe_allow_html=True)
-
-            df_원재료 = _build_원재료단가변동_table(year, month)
-            memo6 = _get_memo(Sheets.원재료단가변동_메모, year, month)
-            app.markdown(_layout64("6) 원재료 단가변동",
-                                   _원재료_to_html_table(df_원재료),
-                                   memo6, '[단위: 톤, 원/kg, 백만원]'),
-                         unsafe_allow_html=True)
         app.If(lambda: True, _render_포함)
 
     with tabs[1]:
         def _render_국내():
             year, month = int(year_state.value), int(month_state.value)
             get, _ = _load_손익()
-            memo = _get_memo(Sheets.손익_국내_메모, year, month)
-            app.markdown(_section("1) 손익_전월비/계획비", _build_국내_table(get, year, month), memo),
+            memo1 = _get_memo(Sheets.손익_국내_메모, year, month)
+            app.markdown(_section("1) 손익 (별도)", _build_국내_table(get, year, month), memo1),
                          unsafe_allow_html=True)
-        app.If(lambda: True, _render_국내)
+            
+            
+            memo2 = _get_memo(Sheets.품목손익_메모, year, month)
+            app.markdown(_section("2) 품목손익 (별도)", _build_품목손익_별도_table(year, month), memo2),
+                         unsafe_allow_html=True)
+            
+            memo3 = ""
+            app.markdown(_section("3) 수정원가기준손익 (별도)", _build_수정원가기준손익_별도_table(year, month), memo3),
+                         unsafe_allow_html=True)
+            
         
-'''
+        app.If(lambda: True, _render_국내)
