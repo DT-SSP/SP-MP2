@@ -506,9 +506,15 @@ def _load_손익():
 
 
 def _get_연도_목록():
-    df = load_sheet(Sheets.손익_DB)
-    return sorted(pd.to_numeric(df['연도'], errors='coerce').dropna().astype(int).unique().tolist())
-
+    df1 = load_sheet(Sheets.손익_DB)
+    df2 = load_sheet(Sheets.현금흐름표_별도_DB)
+    df3 = load_sheet(Sheets.재무상태표_DB)
+    
+    y1 = pd.to_numeric(df1['연도'], errors='coerce').dropna().astype(int).unique().tolist()
+    y2 = pd.to_numeric(df2['연도'], errors='coerce').dropna().astype(int).unique().tolist()
+    y3 = pd.to_numeric(df3['연도'], errors='coerce').dropna().astype(int).unique().tolist()
+    
+    return sorted(list(set(y1 + y2 + y3)))
 
 def _get_memo(sheet_info, year, month) -> str:
     df = load_sheet(sheet_info)
@@ -900,7 +906,499 @@ def _build_수정원가기준손익_별도_table(year, month):
     columns = ['구분'] + 품목_cols
     return pd.DataFrame({col: [r.get(col, '') for r in rows] for col in columns})
 
+def _build_원재료입고기초단가차이_table(year, month):
+    df = load_sheet(Sheets.원재료입고기초단가차이_DB)
+    df['값'] = df['값'].apply(_parse)
+    df = _drop_empty(df, '연도', '월')
 
+    target = df[(df['연도'] == year) & (df['월'] == month)]
+    val_map = target.set_index(['구분1', '구분2'])['값'].to_dict()
+
+    def get_val(g1, g2):
+        return val_map.get((g1, g2), 0.0)
+
+    # 데이터에 존재하는 메이커 목록 추출 (합계는 맨 마지막으로 배치)
+    makers = [m for m in target['구분1'].unique() if m != '합계']
+    if '합계' in target['구분1'].values:
+        makers.append('합계')
+
+    columns = ['메이커', '중량', '금액', '단가']
+    rows = []
+    
+    for m in makers:
+        w = get_val(m, '중량') / 1000.0      # 톤 단위
+        a = get_val(m, '금액') / 1000000.0   # 백만원 단위
+        p = get_val(m, '단가')               # 그대로
+        
+        rows.append({
+            '메이커': m,
+            '중량': _fmt(w, decimal=0),
+            '금액': _fmt(a, decimal=0),
+            '단가': _fmt(p, decimal=0),
+        })
+
+    return pd.DataFrame({col: [r.get(col, '') for r in rows] for col in columns})
+
+
+def _build_원재료입고단가차이_거래처기준_table(year, month):
+    df = load_sheet(Sheets.원재료입고단가차이_거래처기준_DB)
+    df['값'] = df['값'].apply(_parse)
+    df = _drop_empty(df, '연도', '월')
+
+    target = df[(df['연도'] == year) & (df['월'] == month)]
+    val_map = target.set_index(['구분1', '구분2'])['값'].to_dict()
+
+    def get_val(g1, g2):
+        return val_map.get((g1, g2), 0.0)
+
+    # 데이터에 존재하는 메이커 목록 추출 (합계는 맨 마지막으로 배치)
+    makers = [m for m in target['구분1'].unique() if m != '합계']
+    if '합계' in target['구분1'].values:
+        makers.append('합계')
+
+    columns = ['메이커', '금액', '단가']
+    rows = []
+    
+    for m in makers:
+        a = get_val(m, '금액') / 1000000.0   # 백만원 단위
+        p = get_val(m, '단가')               # 그대로
+        
+        rows.append({
+            '메이커': m,
+            '금액': _fmt(a, decimal=0),
+            '단가': _fmt(p, decimal=0),
+        })
+
+    return pd.DataFrame({col: [r.get(col, '') for r in rows] for col in columns})
+
+
+def _원재료_to_html_table(df):
+    rows_html = ''
+    for idx, row in df.iterrows():
+        is_sub = str(row.iloc[0]) == '합계'
+        bg = '' if is_sub else (f';background:{_C_LT_GRAY}' if idx % 2 == 1 else '')
+        
+        cells = ''
+        for i, val in enumerate(row):
+            s = str(val)
+            if i == 0:
+                style = _TD_SUB_LBL if is_sub else _TD_LBL + bg
+            elif s.startswith('-'):
+                style = _TD_SUB_RED if is_sub else _TD_RED + bg
+            else:
+                style = _TD_SUB_NUM if is_sub else _TD_NUM + bg
+            cells += f'<td style="{style}">{s}</td>'
+        rows_html += f'<tr style="vertical-align:middle">{cells}</tr>'
+
+    headers = ''.join(f'<th style="{_TH}">{c}</th>' for c in df.columns)
+    return _html_table(f'<tr>{headers}</tr>', rows_html)
+
+
+def _원재료_section(title, table_df, memo='', unit='[단위: 톤, 백만원]'):
+    return _layout64(title, _원재료_to_html_table(table_df), memo, unit)
+
+def _build_제품수불표_table(year, month):
+    df = load_sheet(Sheets.제품수불표_DB)
+    df['값'] = df['값'].apply(_parse)
+    df = _drop_empty(df, '연도', '월')
+
+    target = df[(df['연도'] == year) & (df['월'] == month)]
+    val_map = target.set_index(['구분1', '구분2'])['값'].to_dict()
+
+    def get_val(g1, g2):
+        return val_map.get((g1, g2), 0.0)
+
+    columns = ['구분', '단가', '금액']
+    rows = []
+
+    for g1 in ['입고-기초', '매출원가-기초']:
+        p = get_val(g1, '단가')
+        a = get_val(g1, '금액') / 1000000.0 
+
+        rows.append({
+            '구분': g1,
+            '단가': _fmt(p, decimal=0),
+            '금액': _fmt(a, decimal=0)
+        })
+
+    return pd.DataFrame({col: [r.get(col, '') for r in rows] for col in columns})
+
+import numpy as np
+
+def _build_현금흐름표_별도_table(year, month):
+    df = load_sheet(Sheets.현금흐름표_별도_DB)
+    
+    # 1. 값 컬럼 정리 (보내주신 _to_num 로직 반영)
+    val_col = '실적' if '실적' in df.columns else '값'
+    df[val_col] = df[val_col].apply(_parse)
+    
+    # 2. 필수 컬럼 정리
+    target_cols = ["구분1", "구분2", "구분3", "구분4", "Parent Class"]
+    for c in target_cols:
+        if c in df.columns:
+            df[c] = df[c].fillna("").astype(str).str.strip().str.replace(r"\s+", " ", regex=True)
+
+    df["연도"] = pd.to_numeric(df["연도"], errors="coerce").fillna(0).astype(int)
+    df["월"]   = pd.to_numeric(df["월"], errors="coerce").fillna(0).astype(int)
+    
+    # 3. 구분1 필터 처리 (시트 구조에 따라 탄력적 적용)
+    if "현금흐름표_별도" in df["구분1"].values:
+        df = df[df["구분1"] == "현금흐름표_별도"].copy()
+        
+    df["__ord__"] = range(len(df))
+
+    # 4. 보내주신 아이템 순서(item_order) 그대로 반영
+    item_order = [
+        "영업활동현금흐름", "당기순이익", "조정", "감가상각비",
+        "조정1",
+        "자산부채증감",
+        "매출채권 감소(증가)", "재고자산 감소(증가)", "기타자산 감소(증가)",
+        "매입채무 증가(감소)", "기타채무 증가(감소)", "법인세납부",
+        "투자활동현금흐름", "투자활동 현금유출", "투자활동 현금유입",
+        "재무활동현금흐름", "차입금의 증가(감소)",
+        "조정2",
+        "배당금의 지급", "리스부채의 증감",
+        "현금성자산의 증감", "기초현금", "기말현금",
+    ]
+
+    name_counts = {}
+    order_with_n = []
+    for name in item_order:
+        name_counts[name] = name_counts.get(name, 0) + 1
+        order_with_n.append((name, name_counts[name]))
+
+    # 5. 핵심: 중복 데이터(기타)를 순서대로 분리해서 더하는 로직
+    def _sum_item_nth(name, nth, years, months):
+        sub = df[(df["연도"].isin(years)) & (df["월"].isin(months))]
+        total = 0.0
+        for (_, _), g in sub.groupby(["연도", "월"], sort=False):
+            if name in ["조정1", "조정2"]:
+                if "Parent Class" in g.columns:
+                    gg = g[((g["구분2"] == "기타") | (g["구분3"] == "기타")) & (g["Parent Class"] == name)]
+                else:
+                    gg = g[(g["구분1"] == "기타") | (g["구분2"] == "기타") | (g["구분3"] == "기타")]
+            else:
+                gg = g[(g["구분1"] == name) | (g["구분2"] == name) | (g["구분3"] == name)]
+
+            gg = gg.sort_values("__ord__", kind="stable")
+            if len(gg) >= nth:
+                val = gg.iloc[nth - 1][val_col]
+                total += float(val) if pd.notnull(val) else 0.0
+        return total
+
+    def _block(years, months):
+        return [_sum_item_nth(nm, nth, years, months) for (nm, nth) in order_with_n]
+
+    # 6. 월별 합산을 통한 5개 컬럼 값 계산
+    vals_y2   = _block([year - 2], range(1, 13))
+    vals_y1   = _block([year - 1], range(1, 13))
+    
+    used_month = month
+    prev_ms   = range(1, used_month) if used_month > 1 else []
+    vals_prev = _block([year], prev_ms) if prev_ms else [0.0] * len(order_with_n)
+    vals_ytd  = _block([year], range(1, used_month + 1))
+    
+    # 당월 = 당해누적(ytd) - 전월누적(prev)
+    vals_mon  = (np.array(vals_ytd) - np.array(vals_prev)).tolist()
+
+    sub_labels = [
+        f"'{str(year - 2)[2:]}년",
+        f"'{str(year - 1)[2:]}년",
+        '전월누적',
+        '당월',
+        f"'{str(year)[2:]}년누적",
+    ]
+    columns = ['구분', '_depth'] + sub_labels
+
+    # 7. 들여쓰기(_depth) 및 볼드체(소계행) 지정 로직
+    lv0 = {"영업활동현금흐름", "투자활동현금흐름", "재무활동현금흐름", "현금성자산의 증감", "기초현금", "기말현금"}
+    lv1 = {"당기순이익", "조정", "자산부채증감", "법인세납부",
+           "투자활동 현금유출", "투자활동 현금유입",
+           "차입금의 증가(감소)", "배당금의 지급", "리스부채의 증감"}
+
+    rows = []
+    gita_count = 0
+    for i, (nm, _) in enumerate(order_with_n):
+        label = "기타" if nm in ["조정1", "조정2"] else nm
+        clean_label = str(label).strip()
+
+        if clean_label in lv0:
+            depth = 0
+        elif clean_label in lv1:
+            depth = 1
+        elif clean_label == "기타":
+            gita_count += 1
+            depth = 2 if gita_count == 1 else 1
+        else:
+            depth = 2
+
+        rows.append({
+            '구분':        label,
+            '_depth':      depth,
+            sub_labels[0]: _fmt(vals_y2[i]),
+            sub_labels[1]: _fmt(vals_y1[i]),
+            sub_labels[2]: _fmt(vals_prev[i]),
+            sub_labels[3]: _fmt(vals_mon[i]),
+            sub_labels[4]: _fmt(vals_ytd[i]),
+        })
+
+    df_res = pd.DataFrame({col: [r.get(col, '') for r in rows] for col in columns})
+    소계행 = lv0
+    헤더행 = set()
+
+    return _현금흐름표_연결_to_html_table(df_res, 소계행, 헤더행)
+
+def _build_재무상태표_별도_table(year, month):
+    df = load_sheet(Sheets.재무상태표_DB)
+    df['값']  = df['값'].apply(_parse)
+    df = _drop_empty(df, '연도', '월')
+
+    df = df[df['사업장'] == '특수강']
+
+    yr_전기, mo_전기 = year - 1, 12
+    yr_전월, mo_전월 = _prev(year, month, 1)
+
+    sub_labels = [
+        f"'{str(year - 1)[2:]}년",
+        f"'{str(yr_전월)[2:]}.{mo_전월}월",
+        f"{month}월",
+        '전월비',
+    ]
+
+    anchor = df[(df['연도'] == year) & (df['월'] == month)]
+    
+    if anchor.empty:
+        행_순서 = list(dict.fromkeys(zip(df['구분1'], df['구분2'])))
+    else:
+        행_순서 = list(dict.fromkeys(zip(anchor['구분1'], anchor['구분2'])))
+
+    val_map = df.set_index(['연도', '월', '구분1', '구분2'])['값'].to_dict()
+
+    def 값(yr, mo, g1, g2):
+        return val_map.get((yr, mo, g1, g2), 0.0)
+
+    columns = ['구분', '_depth'] + sub_labels
+    소계행  = 재무_소계행
+    헤더행  = set()
+
+    행_순서_aug = [(g1, g2) for g1, g2 in 행_순서]
+    g1_order = list(dict.fromkeys(t[0] for t in 행_순서_aug))
+    g1_groups: dict = {g: [] for g in g1_order}
+    for triple in 행_순서_aug:
+        g1_groups[triple[0]].append(triple)
+
+    행_순서_final: list = []
+    for g1 in g1_order:
+        group  = g1_groups[g1]
+        totals = [t for t in group if (t[1] in 소계행 or t[0] == t[1])]
+        others = [t for t in group if t not in totals]
+        행_순서_final.extend(totals + others)
+
+    rows = []
+    for g1, g2 in 행_순서_final:
+        label = g2
+        depth = 0 if (label in 소계행 or g1 == g2) else 1
+
+        전기_v = 값(yr_전기, mo_전기, g1, g2)
+        전월_v = 값(yr_전월, mo_전월, g1, g2)
+        당월_v = 값(year,    month,   g1, g2)
+
+        rows.append({
+            '구분':        label,
+            '_depth':      depth,
+            sub_labels[0]: _fmt(전기_v),
+            sub_labels[1]: _fmt(전월_v),
+            sub_labels[2]: _fmt(당월_v),
+            sub_labels[3]: _fmt(당월_v - 전월_v),
+        })
+
+    df_res = pd.DataFrame({col: [r.get(col, '') for r in rows] for col in columns})
+    return _재무_to_html_table(df_res, 소계행, 헤더행)
+
+def _build_회전일_별도_table(year, month):
+    df = load_sheet(Sheets.회전일_DB)
+    val_col = '실적' if '실적' in df.columns else '값'
+    df[val_col] = df[val_col].apply(_parse)
+    df = _drop_empty(df, '연도', '월')
+
+    if '사업장' in df.columns:
+        df = df[df['사업장'] == '특수강']
+
+    yr_전기, mo_전기 = year - 1, 12
+    yr_전월, mo_전월 = _prev(year, month, 1)
+
+    sub_labels = [
+        f"'{str(yr_전기)[2:]}년말",
+        f"'{str(yr_전월)[2:]}년 {mo_전월}월",
+        f"'{str(year)[2:]}년 {month}월",
+        '전월대비'
+    ]
+
+    item_col = '구분2' if '구분2' in df.columns else '구분1'
+    df[item_col] = df[item_col].fillna('').astype(str).str.strip()
+    
+    val_map = df.set_index(['연도', '월', item_col])[val_col].to_dict()
+
+    def 값(yr, mo, 항목):
+        for k, v in val_map.items():
+            if k[0] == yr and k[1] == mo and 항목 in k[2]:
+                return float(v)
+        return None
+
+    rows_info = [
+        ("매출채권 ⓐ", "매출채권"),
+        ("재고자산 ⓑ", "재고자산"),
+        ("매입채무 ⓒ", "매입채무"),
+        ("현금전환주기<br>(ⓐ+ⓑ-ⓒ)", "현금전환주기"),
+    ]
+    rows = []
+    
+    def fmt_num(v):
+        if v is None: return ""
+        return f"{v:.1f}"
+
+    for label, key in rows_info:
+        v_end = 값(yr_전기, mo_전기, key)
+        v_pre = 값(yr_전월, mo_전월, key)
+        v_cur = 값(year, month, key)
+        v_dif = v_cur - v_pre if (v_cur is not None and v_pre is not None) else None
+        
+        rows.append({
+            '구분': label,
+            sub_labels[0]: fmt_num(v_end),
+            sub_labels[1]: fmt_num(v_pre),
+            sub_labels[2]: fmt_num(v_cur),
+            sub_labels[3]: fmt_num(v_dif)
+        })
+    
+    return pd.DataFrame(rows)
+
+def _build_안정성_별도_table(year, month):
+    df = load_sheet(Sheets.안정성_DB)
+    val_col = '값' if '값' in df.columns else '실적'
+    
+    df[val_col] = df[val_col].astype(str).str.replace('%', '', regex=False).apply(_parse)
+    df = _drop_empty(df, '연도', '월')
+
+    if '사업장' in df.columns:
+        if '본사' in df['사업장'].values:
+            df = df[df['사업장'] == '본사']
+        elif '특수강' in df['사업장'].values:
+            df = df[df['사업장'] == '특수강']
+
+    yr_전기, mo_전기 = year - 1, 12
+    yr_전월, mo_전월 = _prev(year, month, 1)
+
+    sub_labels = [
+        f"'{str(yr_전기)[2:]}년말",
+        f"'{str(yr_전월)[2:]}년 {mo_전월}월",
+        f"'{str(year)[2:]}년 {month}월",
+        '전월대비'
+    ]
+
+    item_col = '구분2' if '구분2' in df.columns and df['구분2'].str.strip().astype(bool).any() else '구분1'
+    df[item_col] = df[item_col].fillna('').astype(str).str.strip()
+    
+    val_map = df.groupby(['연도', '월', item_col])[val_col].sum().to_dict()
+
+    def 값(yr, mo, 항목):
+        for k, v in val_map.items():
+            if k[0] == yr and k[1] == mo and 항목 in k[2]:
+                # 엑셀 서식 보정: 소수점으로 들어온 실제 값에 100을 곱함
+                return float(v) * 100
+        return None
+
+    rows_info = ["부채비율", "차입금의존도"]
+    rows = []
+    
+    def fmt_pct(v):
+        if v is None: return ""
+        return f"{v:.1f}%"
+        
+    def fmt_p(v):
+        if v is None: return ""
+        if v > 0: return f"+{v:.1f}p"
+        return f"{v:.1f}p"
+
+    for label in rows_info:
+        v_end = 값(yr_전기, mo_전기, label)
+        v_pre = 값(yr_전월, mo_전월, label)
+        v_cur = 값(year, month, label)
+        v_dif = v_cur - v_pre if (v_cur is not None and v_pre is not None) else None
+        
+        rows.append({
+            '구분': label,
+            sub_labels[0]: fmt_pct(v_end),
+            sub_labels[1]: fmt_pct(v_pre),
+            sub_labels[2]: fmt_pct(v_cur),
+            sub_labels[3]: fmt_p(v_dif)
+        })
+    
+    return pd.DataFrame(rows)
+
+
+def _build_수익성_별도_table(year, month):
+    df = load_sheet(Sheets.수익성_DB)
+    val_col = '값' if '값' in df.columns else '실적'
+    
+    df[val_col] = df[val_col].astype(str).str.replace('%', '', regex=False).apply(_parse)
+    df = _drop_empty(df, '연도', '월')
+
+    if '사업장' in df.columns:
+        if '본사' in df['사업장'].values:
+            df = df[df['사업장'] == '본사']
+        elif '특수강' in df['사업장'].values:
+            df = df[df['사업장'] == '특수강']
+
+    yr_전기, mo_전기 = year - 1, 12
+    yr_전월, mo_전월 = _prev(year, month, 1)
+
+    sub_labels = [
+        f"'{str(yr_전기)[2:]}년말",
+        f"'{str(yr_전월)[2:]}년 {mo_전월}월",
+        f"'{str(year)[2:]}년 {month}월",
+        '전월대비'
+    ]
+
+    item_col = '구분2' if '구분2' in df.columns and df['구분2'].str.strip().astype(bool).any() else '구분1'
+    df[item_col] = df[item_col].fillna('').astype(str).str.strip()
+    
+    val_map = df.groupby(['연도', '월', item_col])[val_col].sum().to_dict()
+
+    def 값(yr, mo, 항목):
+        for k, v in val_map.items():
+            if k[0] == yr and k[1] == mo and 항목 in k[2]:
+                # 엑셀 서식 보정: 소수점으로 들어온 실제 값에 100을 곱함
+                return float(v) * 100
+        return None
+
+    rows_info = ["ROA", "ROE"]
+    rows = []
+    
+    def fmt_pct(v):
+        if v is None: return ""
+        return f"{v:.2f}%"
+        
+    def fmt_p(v):
+        if v is None: return ""
+        if v > 0: return f"+{v:.1f}p"
+        return f"{v:.1f}p"
+
+    for label in rows_info:
+        v_end = 값(yr_전기, mo_전기, label)
+        v_pre = 값(yr_전월, mo_전월, label)
+        v_cur = 값(year, month, label)
+        v_dif = v_cur - v_pre if (v_cur is not None and v_pre is not None) else None
+        
+        rows.append({
+            '구분': label,
+            sub_labels[0]: fmt_pct(v_end),
+            sub_labels[1]: fmt_pct(v_pre),
+            sub_labels[2]: fmt_pct(v_cur),
+            sub_labels[3]: fmt_p(v_dif)
+        })
+    
+    return pd.DataFrame(rows)
 # ── 페이지 렌더 ───────────────────────────────────────────────
 
 def render_page(app, year_state, month_state):
@@ -912,7 +1410,7 @@ def render_page(app, year_state, month_state):
         )
     app.If(lambda: True, _render_title)
 
-    tabs = app.tabs(["주요경영지표(해외법인 포함)", "주요경영지표(선재_국내)"])
+    tabs = app.tabs(["주요경영지표(해외법인 포함)", "주요경영지표(선재_국내)", "연간사업계획"])
     
     with tabs[0]:
         def _render_포함():
@@ -959,5 +1457,41 @@ def render_page(app, year_state, month_state):
             app.markdown(_section("3) 수정원가기준손익 (별도)", _build_수정원가기준손익_별도_table(year, month), memo3),
                          unsafe_allow_html=True)
             
-        
+            app.markdown(_원재료_section("4) 원재료 입고-기초 단가 차이", _build_원재료입고기초단가차이_table(year, month), "", '[단위: 톤, 백만원]'),
+                         unsafe_allow_html=True)
+            
+            app.markdown(_원재료_section("5) 원재료 입고-기초 단가 차이 거래처 기준", _build_원재료입고단가차이_거래처기준_table(year, month), "", '[단위: 톤, 백만원]'),
+                         unsafe_allow_html=True)
+            
+            app.markdown(_section("6) 제품수불표 (별도)", _build_제품수불표_table(year, month), "", '[단위: 원, 백만원]'),
+                         unsafe_allow_html=True)
+            
+            memo7 = _get_memo(Sheets.현금흐름표_별도_메모, year, month)
+            app.markdown(_layout64("7) 현금흐름표 (별도)", _build_현금흐름표_별도_table(year, month), memo7, '[단위: 백만원]'),
+                         unsafe_allow_html=True)
+
+            memo8 = _get_memo(Sheets.재무상태표_국내_메모, year, month)
+            app.markdown(_layout64("8) 재무상태표 (별도)", _build_재무상태표_별도_table(year, month), memo8, '[단위: 백만원]'),
+                         unsafe_allow_html=True)
+            
+            memo9 = _get_memo(Sheets.안정성_메모, year, month)
+            app.markdown(_section("9) 안정성 (별도)", _build_안정성_별도_table(year, month), memo9, '[단위: %]'),
+                         unsafe_allow_html=True)
+            
+            memo10 = _get_memo(Sheets.회전일_국내_메모, year, month)
+            app.markdown(_section("10) 회전일 (별도)", _build_회전일_별도_table(year, month), memo10, '[단위: 일]'),
+                         unsafe_allow_html=True)
+            
+            memo11 = _get_memo(Sheets.수익성_메모, year, month)
+            app.markdown(_section("11) 수익성 (별도)", _build_수익성_별도_table(year, month), memo11, '[단위: %]'),
+                         unsafe_allow_html=True)
+            
         app.If(lambda: True, _render_국내)
+        
+        with tabs[2]:
+            def _render_연간():
+                year, month = int(year_state.value), int(month_state.value)
+
+
+
+        app.If(lambda: True, _render_연간)
