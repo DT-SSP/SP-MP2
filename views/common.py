@@ -178,3 +178,17 @@ def layout64(title, content_html, memo, unit='[단위: 만개, 백만원]'):
         '</div>'
         '</div>'
     )
+
+def layout100(title, content_html, memo='', unit=''):
+    title_html = f'<div style="font-size:16px;font-weight:700;color:{C_NAVY};margin-bottom:8px;">{title}</div>'
+    unit_html = f'<div style="text-align:right; font-size:13px; color:#666; margin-bottom:4px;">{unit}</div>' if unit else ''
+    
+    memo_html = ''
+    if memo:
+        memo_html = f'''
+        <div class="t3-special-memo" style="margin-top:10px; padding:10px; background:#f8f9fa; border-radius:4px; font-size:13px; color:#444;">
+            {memo}
+        </div>
+        '''
+
+    return f'<div style="width:100%; margin-bottom:20px;">{title_html}{unit_html}{content_html}{memo_html}</div>'

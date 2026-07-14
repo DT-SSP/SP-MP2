@@ -16,7 +16,7 @@ from views.common import (
     C_NAVY as _C_NAVY, C_RED as _C_RED, C_LT_GRAY as _C_LT_GRAY,
     TH as _TH, TD_LBL as _TD_LBL, TD_NUM as _TD_NUM, TD_RED as _TD_RED,
     TD_SUB_LBL as _TD_SUB_LBL, TD_SUB_NUM as _TD_SUB_NUM, TD_SUB_RED as _TD_SUB_RED,
-    html_table as _html_table, memo_html as _memo_html, layout64 as _layout64,
+    html_table as _html_table, memo_html as _memo_html, layout64 as _layout64, layout100 as _layout100,
 )
 
 _기호 = ['①', '②', '③', '④', '⑤', '⑥']
@@ -1023,130 +1023,84 @@ def _build_제품수불표_table(year, month):
 
     return pd.DataFrame({col: [r.get(col, '') for r in rows] for col in columns})
 
-import numpy as np
-
 def _build_현금흐름표_별도_table(year, month):
     df = load_sheet(Sheets.현금흐름표_별도_DB)
     
-    # 1. 값 컬럼 정리 (보내주신 _to_num 로직 반영)
+    # 1. 값 컬럼 정리
     val_col = '실적' if '실적' in df.columns else '값'
     df[val_col] = df[val_col].apply(_parse)
-    
-    # 2. 필수 컬럼 정리
-    target_cols = ["구분1", "구분2", "구분3", "구분4", "Parent Class"]
-    for c in target_cols:
-        if c in df.columns:
-            df[c] = df[c].fillna("").astype(str).str.strip().str.replace(r"\s+", " ", regex=True)
+    df = _drop_empty(df, '연도', '월')
 
-    df["연도"] = pd.to_numeric(df["연도"], errors="coerce").fillna(0).astype(int)
-    df["월"]   = pd.to_numeric(df["월"], errors="coerce").fillna(0).astype(int)
-    
-    # 3. 구분1 필터 처리 (시트 구조에 따라 탄력적 적용)
-    if "현금흐름표_별도" in df["구분1"].values:
-        df = df[df["구분1"] == "현금흐름표_별도"].copy()
+    # 2. 구분 컬럼 정제
+    for c in ['구분1', '구분2', '구분3', '구분4']:
+        df[c] = df[c].fillna('').astype(str).str.strip().str.replace(r"\s+", " ", regex=True)
+
+    # 3. 데이터 롤업(Roll-up) 해시맵 생성
+    val_map = {}
+    for _, row in df.iterrows():
+        y, m, g4 = int(row['연도']), int(row['월']), row['구분4']
+        g1, g2, g3 = row['구분1'], row['구분2'], row['구분3']
+        v = row[val_col]
+        if v == 0: continue
         
-    df["__ord__"] = range(len(df))
+        def add(k_g1, k_g2, k_g3):
+            key = (y, m, g4, k_g1, k_g2, k_g3)
+            val_map[key] = val_map.get(key, 0.0) + v
+        
+        add(g1, g2, g3)
+        if g3: add(g1, g2, '')
+        if g2 or g3: add(g1, '', '')
 
-    # 4. 보내주신 아이템 순서(item_order) 그대로 반영
-    item_order = [
-        "영업활동현금흐름", "당기순이익", "조정", "감가상각비",
-        "조정1",
-        "자산부채증감",
-        "매출채권 감소(증가)", "재고자산 감소(증가)", "기타자산 감소(증가)",
-        "매입채무 증가(감소)", "기타채무 증가(감소)", "법인세납부",
-        "투자활동현금흐름", "투자활동 현금유출", "투자활동 현금유입",
-        "재무활동현금흐름", "차입금의 증가(감소)",
-        "조정2",
-        "배당금의 지급", "리스부채의 증감",
-        "현금성자산의 증감", "기초현금", "기말현금",
-    ]
+    def get_val(yr, mo, g4, g1, g2, g3):
+        return val_map.get((yr, mo, g4, g1, g2, g3), 0.0)
 
-    name_counts = {}
-    order_with_n = []
-    for name in item_order:
-        name_counts[name] = name_counts.get(name, 0) + 1
-        order_with_n.append((name, name_counts[name]))
+    # 4. 조회 로직: 과거/현재 구분
+    def get_accumulated(yr, target_mo, g1, g2, g3):
+        # 1) 23, 24년 등 과거는 DB에 저장된 '누적' 값을 우선 사용
+        if yr < 2025:
+            return get_val(yr, 12, '누적', g1, g2, g3)
+        
+        return sum(get_val(yr, m, '당월', g1, g2, g3) for m in range(1, target_mo + 1))
 
-    # 5. 핵심: 중복 데이터(기타)를 순서대로 분리해서 더하는 로직
-    def _sum_item_nth(name, nth, years, months):
-        sub = df[(df["연도"].isin(years)) & (df["월"].isin(months))]
-        total = 0.0
-        for (_, _), g in sub.groupby(["연도", "월"], sort=False):
-            if name in ["조정1", "조정2"]:
-                if "Parent Class" in g.columns:
-                    gg = g[((g["구분2"] == "기타") | (g["구분3"] == "기타")) & (g["Parent Class"] == name)]
-                else:
-                    gg = g[(g["구분1"] == "기타") | (g["구분2"] == "기타") | (g["구분3"] == "기타")]
-            else:
-                gg = g[(g["구분1"] == name) | (g["구분2"] == name) | (g["구분3"] == name)]
+    # 5. 표 뼈대 생성 (당월 데이터 기준)
+    target = df[(df['연도'] == year) & (df['월'] == month)].copy()
+    tree = {}
+    for _, row in target.iterrows():
+        g1, g2, g3 = row['구분1'], row['구분2'], row['구분3']
+        if not g1: continue
+        if g1 not in tree: tree[g1] = {}
+        if g2:
+            if g2 not in tree[g1]: tree[g1][g2] = []
+            if g3 and g3 not in tree[g1][g2]: tree[g1][g2].append(g3)
 
-            gg = gg.sort_values("__ord__", kind="stable")
-            if len(gg) >= nth:
-                val = gg.iloc[nth - 1][val_col]
-                total += float(val) if pd.notnull(val) else 0.0
-        return total
-
-    def _block(years, months):
-        return [_sum_item_nth(nm, nth, years, months) for (nm, nth) in order_with_n]
-
-    # 6. 월별 합산을 통한 5개 컬럼 값 계산
-    vals_y2   = _block([year - 2], range(1, 13))
-    vals_y1   = _block([year - 1], range(1, 13))
-    
-    used_month = month
-    prev_ms   = range(1, used_month) if used_month > 1 else []
-    vals_prev = _block([year], prev_ms) if prev_ms else [0.0] * len(order_with_n)
-    vals_ytd  = _block([year], range(1, used_month + 1))
-    
-    # 당월 = 당해누적(ytd) - 전월누적(prev)
-    vals_mon  = (np.array(vals_ytd) - np.array(vals_prev)).tolist()
-
-    sub_labels = [
-        f"'{str(year - 2)[2:]}년",
-        f"'{str(year - 1)[2:]}년",
-        '전월누적',
-        '당월',
-        f"'{str(year)[2:]}년누적",
-    ]
-    columns = ['구분', '_depth'] + sub_labels
-
-    # 7. 들여쓰기(_depth) 및 볼드체(소계행) 지정 로직
-    lv0 = {"영업활동현금흐름", "투자활동현금흐름", "재무활동현금흐름", "현금성자산의 증감", "기초현금", "기말현금"}
-    lv1 = {"당기순이익", "조정", "자산부채증감", "법인세납부",
-           "투자활동 현금유출", "투자활동 현금유입",
-           "차입금의 증가(감소)", "배당금의 지급", "리스부채의 증감"}
-
+    # 6. 행 조립 및 계산
     rows = []
-    gita_count = 0
-    for i, (nm, _) in enumerate(order_with_n):
-        label = "기타" if nm in ["조정1", "조정2"] else nm
-        clean_label = str(label).strip()
+    소계행 = set(tree.keys())
+    
+    for g1, g2_dict in tree.items():
+        rows.append({'label': g1, 'depth': 0, 'keys': (g1, '', '')})
+        for g2, g3_list in g2_dict.items():
+            rows.append({'label': g2, 'depth': 1, 'keys': (g1, g2, '')})
+            for g3 in g3_list:
+                rows.append({'label': g3, 'depth': 2, 'keys': (g1, g2, g3)})
 
-        if clean_label in lv0:
-            depth = 0
-        elif clean_label in lv1:
-            depth = 1
-        elif clean_label == "기타":
-            gita_count += 1
-            depth = 2 if gita_count == 1 else 1
-        else:
-            depth = 2
-
-        rows.append({
-            '구분':        label,
-            '_depth':      depth,
-            sub_labels[0]: _fmt(vals_y2[i]),
-            sub_labels[1]: _fmt(vals_y1[i]),
-            sub_labels[2]: _fmt(vals_prev[i]),
-            sub_labels[3]: _fmt(vals_mon[i]),
-            sub_labels[4]: _fmt(vals_ytd[i]),
+    final_rows = []
+    yr_y2, yr_y1 = year - 2, year - 1
+    sub_labels = [f"'{str(yr_y2)[2:]}년", f"'{str(yr_y1)[2:]}년", '전월누적', '당월', f"'{str(year)[2:]}년누적"]
+    
+    for r in rows:
+        g1, g2, g3 = r['keys']
+        final_rows.append({
+            '구분':        r['label'],
+            '_depth':      r['depth'],
+            sub_labels[0]: _fmt(get_accumulated(yr_y2, 12, g1, g2, g3)),
+            sub_labels[1]: _fmt(get_accumulated(yr_y1, 12, g1, g2, g3)),
+            sub_labels[2]: _fmt(get_accumulated(year, month - 1, g1, g2, g3)),
+            sub_labels[3]: _fmt(get_val(year, month, '당월', g1, g2, g3)),
+            sub_labels[4]: _fmt(get_accumulated(year, month, g1, g2, g3)),
         })
 
-    df_res = pd.DataFrame({col: [r.get(col, '') for r in rows] for col in columns})
-    소계행 = lv0
-    헤더행 = set()
-
-    return _현금흐름표_연결_to_html_table(df_res, 소계행, 헤더행)
+    return _현금흐름표_연결_to_html_table(pd.DataFrame(final_rows), 소계행, set())
 
 def _build_재무상태표_별도_table(year, month):
     df = load_sheet(Sheets.재무상태표_DB)
@@ -1399,6 +1353,203 @@ def _build_수익성_별도_table(year, month):
         })
     
     return pd.DataFrame(rows)
+
+def _build_판매계획및실적_html(year, month):
+    raw = load_sheet(Sheets.판매계획및실적_DB)
+    
+    # 1. 원본 데이터 값 정제
+    val_col = '값' if '값' in raw.columns else '실적'
+    raw[val_col] = raw[val_col].astype(str).str.replace(',', '', regex=False)
+    raw[val_col] = pd.to_numeric(raw[val_col], errors='coerce').fillna(0)
+    raw['연도'] = pd.to_numeric(raw['연도'], errors='coerce').fillna(0).astype(int)
+    raw['월'] = pd.to_numeric(raw['월'], errors='coerce').fillna(0).astype(int)
+    
+    # 2. 빠른 데이터 조회를 위한 해시맵
+    data_map = {}
+    for _, row in raw.iterrows():
+        if row[val_col] == 0: continue
+        k = (str(row.get('계획/실적', '')).strip(), 
+             str(row.get('구분4', '')).strip(),
+             str(row.get('구분1', '')).strip(), 
+             str(row.get('구분2', '')).strip(), 
+             str(row.get('구분3', '')).strip(), 
+             row['연도'],
+             row['월'])
+        data_map[k] = data_map.get(k, 0) + row[val_col]
+        
+    def get_val(mode, metric, keys, target_year, m_range):
+        total = 0.0
+        for g1, g2, g3 in keys:
+            for m in m_range:
+                total += data_map.get((mode, metric, g1, g2, g3, target_year, m), 0.0)
+        return total
+
+    # 3. 그룹별 키 매핑
+    k_선재 = [('국내', '내수', '선재영업팀')]
+    k_봉강 = [('국내', '내수', '봉강영업팀')]
+    k_부산 = [('국내', '내수', '부산영업소')]
+    k_대구 = [('국내', '내수', '대구영업소')]
+    k_내수 = k_선재 + k_봉강 + k_부산 + k_대구
+    
+    k_수출 = [('국내', '수출', '글로벌영업팀')]
+    k_국내선재 = k_내수 + k_수출
+    k_국내AT = [('국내', '국내(AT)', 'AT_국내')]
+    k_국내계 = k_국내선재 + k_국내AT
+    
+    k_남통 = [('중국', '포스세아', '남통')]
+    k_천진 = [('중국', '포스세아', '천진')]
+    k_포스세아 = k_남통 + k_천진
+    k_기차배건 = [('중국', '기차배건', 'AT_기차배건')]
+    k_중국계 = k_포스세아 + k_기차배건
+    
+    k_태국계 = [('태국', '태국', '태국')]
+    
+    k_Total = k_국내계 + k_중국계 + k_태국계
+    k_선재계 = k_국내선재 + k_포스세아 + k_태국계
+    k_AT계 = k_국내AT + k_기차배건
+
+    # 4. 표에 출력될 행 정의 (이미지 기반 예외처리 추가)
+    # vol_keys: 판매량 집계 시 별도로 참조할 키 (단위가 섞이는 걸 방지)
+    rows_info = [
+        {'label': '선재영업팀', 'keys': k_선재, 'lv': 2, 'is_AT': False},
+        {'label': '봉강영업팀', 'keys': k_봉강, 'lv': 2, 'is_AT': False},
+        {'label': '부산영업소', 'keys': k_부산, 'lv': 2, 'is_AT': False},
+        {'label': '대구영업소', 'keys': k_대구, 'lv': 2, 'is_AT': False},
+        {'label': '내수', 'keys': k_내수, 'lv': 1, 'bold': True, 'is_AT': False},
+        {'label': '수출 (글로벌영업팀)', 'keys': k_수출, 'lv': 1, 'bold': True, 'is_AT': False},
+        {'label': '국내(선재)', 'keys': k_국내선재, 'lv': 0, 'bold': True, 'is_AT': False},
+        {'label': '국내(AT)', 'keys': k_국내AT, 'lv': 0, 'bold': True, 'is_AT': True},
+        # 🟢 국내 계: 판매량은 '국내선재'만 가져오고, 단가는 숨김
+        {'label': '국내 계', 'keys': k_국내계, 'vol_keys': k_국내선재, 'lv': 0, 'bold': True, 'bg': '#E9ECEF', 'skip_price': True},
+        
+        {'label': '남통', 'keys': k_남통, 'lv': 2, 'is_AT': False},
+        {'label': '천진', 'keys': k_천진, 'lv': 2, 'is_AT': False},
+        {'label': '포스세아', 'keys': k_포스세아, 'lv': 1, 'bold': True, 'is_AT': False},
+        {'label': '기차배건', 'keys': k_기차배건, 'lv': 1, 'bold': True, 'is_AT': True},
+        # 🟢 중국 계: 판매량은 '포스세아(선재)'만 가져오고, 단가는 숨김
+        {'label': '중국 계', 'keys': k_중국계, 'vol_keys': k_포스세아, 'lv': 0, 'bold': True, 'bg': '#E9ECEF', 'skip_price': True},
+        
+        {'label': '태국 계', 'keys': k_태국계, 'lv': 0, 'bold': True, 'bg': '#E9ECEF', 'is_AT': False},
+        # 🟢 Total: 판매량, 단가 모두 숨김
+        {'label': 'Total', 'keys': k_Total, 'lv': 0, 'bold': True, 'bg': '#53565A', 'color': 'white', 'skip_vol': True, 'skip_price': True},
+        
+        {'label': '선재 계', 'keys': k_선재계, 'lv': 0, 'bold': True, 'is_AT': False},
+        {'label': 'A T 계', 'keys': k_AT계, 'lv': 0, 'bold': True, 'is_AT': True},
+    ]
+
+    # 각 지표 계산 로직 (vol_keys 우선 참조)
+    def calc_metrics(mode, keys, m_range, is_AT, vol_keys=None):
+        v_target_keys = vol_keys if vol_keys else keys
+        
+        v_raw = get_val(mode, '판매량', v_target_keys, int(year), m_range)
+        r_raw = get_val(mode, '매출액', keys, int(year), m_range)
+        
+        v = (v_raw / 1000.0) if is_AT else v_raw
+        r = r_raw / 100_000.0
+        p = (r_raw / v) if v != 0 else 0
+        
+        return v, p, r
+
+    # 셀 렌더링 (단가와 판매량 스킵을 분리)
+    def td(val, is_pct=False, bg='', color='', skip=False):
+        if skip or val is None:
+            return f"<td style='background:{bg}; border:1px solid #DEE2E6;'></td>"
+        
+        c = color
+        if val < 0: c = '#DC2626'
+            
+        v_abs = abs(val)
+        s = f"{v_abs:,.0f}%" if is_pct else f"{v_abs:,.0f}"
+        if val < 0: s = f"-{s}"
+            
+        style = "padding:6px 10px; text-align:right; border:1px solid #DEE2E6; white-space:nowrap;"
+        if bg: style += f" background:{bg};"
+        if c: style += f" color:{c};"
+        
+        return f"<td style='{style}'>{s}</td>"
+
+    # 5. 본문 생성
+    body_html = ""
+    for r in rows_info:
+        keys = r['keys']
+        vol_keys = r.get('vol_keys')
+        skip_vol = r.get('skip_vol', False)
+        skip_price = r.get('skip_price', False)
+        is_AT = r.get('is_AT', False)
+        
+        bg = r.get('bg', '#ffffff')
+        txt_col = r.get('color', '#333333')
+        fw = '700' if r.get('bold') else '400'
+        lv = r.get('lv', 0)
+        
+        # 데이터 계산
+        py_v, py_p, py_r = calc_metrics('계획', keys, range(1, 13), is_AT, vol_keys)
+        pc_v, pc_p, pc_r = calc_metrics('계획', keys, range(1, month + 1), is_AT, vol_keys)
+        ac_v, ac_p, ac_r = calc_metrics('실적', keys, range(1, month + 1), is_AT, vol_keys)
+        
+        var_v = ac_v - pc_v
+        var_p = ac_p - pc_p
+        var_r = ac_r - pc_r
+        
+        ach_v = (ac_v / pc_v * 100) if pc_v else 0
+        ach_r = (ac_r / pc_r * 100) if pc_r else 0
+        
+        td_label_style = f"padding:6px 10px; text-align:left; border:1px solid #DEE2E6; font-weight:{fw}; background:{bg}; color:{txt_col};"
+        label_html = f"<td style='{td_label_style}'><span style='padding-left:{lv*16}px'>{r['label']}</span></td>"
+        
+        body_html += "<tr>" + label_html
+        
+        # skip_vol, skip_price를 각각 필요한 열에 독립적으로 적용
+        body_html += td(py_v, bg=bg, color=txt_col, skip=skip_vol)
+        body_html += td(py_p, bg=bg, color=txt_col, skip=skip_price)
+        body_html += td(py_r, bg=bg, color=txt_col)
+        
+        body_html += td(pc_v, bg=bg, color=txt_col, skip=skip_vol)
+        body_html += td(pc_p, bg=bg, color=txt_col, skip=skip_price)
+        body_html += td(pc_r, bg=bg, color=txt_col)
+        
+        body_html += td(ac_v, bg=bg, color=txt_col, skip=skip_vol)
+        body_html += td(ac_p, bg=bg, color=txt_col, skip=skip_price)
+        body_html += td(ac_r, bg=bg, color=txt_col)
+        
+        body_html += td(var_v, bg=bg, color=txt_col, skip=skip_vol)
+        body_html += td(var_p, bg=bg, color=txt_col, skip=skip_price)
+        body_html += td(var_r, bg=bg, color=txt_col)
+        
+        body_html += td(ach_v, is_pct=True, bg=bg, color=txt_col, skip=skip_vol)
+        body_html += td(ach_r, is_pct=True, bg=bg, color=txt_col)
+        
+        body_html += "</tr>"
+
+    # 6. 헤더 생성
+    th_st = "padding:8px 10px; text-align:center; border:1px solid #DEE2E6; background:#F1F3F5; color:#53565A; font-weight:700; white-space:nowrap;"
+    header_html = f"""
+    <tr>
+        <th rowspan="2" style="{th_st}">구분</th>
+        <th colspan="3" style="{th_st}">사업 계획 (연간)</th>
+        <th colspan="3" style="{th_st}">사업 계획 (누적)</th>
+        <th colspan="3" style="{th_st}">실적 (누적)</th>
+        <th colspan="3" style="{th_st}">실적 - 계획</th>
+        <th colspan="2" style="{th_st}">달성률(%)</th>
+    </tr>
+    <tr>
+        <th style="{th_st}">판매량</th><th style="{th_st}">단가</th><th style="{th_st}">매출액</th>
+        <th style="{th_st}">판매량</th><th style="{th_st}">단가</th><th style="{th_st}">매출액</th>
+        <th style="{th_st}">판매량</th><th style="{th_st}">단가</th><th style="{th_st}">매출액</th>
+        <th style="{th_st}">판매량</th><th style="{th_st}">단가</th><th style="{th_st}">매출액</th>
+        <th style="{th_st}">판매량</th><th style="{th_st}">매출액</th>
+    </tr>
+    """
+
+    return f"""
+    <div style='overflow-x:auto; width:100%;'>
+        <table style='border-collapse:collapse; width:100%; font-size:14px; min-width:1100px;'>
+            <thead>{header_html}</thead>
+            <tbody>{body_html}</tbody>
+        </table>
+    </div>
+    """
+
 # ── 페이지 렌더 ───────────────────────────────────────────────
 
 def render_page(app, year_state, month_state):
@@ -1488,10 +1639,13 @@ def render_page(app, year_state, month_state):
             
         app.If(lambda: True, _render_국내)
         
-        with tabs[2]:
-            def _render_연간():
-                year, month = int(year_state.value), int(month_state.value)
-
-
+    with tabs[2]:
+        def _render_연간():
+            year, month = int(year_state.value), int(month_state.value)
+            html_table = _build_판매계획및실적_html(year, month)
+            memo = _get_memo(Sheets.판매계획및실적_메모, year, month)
+            
+            app.markdown(_layout100("1) 판매계획 및 실적", html_table, memo, '[단위: 톤, 천개, 억원]'),
+                            unsafe_allow_html=True)
 
         app.If(lambda: True, _render_연간)
