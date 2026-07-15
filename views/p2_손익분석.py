@@ -951,6 +951,337 @@ def _메이커별_입고추이_to_html(df) -> str:
 
     return _html_table(th_html, body_html)
 
+# ────────────────────────────────────────────────────────────────────────
+# 4) 제조 가공비 요약 Builder & HTML Renderer
+# ────────────────────────────────────────────────────────────────────────
+
+def _build_제조가공비_table(year: int, month: int):
+    # 데이터 로드
+    df_raw = load_sheet(Sheets.제조가공비_DB)
+    
+    # 🟢 급료와임금 데이터 살리기
+    if '구분2' in df_raw.columns:
+        df_raw['구분2'] = df_raw['구분2'].astype(str).str.replace("급료와임금", "급여")
+
+    # --- 내부 연산 모듈 로직 통합 ---
+    df = df_raw.copy()
+    
+    c_y, c_m, c_it, c_site, c_val = "연도", "월", "구분2", "사업장", "값"
+    
+    df[c_y] = pd.to_numeric(df[c_y], errors="coerce")
+    df[c_m] = pd.to_numeric(df[c_m], errors="coerce")
+    df[c_val] = pd.to_numeric(df[c_val].astype(str).str.replace(",", ""), errors="coerce").fillna(0)
+
+    def _site_norm(s: str) -> str:
+        s = str(s).strip()
+        if "포항" in s: return "포항"
+        if "충주2" in s: return "충주2"
+        if "충주" in s: return "충주"
+        return "기타"
+
+    if c_site not in df.columns:
+        df[c_site] = df.get("구분1", "")
+
+    df["__site__"] = df[c_site].map(_site_norm)
+    df = df[df["__site__"].isin(["포항", "충주", "충주2"])]
+
+    # 와이드 형태로 피벗
+    pv = (
+        df.groupby([c_y, c_m, c_it, "__site__"])[c_val].sum().reset_index()
+        .pivot(index=[c_y, c_m, c_it], columns="__site__", values=c_val)
+        .reset_index()
+    )
+    for c in ["포항", "충주", "충주2"]:
+        if c not in pv.columns:
+            pv[c] = 0.0
+
+    pv.rename(columns={c_y: "연도", c_m: "월", c_it: "항목"}, inplace=True)
+    pv["계"] = pv[["포항", "충주", "충주2"]].sum(axis=1)
+    wide = pv[["연도", "월", "항목", "포항", "충주", "충주2", "계"]]
+
+    # 🔴 [수정] 부모(구분1)가 먼저 나오고, 그 아래에 자식(구분2)들이 오도록 순서 재정렬
+    # 엑셀 기준 부재료비는 제조경비 하위이므로 그룹화 편입
+    ORDER = [
+        "제조노무비", "급여", "상여금", "잡급", "퇴직급여충당금", 
+        "제조경비", "부재료비", "전력비", "수도료", "감가상각비", "수선비", "소모품비", "복리후생비", "지급임차료", "지급수수료", "외주용역비", "외주가공비", "기타", 
+        "총합", "원재투입중량", "투입중량 원단위(천원)"
+    ]
+    LABOR = ["급여", "상여금", "잡급", "퇴직급여충당금"]
+    OH = ["부재료비", "전력비", "수도료", "감가상각비", "수선비", "소모품비", "복리후생비", "지급임차료", "지급수수료", "외주용역비", "외주가공비", "기타"]
+
+    def _month_list_loc(y: int, m: int):
+        d = wide[(wide["연도"] == y) & (wide["월"] == m)]
+        base = d.groupby("항목")[["포항", "충주", "충주2", "계"]].sum()
+        
+        def _row_sum(names):
+            if not names: return pd.Series([0,0,0,0], index=["포항", "충주", "충주2", "계"])
+            return base.reindex(names).fillna(0).sum()
+
+        labor = _row_sum(LABOR)
+        oh = _row_sum(OH)
+        
+        # 🔴 [수정] 제조경비(OH) 안에 부재료비가 편입되었으므로 material 변수를 별도로 더하지 않음
+        total = labor.add(oh, fill_value=0)
+
+        weight = d[d["항목"] == "원재투입중량"][["포항", "충주", "충주2", "계"]].sum()
+        if weight.empty: weight = pd.Series([np.nan]*4, index=["포항", "충주", "충주2", "계"])
+
+        unit = total * 1000.0 / weight.replace({0: np.nan})
+
+        rows = {}
+        for name in ORDER:
+            if name == "제조노무비": rows[name] = labor
+            elif name == "제조경비": rows[name] = oh
+            elif name == "총합": rows[name] = total
+            elif name == "원재투입중량": rows[name] = weight
+            elif name == "투입중량 원단위(천원)": rows[name] = unit
+            else: rows[name] = base.reindex([name]).fillna(0).sum()
+            
+        snap = pd.DataFrame(rows).T[["포항", "충주", "충주2", "계"]]
+        snap.index.name = "구분"
+        return snap
+
+    prev_y, prev_m = _month_shift(year, month, -1)
+    prev_snap = _month_list_loc(prev_y, prev_m)
+    curr_snap = _month_list_loc(year, month)
+
+    idx = prev_snap.index.union(curr_snap.index)
+    prev = prev_snap.reindex(idx).fillna(0.0)
+    curr = curr_snap.reindex(idx).fillna(0.0)
+    diff = curr - prev
+
+    disp = pd.concat([prev, curr, diff], axis=1).reset_index()
+    
+    # --- 화면 출력 노출용 재치환 및 정렬 ---
+    disp["구분"] = disp["구분"].astype(str).replace("급여", "급료와임금")
+    order_map = {name.replace("급여", "급료와임금"): i for i, name in enumerate(ORDER)}
+    disp["__ord__"] = disp["구분"].map(order_map).fillna(9999)
+    disp = disp.sort_values(by="__ord__").drop(columns="__ord__").reset_index(drop=True)
+
+    # 동적 단층 컬럼명 지정
+    yy_str = str(year)[-2:]
+    prev_m_label = f"'{str(prev_y)[-2:]}년 {prev_m}월"
+    curr_m_label = f"'{yy_str}년 {month}월"
+
+    disp.columns = [
+        '구분',
+        '포항/본사 ①', '충주 ②', '충주2 ③', f'{prev_m_label} ①+②+③',
+        '포항/본사 ④', '충주 ⑤', '충주2 ⑥', f'{curr_m_label} ④+⑤+⑥',
+        '포항/본사 ⑦', '충주 ⑧', '충주2 ⑨', '전월대비 ⑦+⑧+⑨'
+    ]
+    
+    return disp
+
+def _제조가공비_to_html(df) -> str:
+    cols = df.columns.tolist()
+    th_html = '<tr>' + ''.join(f'<th style="{_TH}; white-space: nowrap;">{c}</th>' for c in cols) + '</tr>'
+
+    # 🔴 [수정] 구분1(부모) 및 총계 라인들만 볼드 및 들여쓰기 0 적용
+    lv0_items = ['제조노무비', '제조경비', '총합', '원재투입중량', '투입중량 원단위(천원)']
+    
+    body_html = ''
+    for _, row in df.iterrows():
+        label = str(row['구분']).strip()
+        if not label: continue
+
+        body_html += '<tr>'
+        for c in cols:
+            val = row[c]
+            
+            if c == '구분':
+                if label in lv0_items:
+                    padding = 0
+                    font_weight = '700'
+                else:
+                    padding = 16
+                    font_weight = '400'
+                
+                text = f'<span style="padding-left:{padding}px; font-weight:{font_weight};">{label}</span>'
+                body_html += f'<td style="border: 1px solid #aaa; padding: 8px 16px; font-size: 15px; text-align: left; white-space: nowrap;">{text}</td>'
+            else:
+                if pd.isna(val) or str(val).strip() == "":
+                    text = ""
+                else:
+                    try:
+                        v = float(val)
+                        is_special = any(k in label for k in ['중량', '원단위'])
+                        if not is_special:
+                            v = v / 1000000.0
+
+                        if "잡급" in label:
+                            if v == 0: text = "0"
+                            elif v < 0: text = f'<span style="color:#d32f2f;">-{abs(v):,.1f}</span>'
+                            else: text = f"{v:,.1f}"
+                        else:
+                            v_round = int(round(v))
+                            if v_round < 0:
+                                text = f'<span style="color:#d32f2f;">-{abs(v_round):,}</span>'
+                            else:
+                                text = f"{v_round:,}"
+                    except:
+                        text = str(val)
+                        
+                body_html += f'<td style="{_TD_NUM}">{text}</td>'
+        body_html += '</tr>'
+
+    return _html_table(th_html, body_html)
+
+
+# ────────────────────────────────────────────────────────────────────────
+# 5) 판매비와 관리비 Builder & HTML Renderer
+# ────────────────────────────────────────────────────────────────────────
+
+def _build_판관비_table(year: int, month: int):
+    df_src = load_sheet(Sheets.판매비와관리비_DB)
+    
+    # --- 내부 연산 모듈 로직 통합 ---
+    df = df_src.copy()
+    df["연도"] = pd.to_numeric(df["연도"], errors="coerce")
+    df["월"] = pd.to_numeric(df["월"], errors="coerce")
+    df["값"] = pd.to_numeric(df["값"].astype(str).str.replace(",", ""), errors="coerce").fillna(0)
+
+    # 🔴 [수정] 엑셀 원본(image_ed112b.png)에 맞추어 구분2(급여 등)와 구분1(판매량)을 합쳐서 기준 생성
+    df["구분2"] = df["구분2"].fillna("").astype(str).str.strip()
+    df["구분1"] = df["구분1"].fillna("").astype(str).str.strip()
+    df["항목"] = df["구분2"].replace("", np.nan).fillna(df["구분1"])
+
+    # 일반(숫자 월)과 월평균 데이터 분리
+    df_num = df[df["월"].notna()].copy()
+    wide = df_num.groupby(["연도", "월", "항목"])["값"].sum().reset_index()
+    wide.rename(columns={"값": "계"}, inplace=True)
+
+    avg_rows = df[df["월"].astype(str).str.contains("평균", na=False)]
+    avg_explicit = avg_rows.groupby(["연도", "항목"])["값"].sum().reset_index()
+    avg_explicit.rename(columns={"값": "계"}, inplace=True)
+
+    SGNA_ORDER = ["급여", "상여금", "퇴직급여충당금", "인건비",
+                  "복리후생비", "지급임차료", "사용권자산 감가상각비", "접대비", "세금과공과",
+                  "대손상각비", "지급수수료", "A/S비", "경상연구비", "기타", "관리비",
+                  "판관-운반비", "판관-수출개별비", "판매비",
+                  "합계", "", "판매량", "인건비 및 관리비 원단위", "운반비 원단위"]
+
+    LABOR = ["급여", "상여금", "퇴직급여충당금"]
+    ADMIN = ["복리후생비", "지급임차료", "사용권자산 감가상각비", "접대비", "세금과공과", "대손상각비", "지급수수료", "A/S비", "경상연구비", "기타"]
+    SELL = ["판관-운반비", "판관-수출개별비"]
+
+    def _sgna_from_base(base, sales_override=None):
+        def _sum(keys): return float(base.reindex(keys).fillna(0).sum())
+        labor = _sum(LABOR)
+        admin = _sum(ADMIN)
+        sell = _sum(SELL)
+
+        # 판매량 탐색
+        idx = [str(x) for x in base.index]
+        sales_key = next((x for x in idx if "판매량" in x.replace(" ", "")), None)
+        sales_val = float(base.get(sales_key, 0.0)) if sales_key else 0.0
+
+        sales_qty = float(sales_override) if sales_override is not None and pd.notna(sales_override) and sales_override != 0 else sales_val
+
+        total = labor + admin + sell
+        unit_la = ((labor + admin) / sales_qty * 1000.0) if sales_qty else float("nan")
+        unit_f = (sell / sales_qty * 1000.0) if sales_qty else float("nan")
+
+        out = {k: float(base.get(k, 0.0)) for k in LABOR + ADMIN + SELL}
+        out["판매량"] = sales_val
+        out["인건비"] = labor
+        out["관리비"] = admin
+        out["판매비"] = sell
+        out["합계"] = total
+        out["인건비 및 관리비 원단위"] = unit_la
+        out["운반비 원단위"] = unit_f
+        return pd.Series(out).reindex(SGNA_ORDER)
+
+    def _sgna_list_loc(y, m):
+        d = wide[(wide["연도"] == y) & (wide["월"] == m)]
+        base = d.groupby("항목")["계"].sum()
+        return _sgna_from_base(base)
+
+    m2_y, m2_m = _month_shift(year, month, -2)
+    m1_y, m1_m = _month_shift(year, month, -1)
+
+    s_m2 = _sgna_list_loc(m2_y, m2_m)
+    s_m1 = _sgna_list_loc(m1_y, m1_m)
+    s_m0 = _sgna_list_loc(year, month)
+    diff = s_m0 - s_m1
+
+    data = {
+        "구분": SGNA_ORDER,
+        f"'{str(m2_y)[-2:]}년 {m2_m}월": s_m2.values,
+        f"'{str(m1_y)[-2:]}년 {m1_m}월": s_m1.values,
+        f"'{str(year)[-2:]}년 {month}월": s_m0.values,
+        "전월대비": diff.values,
+    }
+
+    avg_years = [year - 2, year - 1]
+    years_have_avg = set(avg_explicit["연도"].dropna().astype(int).tolist())
+
+    for y in reversed(avg_years):
+        if y in years_have_avg:
+            base = avg_explicit[avg_explicit["연도"] == y].set_index("항목")["계"].astype(float)
+            sales_key = next((x for x in base.index if "판매량" in str(x).replace(" ","")), None)
+            sales_avg = base.get(sales_key, np.nan) if sales_key else np.nan
+
+            if pd.isna(sales_avg) or sales_avg == 0:
+                wide_y = wide[wide["연도"] == int(y)]
+                sales_rows = wide_y[wide_y["항목"].astype(str).str.replace(" ","").str.contains("판매량", na=False)]
+                sales_avg = sales_rows.groupby("월")["계"].sum().mean() if not sales_rows.empty else np.nan
+
+            s_avg = _sgna_from_base(base, sales_avg)
+            col_values = s_avg.values
+        else:
+            col_values = np.full(len(SGNA_ORDER), np.nan)
+
+        data = {f"'{str(y)[-2:]}년 월평균": col_values, **data}
+
+    disp = pd.DataFrame(data)
+
+    # ── Lv class 들여쓰기를 위한 데이터 매핑 (판매비와 관리비는 정적 들여쓰기 로직으로 교체) ──
+    # 원본 파일에 Lv class 컬럼이 없을 경우를 대비하여 하드코딩 처리 추가
+    lv0_items = ['인건비', '관리비', '판매비', '합계', '판매량', '인건비 및 관리비 원단위', '운반비 원단위']
+    disp['_lv'] = disp['구분'].apply(lambda x: 0 if str(x).strip() in lv0_items else 1)
+
+    return disp
+
+def _판관비_to_html(df) -> str:
+    cols = [c for c in df.columns if c != '_lv']
+    th_html = '<tr>' + ''.join(f'<th style="{_TH}; white-space: nowrap;">{c}</th>' for c in cols) + '</tr>'
+
+    body_html = ''
+    for _, row in df.iterrows():
+        lv = row.get('_lv', 0)
+        label = str(row['구분'])
+        
+        body_html += '<tr>'
+        for c in cols:
+            val = row[c]
+            if c == '구분':
+                padding = lv * 16
+                text = f'<span style="padding-left:{padding}px">{label}</span>'
+                body_html += f'<td style="border: 1px solid #aaa; padding: 8px 16px; font-size: 15px; text-align: left; white-space: pre;">{text}</td>'
+            else:
+                if pd.isna(val) or str(val).strip() == "":
+                    text = ""
+                else:
+                    try:
+                        fv = float(val)
+                        is_avg = "월평균" in str(c)
+                        if c == "전월대비":
+                            iv = int(round(fv / 1_000_000))
+                            if iv < 0: text = f'<span style="color:red">-{abs(iv):,}</span>'
+                            elif iv > 0: text = f"{iv:,}"
+                            else: text = "0"
+                        else:
+                            # 월평균은 스케일링 제외 (시안 로직 유지)
+                            iv = int(round(fv if is_avg else fv / 1_000_000))
+                            if iv < 0: text = f'<span style="color:red">-{abs(iv):,}</span>'
+                            else: text = f"{iv:,}"
+                    except:
+                        text = str(val)
+                body_html += f'<td style="{_TD_NUM}">{text}</td>'
+        body_html += '</tr>'
+
+    return _html_table(th_html, body_html)
+
 
 # ── render_page ───────────────────────────────────────────────────────────
 
@@ -1055,30 +1386,41 @@ def render_page(app, year_state, month_state):
 
         app.If(lambda: True, _render_원재료)
 
-'''    
     with tabs[3]:
         def _render_제조가공비():
             year, month = int(year_state.value), int(month_state.value)
-            rows, col_headers = _build_제조가공비(year, month)
-            memo = _get_memo(Sheets.제조가공비_메모, year, month)
-            app.markdown(
-                _layout64("1) 전월비, 계획대비 제조비용 증감",
-                          _제조가공비_to_html(rows, col_headers),
-                          memo, unit='[단위: 백만원]'),
-                unsafe_allow_html=True,
-            )
+            
+            try:
+                df_mfg = _build_제조가공비_table(year, month)
+                html_mfg = _제조가공비_to_html(df_mfg)
+                memo_mfg = _get_memo(Sheets.제조가공비_메모, year, month)
+                
+                # 제조 가공비 요약은 100 layout 적용
+                app.markdown(
+                    _layout100("1) 제조 가공비 요약", html_mfg, memo=memo_mfg, unit="[단위: 톤, 백만원]"),
+                    unsafe_allow_html=True,
+                )
+            except Exception as e:
+                app.markdown(f"<p style='color:#d32f2f;'>제조 가공비 요약 생성 중 오류: {e}</p>", unsafe_allow_html=True)
+                
         app.If(lambda: True, _render_제조가공비)
 
     with tabs[4]:
         def _render_판관비():
             year, month = int(year_state.value), int(month_state.value)
-            rows, col_headers = _build_판관비(year, month)
-            memo = _get_memo(Sheets.판관비_메모, year, month)
-            app.markdown(
-                _layout64("1) 전월비, 계획대비 판관비 증감",
-                          _제조가공비_to_html(rows, col_headers),
-                          memo, unit='[단위: 백만원]'),
-                unsafe_allow_html=True,
-            )
+            
+            try:
+                df_sgna = _build_판관비_table(year, month)
+                html_sgna = _판관비_to_html(df_sgna)
+                memo_sgna = _get_memo(Sheets.판매비와관리비_메모, year, month)
+                
+                # 판매비와 관리비는 64 layout 적용
+                app.markdown(
+                    _layout64("1) 판매비와 관리비", html_sgna, memo=memo_sgna, unit="[단위: 톤, 백만원]"),
+                    unsafe_allow_html=True,
+                )
+            except Exception as e:
+                app.markdown(f"<p style='color:#d32f2f;'>판매비와 관리비 생성 중 오류: {e}</p>", unsafe_allow_html=True)
+                
         app.If(lambda: True, _render_판관비)
-        '''
+
