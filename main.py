@@ -15,7 +15,7 @@ from violit.context import layout_ctx
 
 from data.config import Sheets
 from data.loader import load_sheet, preload_all, refresh_all
-from views import p1_실적요약
+from views import p1_실적요약 ,p2_손익분석
 #from views import p2_손익분석, p3_매출분석, p4_생산분석
 #from views import p5_비용분석, p6_재고자산, p7_기타, p8_해외법인
 
@@ -52,7 +52,7 @@ def _run_refresh_bg():
         _REFRESH_LOCK.release()
 
 
-app = vl.App(title="선재사업본부 경영실적 대시보드",container_width="100%", db="./app.db")
+app = vl.App(title="선재사업부문 경영실적 대시보드",container_width="100%", db="./app.db")
 app.setup_auth(User, require_auth=False)
 
 
@@ -188,7 +188,8 @@ def _public(render_fn):
 
 app.navigation([
     vl.Page(login_page,                              title="Login"),
-    vl.Page(_protected(p1_실적요약.render_page),     title="1. 실적요약")
+    vl.Page(_protected(p1_실적요약.render_page),     title="1. 실적요약"),
+    vl.Page(_protected(p2_손익분석.render_page),     title="2. 손익분석"),
 ])
 
 '''
