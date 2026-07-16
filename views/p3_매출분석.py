@@ -68,7 +68,7 @@ _부산물판매_COL_HDRS = [
 # ── 공통 로더 ─────────────────────────────────────────────────────────────
 
 def _get_연도_목록():
-    df = load_sheet(Sheets.품목별매출_DB)
+    df = load_sheet(Sheets.계획대비매출실적_DB)
     return sorted(pd.to_numeric(df['연도'], errors='coerce').dropna().astype(int).unique().tolist())
 
 
@@ -80,151 +80,129 @@ def _get_memo(sheet_info, year, month):
     return str(row.iloc[0]['메모']) if not row.empty else ''
 
 
-# ── 1) 품목별 매출 ──────────────────────────────────────────────────────────
+# ── 1) 계획대비 매출실적 ──────────────────────────────────────────────────────────
 
-def _build_품목별매출(year, month):
-    df = load_sheet(Sheets.품목별매출_DB)
+def _build_계획대비_매출실적(year, month):
+    df = load_sheet(Sheets.계획대비매출실적_DB) 
     df = _drop_empty(df, '연도', '월')
     df['값'] = df['값'].apply(_parse)
 
-    vm = df.set_index(['구분1', '구분2', '구분3', '연도', '월'])['값'].to_dict()
+    vm = df.set_index(['구분1', '구분2', '계획/실적', '연도', '월'])['값'].to_dict()
     prev_yr, prev_mo = _prev(year, month, 1)
 
-    # DB에서 품목 목록 자동 감지 (소급 제외) → config 순서대로 정렬, 미등록 품목은 뒤에
-    db_품목 = [p for p in df[df['구분1'] == '매출액']['구분2'].unique()
-               if not str(p).endswith('소급')]
-    품목_list = _sort(db_품목, 품목별매출_품목_순서)
+    def raw(g1, g2, typ, yr, mo):
+        return vm.get((g1, g2, typ, yr, mo), 0.0)
 
-    # 판매량 데이터가 있는 품목만 단가/판매량 행 표시
-    단가_품목 = set(df[df['구분1'] == '판매량']['구분2'].unique())
+    def ann(g1, g2, typ, yr):
+        return sum(raw(g1, g2, typ, yr, m) for m in range(1, 13))
 
-    # 합계 판매량: 단가 있는 품목 중 톤 단위 제외 (만개 단위만)
-    합계_판매량_품목 = 단가_품목 - 품목별매출_톤_단위_품목
+    def ytd(g1, g2, typ, yr, mo):
+        return sum(raw(g1, g2, typ, yr, m) for m in range(1, mo + 1))
 
-    def g(품목, typ, yr, mo):
-        base = vm.get(('매출액', 품목, typ, yr, mo), 0.0)
-        soq  = vm.get(('매출액', f'{품목}소급', typ, yr, mo), 0.0)
-        return base + soq
-
-    def q(품목, typ, yr, mo):
-        return vm.get(('판매량', 품목, typ, yr, mo), 0.0)
-
-    def ann_g(품목):
-        return sum(g(품목, '계획', year, m) for m in range(1, 13))
-
-    def ann_q(품목):
-        return sum(q(품목, '계획', year, m) for m in range(1, 13))
-
-    def ytd_g(품목, typ):
-        return sum(g(품목, typ, year, m) for m in range(1, month + 1))
-
-    def ytd_q(품목, typ):
-        return sum(q(품목, typ, year, m) for m in range(1, month + 1))
+    # 이미지에 나타난 품목 목록
+    품목_list = ['CHQ', 'CD', 'STS', 'BTB', 'PB', '기타']
+    단가_품목 = ['CHQ', 'CD', 'STS', 'BTB', 'PB']  # 기타 제외
 
     def dp(금액, 판매량):
         return 금액 / 판매량 if 판매량 else 0.0
 
-    M = 1e6
+    M = 1_000_000 # 금액 백만원 단위 변환[cite: 1]
+    K = 1_000     # 중량 톤 단위 변환 (kg -> ton)
     rows = []
 
     for 품목 in 품목_list:
         rows.append(('section', 품목))
 
-        ag    = ann_g(품목)
-        pg    = g(품목, '실적', prev_yr, prev_mo)
-        plg   = g(품목, '계획', year, month)
-        cg    = g(품목, '실적', year, month)
-        ytdpg = ytd_g(품목, '계획')
-        ytdrg = ytd_g(품목, '실적')
+        # --- 금액 (원 -> 백만원) ---
+        ag = ann(품목, '금액', '계획', year)
+        pg = raw(품목, '금액', '실적', prev_yr, prev_mo)
+        plg = raw(품목, '금액', '계획', year, month)
+        cg = raw(품목, '금액', '실적', year, month)
+        ytdpg = ytd(품목, '금액', '계획', year, month)
+        ytdrg = ytd(품목, '금액', '실적', year, month)
 
         rows.append(('sub', '금액',
                      ag/M, pg/M, plg/M, cg/M,
                      (cg-plg)/M, (cg-pg)/M,
                      ytdpg/M, ytdrg/M, (ytdrg-ytdpg)/M))
 
+        # --- 중량(kg -> 톤) 및 단가(원/톤) ---
         if 품목 in 단가_품목:
-            is_톤 = 품목 in 품목별매출_톤_단위_품목
-            sc  = 1.0 if is_톤 else 1/1e4
-            dsc = 1000 if is_톤 else 1
+            # 중량을 톤 단위로 변환하기 위해 K(1000)로 나눔
+            aq = ann(품목, '중량', '계획', year) / K
+            pq = raw(품목, '중량', '실적', prev_yr, prev_mo) / K
+            plq = raw(품목, '중량', '계획', year, month) / K
+            cq = raw(품목, '중량', '실적', year, month) / K
+            ytdpq = ytd(품목, '중량', '계획', year, month) / K
+            ytdrq = ytd(품목, '중량', '실적', year, month) / K
 
-            aq    = ann_q(품목)
-            pq    = q(품목, '실적', prev_yr, prev_mo)
-            plq   = q(품목, '계획', year, month)
-            cq    = q(품목, '실적', year, month)
-            ytdpq = ytd_q(품목, '계획')
-            ytdrq = ytd_q(품목, '실적')
-
-            da    = dp(ag,    aq*dsc)
-            dpr   = dp(pg,    pq*dsc)
-            dpl   = dp(plg,   plq*dsc)
-            dc    = dp(cg,    cq*dsc)
-            dytdp = dp(ytdpg, ytdpq*dsc)
-            dytdr = dp(ytdrg, ytdrq*dsc)
-
+            # 단가 계산 (금액(원) / 중량(톤))
             rows.append(('sub', '단가',
-                         da, dpr, dpl, dc,
-                         dc - dpl, dc - dpr,
-                         dytdp, dytdr, dytdr - dytdp))
-            rows.append(('sub', '판매량(톤)' if is_톤 else '판매량',
-                         aq*sc, pq*sc, plq*sc, cq*sc,
-                         (cq-plq)*sc, (cq-pq)*sc,
-                         ytdpq*sc, ytdrq*sc, (ytdrq-ytdpq)*sc))
+                         dp(ag, aq)/ K, dp(pg, pq)/ K, dp(plg, plq)/ K, dp(cg, cq)/ K,
+                         (dp(cg, cq) - dp(plg, plq))/ K, (dp(cg, cq) - dp(pg, pq))/ K,
+                         dp(ytdpg, ytdpq)/ K, dp(ytdrg, ytdrq)/ K, (dp(ytdrg, ytdrq) - dp(ytdpg, ytdpq))/ K))
 
-    # 합계
+            rows.append(('sub', '중량(톤)',
+                         aq, pq, plq, cq,
+                         cq-plq, cq-pq,
+                         ytdpq, ytdrq, ytdrq-ytdpq))
+
+    # --- 합계 섹션 ---
     rows.append(('section', '합계'))
 
-    tag    = sum(ann_g(p) for p in 품목_list)
-    tpg    = sum(g(p, '실적', prev_yr, prev_mo) for p in 품목_list)
-    tplg   = sum(g(p, '계획', year, month) for p in 품목_list)
-    tcg    = sum(g(p, '실적', year, month) for p in 품목_list)
-    tytdpg = sum(ytd_g(p, '계획') for p in 품목_list)
-    tytdrg = sum(ytd_g(p, '실적') for p in 품목_list)
+    tag = sum(ann(p, '금액', '계획', year) for p in 품목_list)
+    tpg = sum(raw(p, '금액', '실적', prev_yr, prev_mo) for p in 품목_list)
+    tplg = sum(raw(p, '금액', '계획', year, month) for p in 품목_list)
+    tcg = sum(raw(p, '금액', '실적', year, month) for p in 품목_list)
+    tytdpg = sum(ytd(p, '금액', '계획', year, month) for p in 품목_list)
+    tytdrg = sum(ytd(p, '금액', '실적', year, month) for p in 품목_list)
 
-    taq    = sum(ann_q(p) for p in 합계_판매량_품목)
-    tpq    = sum(q(p, '실적', prev_yr, prev_mo) for p in 합계_판매량_품목)
-    tplq   = sum(q(p, '계획', year, month) for p in 합계_판매량_품목)
-    tcq    = sum(q(p, '실적', year, month) for p in 합계_판매량_품목)
-    tytdpq = sum(ytd_q(p, '계획') for p in 합계_판매량_품목)
-    tytdrq = sum(ytd_q(p, '실적') for p in 합계_판매량_품목)
+    # 합계 중량도 동일하게 K(1000)로 나누어 톤으로 변환
+    taq = sum(ann(p, '중량', '계획', year) for p in 단가_품목) / K
+    tpq = sum(raw(p, '중량', '실적', prev_yr, prev_mo) for p in 단가_품목) / K
+    tplq = sum(raw(p, '중량', '계획', year, month) for p in 단가_품목) / K
+    tcq = sum(raw(p, '중량', '실적', year, month) for p in 단가_품목) / K
+    tytdpq = sum(ytd(p, '중량', '계획', year, month) for p in 단가_품목) / K
+    tytdrq = sum(ytd(p, '중량', '실적', year, month) for p in 단가_품목) / K
 
     rows.append(('total', '금액',
                  tag/M, tpg/M, tplg/M, tcg/M,
                  (tcg-tplg)/M, (tcg-tpg)/M,
                  tytdpg/M, tytdrg/M, (tytdrg-tytdpg)/M))
 
-    tda    = dp(tag,    taq)
-    tdpr   = dp(tpg,    tpq)
-    tdpl   = dp(tplg,   tplq)
-    tdc    = dp(tcg,    tcq)
-    tdytdp = dp(tytdpg, tytdpq)
-    tdytdr = dp(tytdrg, tytdrq)
-
     rows.append(('total', '단가',
-                 tda, tdpr, tdpl, tdc,
-                 tdc - tdpl, tdc - tdpr,
-                 tdytdp, tdytdr, tdytdr - tdytdp))
-    rows.append(('total', '판매량',
-                 taq/1e4, tpq/1e4, tplq/1e4, tcq/1e4,
-                 (tcq-tplq)/1e4, (tcq-tpq)/1e4,
-                 tytdpq/1e4, tytdrq/1e4, (tytdrq-tytdpq)/1e4))
+                 dp(tag, taq)/K, dp(tpg, tpq)/K, dp(tplg, tplq)/K, dp(tcg, tcq)/K,
+                 (dp(tcg, tcq) - dp(tplg, tplq))/K, (dp(tcg, tcq) - dp(tpg, tpq))/K,
+                 dp(tytdpg, tytdpq)/K, dp(tytdrg, tytdrq)/K, (dp(tytdrg, tytdrq) - dp(tytdpg, tytdpq))/K))
 
+    rows.append(('total', '중량(톤)',
+                 taq, tpq, tplq, tcq,
+                 tcq-tplq, tcq-tpq,
+                 tytdpq, tytdrq, tytdrq-tytdpq))
+
+    # --- 구분행(헤더) 날짜 동적 생성 (예: '24.11월 실적, '24.12월 계획 등) ---
+    # 연도가 바뀔 경우 접두사를 포함하여 표기하도록 처리[cite: 1]
+    prev_pfx = f"'{str(prev_yr)[2:]}." if prev_yr != year else "'"
+    curr_pfx = f"'{str(year)[2:]}."
+    
     col_연간계획 = f"'{str(year)[2:]}년 계획"
-    prev_pfx     = f"'{str(prev_yr)[2:]}." if prev_yr != year else ""
-    col_전월실적 = f"{prev_pfx}{prev_mo}월 실적"
+    col_전월실적 = f"{prev_mo}월 실적"
     col_당월계획 = f"{month}월 계획"
     col_당월실적 = f"{month}월 실적"
 
     col_headers = ['구분', col_연간계획, col_전월실적, col_당월계획, col_당월실적,
                    '계획비', '전월비', '누계_계획', '누계_실적', '누계_계획비']
+    
     return rows, col_headers
 
 
-def _품목별매출_to_html(rows, col_headers):
-    n_cols  = len(col_headers)
-    th_html = f'<tr>{"".join(f"<th style=\"{_TH}\">{h}</th>" for h in col_headers)}</tr>'
+def _계획대비_매출실적_to_html(rows, col_headers):
+    n_cols = len(col_headers)
+    th_cells = "".join(f'<th style="{_TH}">{h}</th>' for h in col_headers)
+    th_html = f'<tr>{th_cells}</tr>'
 
     body_html = ''
-    sub_idx   = 0
+    sub_idx = 0
 
     for row in rows:
         if row[0] == 'section':
@@ -232,7 +210,7 @@ def _품목별매출_to_html(rows, col_headers):
             body_html += f'<tr><td colspan="{n_cols}" style="{ROW_SEC}">{row[1]}</td></tr>'
         elif row[0] == 'sub':
             _, label, *vals = row
-            bg = ';background:#f9f9fb' if sub_idx % 2 == 1 else ''
+            bg = ';background:#f9f9fb' if sub_idx % 2 == 1 else ';background:white'
             sub_idx += 1
             cells = f'<td style="{ROW_ITEM + bg}">{label}</td>'
             for v in vals:
@@ -250,792 +228,123 @@ def _품목별매출_to_html(rows, col_headers):
 
 # ── 판매구성 - 1) 제품별 판매현황 ─────────────────────────────────────────
 
-def _build_판매구성_제품별(year, month):
-    df = load_sheet(Sheets.판매구성_DB)
+def _build_판매현황_등급별(year, month):
+    df = load_sheet(Sheets.등급별판매구성_DB)
     df = _drop_empty(df, '연도', '월')
     df['값'] = df['값'].apply(_parse)
+    
+    # [강력한 데이터 클렌징] '년' 글자와 모든 공백 제거
+    df['연도'] = df['연도'].astype(str).str.replace('년', '', regex=False).str.replace(' ', '', regex=False)
+    df['연도'] = pd.to_numeric(df['연도'], errors='coerce').fillna(0).astype(int)
+    
+    # [강력한 데이터 클렌징] .0 제거 및 '월 평균' 등의 공백 제거
+    df['월'] = df['월'].astype(str).str.replace('.0', '', regex=False).str.replace(' ', '', regex=False)
+    
+    df['구분1'] = df['구분1'].fillna('').astype(str).str.strip()
+    df['구분2'] = df['구분2'].fillna('').astype(str).str.strip()
 
-    pdf = df[(df['구분1'] == '제품') & (df['구분2'] == '판매량') &
-             (df['구분3'].isin(['열전', '열후']))]
-    vm = pdf.set_index(['구분3', '연도', '월'])['값'].to_dict()
+    vm = df.set_index(['구분1', '구분2', '연도', '월'])['값'].to_dict()
 
-    def raw(품목, yr, mo):
-        return vm.get((품목, yr, mo), 0.0)
+    def raw(g1, g2, yr, mo):
+        return vm.get((g1, g2, yr, str(mo)), 0.0)
 
-    def yr_avg(품목, yr):
-        vals = [raw(품목, yr, m) for m in range(1, 13) if raw(품목, yr, m) > 0]
+    def yr_avg(g1, g2, yr):
+        val_avg = raw(g1, g2, yr, '월평균')
+        if val_avg != 0.0:
+            return val_avg
+        vals = [v for m in range(1, 13) if (v := raw(g1, g2, yr, m)) != 0]
         return sum(vals) / len(vals) if vals else 0.0
 
-    연도_in_db = sorted(pdf['연도'].unique().tolist())
-    recent = _recent_months(year, month)
-    col_hdrs = _build_col_hdrs(연도_in_db, recent)
+    yr_1, yr_curr = year - 1, year
+    recent_6 = _recent_months(year, month, n=6) 
 
-    data = {}
-    for 품목 in ['열전', '열후']:
-        vals = [yr_avg(품목, yr) / 1e4 for yr in 연도_in_db]
-        vals += [raw(품목, yr_c, mo_c) / 1e4 for yr_c, mo_c in recent]
-        data[품목] = vals
+    col_hdrs = [f"'{str(yr_1)[2:]}년 월평균", f"'{str(yr_curr)[2:]}년 월평균"]
+    
+    last_yr = None
+    for yr_c, mo_c in recent_6:
+        col_hdrs.append(f"'{str(yr_c)[2:]}.{mo_c}월" if yr_c != last_yr else f"{mo_c}월")
+        last_yr = yr_c
 
-    n = len(연도_in_db) + len(recent)
-    계_vals  = [data['열전'][i] + data['열후'][i] for i in range(n)]
-    비중_vals = [
-        data['열후'][i] / 계_vals[i] * 100 if 계_vals[i] else 0.0
-        for i in range(n)
+    categories = [
+        ('정상입고품', '산업재 혹은 중국재', '정상입고품(산업재/중국재)'),
+        ('정상입고품', '정상', '정상입고품(정상)'),
+        ('B급', '', 'B급')
     ]
 
-    rows = [
-        ('sub',   '열전',    data['열전']),
-        ('sub',   '열후',    data['열후']),
-        ('total', '계',      계_vals),
-        ('pct',   '열후비중', 비중_vals),
-    ]
-    return rows, col_hdrs, data, 계_vals, 비중_vals
+    rows = []
+    for g1, g2, label in categories:
+        vals = [yr_avg(g1, g2, yr_1), yr_avg(g1, g2, yr_curr)]
+        for yr_c, mo_c in recent_6:
+            vals.append(raw(g1, g2, yr_c, mo_c))
+        rows.append(('sub', label, vals))
 
+    계_vals = [sum(r[2][i] for r in rows) for i in range(len(col_hdrs))]
+    rows.append(('total', '합계', 계_vals))
 
-def _판매구성_제품별_to_html(rows, col_hdrs):
+    return rows, col_hdrs
+def _판매현황_등급별_to_html(rows, col_hdrs):
+    # 테이블 헤더 (<th>) 구성
     th = ''.join(f'<th style="{_TH}">{h}</th>' for h in ['구분'] + col_hdrs)
+    
     body = ''
     sub_idx = 0
+    
+    # 테이블 본문 (<td>) 구성[cite: 1]
     for kind, label, vals in rows:
         if kind == 'sub':
-            bg = ';background:#f9f9fb' if sub_idx % 2 else ''
+            bg = ';background:#f9f9fb' if sub_idx % 2 else ';background:white'
             sub_idx += 1
             cells = f'<td style="{ROW_ITEM + bg}">{label}</td>'
             cells += ''.join(f'<td style="{_TD_NUM + bg}">{_fmt(v)}</td>' for v in vals)
         elif kind == 'total':
             cells = f'<td style="{ROW_HDR_LBL}">{label}</td>'
             cells += ''.join(f'<td style="{ROW_HDR_NUM}">{_fmt(v)}</td>' for v in vals)
-        elif kind == 'pct':
-            cells = f'<td style="{ROW_ITEM}">{label}</td>'
-            cells += ''.join(
-                f'<td style="{_TD_NUM}">{_fmt(v, is_pct=True, decimal=1)}%</td>'
-                for v in vals
-            )
+            
         body += f'<tr>{cells}</tr>'
+        
     return _html_table(f'<tr>{th}</tr>', body)
 
-
-def _build_제품별판매_chart(x_labels, data, 계_vals, 비중_vals):
+def _build_판매현황_등급별_chart(x_labels, rows):
     fig = go.Figure()
 
-    fig.add_trace(go.Bar(
-        name='열전', x=x_labels, y=data['열전'],
-        marker_color=C_NAVY,
-        marker_line_width=0,
-        text=[str(round(v)) for v in data['열전']],
-        textposition='inside',
-        textfont=dict(color='white', size=13),
-    ))
-    fig.add_trace(go.Bar(
-        name='열후', x=x_labels, y=data['열후'],
-        marker_color=C_CHART_SEC,
-        marker_line_width=0,
-        text=[str(round(v)) for v in data['열후']],
-        textposition='inside',
-        textfont=dict(color='white', size=13),
-    ))
-    fig.add_trace(go.Scatter(
-        name='열후비중',
-        x=x_labels, y=비중_vals,
-        mode='lines+markers+text',
-        line=dict(color=C_ORANGE, width=2),
-        marker=dict(color='white', size=7,
-                    line=dict(color=C_ORANGE, width=2)),
-        text=[f"{v:.1f}%" for v in 비중_vals],
-        textposition='top center',
-        textfont=dict(size=12, color=C_ORANGE),
-        yaxis='y2',
-    ))
+    # 1) 기본 색상 활용: 짙은회색(NAVY), 회색(SEC), 주황색(ORANGE)
+    colors = [C_NAVY, C_CHART_SEC, C_ORANGE]
+    color_idx = 0
+    
+    totals = [0] * len(x_labels)
 
-    max_계   = max(계_vals)   if 계_vals   else 50
-    min_비중 = min(비중_vals) if 비중_vals else 0
-    max_비중 = max(비중_vals) if 비중_vals else 50
-
-    # 바: 하단 40%, 라인: 50~90% 구간 (40% 차지)
-    #   좌축 max = max_계 × 2.5  →  바 상단 = 40% 높이
-    #   라인 min → 50% 높이, max → 90% 높이
-    data_range = max(max_비중 - min_비중, 5)
-    y2_total   = data_range / 0.40   # 데이터가 차트의 40% 차지
-    ymin2      = min_비중 - 0.50 * y2_total   # min이 50% 높이
-    ymax2      = ymin2 + y2_total
-
-    # 우축 눈금: 데이터 범위만 표시
-    step = max(2, int(data_range / 4))
-    t_min = (int(min_비중) // step) * step
-    t_max = (int(max_비중) // step + 2) * step
-    tick_vals = [v for v in range(t_min, t_max + 1, step) if v >= 0]
-
-    fig.update_layout(
-        barmode='stack',
-        height=380,
-        margin=dict(l=10, r=45, t=15, b=60),
-        legend=dict(
-            orientation='h', y=-0.28, x=0.5, xanchor='center',
-            font=dict(size=12),
-            bgcolor='rgba(0,0,0,0)',
-        ),
-        xaxis=dict(
-            tickfont=dict(size=11, color='#4a5568'),
-            showgrid=False,
-            linecolor='#e2e8f0',
-            linewidth=1,
-            showline=True,
-        ),
-        yaxis=dict(
-            showgrid=True,
-            gridcolor=C_CHART_GRID,
-            gridwidth=1,
-            range=[0, max_계 * 2.5],
-            tickfont=dict(size=11, color='#4a5568'),
-            showline=False,
-            zeroline=False,
-        ),
-        yaxis2=dict(
-            overlaying='y', side='right',
-            range=[ymin2, ymax2],
-            tickvals=tick_vals,
-            ticktext=[f"{v}%" for v in tick_vals],
-            showgrid=False,
-            tickfont=dict(size=11, color=C_ORANGE),
-            showline=False,
-            zeroline=False,
-        ),
-        plot_bgcolor='white',
-        paper_bgcolor='white',
-        font=dict(size=12, family='sans-serif'),
-    )
-    return fig
-
-
-# ── 판매구성 - 2) 부산물 매출 판매 현황 ────────────────────────────────────
-
-def _build_부산물매출(year, month):
-    df = load_sheet(Sheets.부산물매출_DB)
-    df = _drop_empty(df, '연도', '월')
-    df['값'] = df['값'].apply(_parse)
-
-    vm = df.set_index(['구분1', '연도', '월'])['값'].to_dict()
-
-    def raw(구분, yr, mo):
-        return vm.get((구분, yr, mo), 0.0)
-
-    연도_in_db = sorted(df['연도'].unique().tolist())
-    recent = _recent_months(year, month)
-    col_hdrs = _build_col_hdrs(연도_in_db, recent)
-
-    중량_vals, 금액_vals, 단가_vals = [], [], []
-
-    for yr in 연도_in_db:
-        ws = [v for m in range(1, 13) if (v := raw('중량', yr, m)) > 0]
-        gs = [v for m in range(1, 13) if (v := raw('금액', yr, m)) > 0]
-        total_w, total_g = sum(ws), sum(gs)
-        중량_vals.append(sum(ws) / len(ws) if ws else 0.0)
-        금액_vals.append(sum(gs) / len(gs) if gs else 0.0)
-        단가_vals.append(total_g * 1000 / total_w if total_w else 0.0)
-
-    for yr_c, mo_c in recent:
-        w = raw('중량', yr_c, mo_c)
-        g = raw('금액', yr_c, mo_c)
-        중량_vals.append(w)
-        금액_vals.append(g)
-        단가_vals.append(g * 1000 / w if w else 0.0)
-
-    rows = [
-        ('sub', '중량',     중량_vals),
-        ('sub', '금액',     금액_vals),
-        ('sub', '단가(원)', 단가_vals),
-    ]
-    return rows, col_hdrs, 중량_vals, 단가_vals
-
-
-def _부산물매출_to_html(rows, col_hdrs):
-    th = ''.join(f'<th style="{_TH}">{h}</th>' for h in ['구분'] + col_hdrs)
-    body = ''
-    sub_idx = 0
-    for _, label, vals in rows:
-        bg = ';background:#f9f9fb' if sub_idx % 2 else ''
-        sub_idx += 1
-        cells = f'<td style="{ROW_ITEM + bg}">{label}</td>'
-        cells += ''.join(f'<td style="{_TD_NUM + bg}">{_fmt(v)}</td>' for v in vals)
-        body += f'<tr>{cells}</tr>'
-    return _html_table(f'<tr>{th}</tr>', body)
-
-
-def _build_부산물매출_chart(x_labels, 중량_vals, 단가_vals):
-    fig = go.Figure()
-    fig.add_trace(go.Bar(
-        name='중량(톤)',
-        x=x_labels, y=중량_vals,
-        marker_color=C_NAVY,
-        marker_line_width=0,
-        text=[str(round(v)) for v in 중량_vals],
-        textposition='inside',
-        textfont=dict(color='white', size=13),
-    ))
-    fig.add_trace(go.Scatter(
-        name='단가(원)',
-        x=x_labels, y=단가_vals,
-        mode='lines+markers+text',
-        line=dict(color=C_ORANGE, width=2),
-        marker=dict(color='white', size=7, line=dict(color=C_ORANGE, width=2)),
-        text=[str(round(v)) for v in 단가_vals],
-        textposition='top center',
-        textfont=dict(size=12, color=C_ORANGE),
-        yaxis='y2',
-    ))
-
-    max_중량 = max(중량_vals) if 중량_vals else 300
-    min_단가 = min(단가_vals) if 단가_vals else 0
-    max_단가 = max(단가_vals) if 단가_vals else 400
-
-    data_range = max(max_단가 - min_단가, 20)
-    y2_total = data_range / 0.40
-    ymin2    = min_단가 - 0.50 * y2_total
-    ymax2    = ymin2 + y2_total
-
-    step = max(20, int(data_range / 4))
-    t_min = (int(min_단가) // step) * step
-    t_max = (int(max_단가) // step + 2) * step
-    tick_vals = [v for v in range(t_min, t_max + 1, step) if v >= 0]
-
-    fig.update_layout(
-        height=380,
-        margin=dict(l=10, r=50, t=15, b=60),
-        legend=dict(
-            orientation='h', y=-0.28, x=0.5, xanchor='center',
-            font=dict(size=12), bgcolor='rgba(0,0,0,0)',
-        ),
-        xaxis=dict(
-            tickfont=dict(size=11, color='#4a5568'),
-            showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
-        ),
-        yaxis=dict(
-            showgrid=True, gridcolor=C_CHART_GRID, gridwidth=1,
-            range=[0, max_중량 * 2.5],
-            tickfont=dict(size=11, color='#4a5568'),
-            showline=False, zeroline=False,
-        ),
-        yaxis2=dict(
-            overlaying='y', side='right',
-            range=[ymin2, ymax2],
-            tickvals=tick_vals,
-            ticktext=[str(v) for v in tick_vals],
-            showgrid=False,
-            tickfont=dict(size=11, color=C_ORANGE),
-            showline=False, zeroline=False,
-        ),
-        plot_bgcolor='white', paper_bgcolor='white',
-        font=dict(size=12, family='sans-serif'),
-    )
-    return fig
-
-
-# ── 판매구성 - 3) 총 투입량 대비 부산물 중량 변동 추이 ────────────────────
-
-def _build_부산물증량(year, month):
-    df = load_sheet(Sheets.부산물증량_DB)
-    df = _drop_empty(df, '연도', '월')
-    df['실적'] = df['실적'].apply(_parse)
-
-    vm = df.set_index(['구분1', '구분2', '연도', '월'])['실적'].to_dict()
-
-    def raw(g1, g2, yr, mo):
-        return vm.get((g1, g2, yr, mo), 0.0)
-
-    def 환산중량(yr, mo):
-        b = raw('원자재 출고', '랙바',      yr, mo)
-        s = raw('원자재 출고', '랙바(사급)', yr, mo)
-        p = raw('원자재 출고', '피니언',    yr, mo)
-        return b + (s * 3.3 * 10) + (p * 0.276 * 10)
-
-    def yr_avg(g1, g2, yr):
-        vals = [v for m in range(1, 13) if (v := raw(g1, g2, yr, m)) > 0]
-        return sum(vals) / len(vals) if vals else 0.0
-
-    def yr_avg_환산(yr):
-        vals = [v for m in range(1, 13) if (v := 환산중량(yr, m)) > 0]
-        return sum(vals) / len(vals) if vals else 0.0
-
-    연도_in_db = sorted(df['연도'].unique().tolist())
-    recent = _recent_months(year, month)
-    col_hdrs = _build_col_hdrs(연도_in_db, recent)
-
-    rows = []
-
-    # 원자재 출고 섹션
-    rows.append(('sec', '원자재 출고'))
-    for g2, dec in [('랙바', 0), ('랙바(사급)', 1), ('피니언', 1)]:
-        vals = [yr_avg('원자재 출고', g2, yr) for yr in 연도_in_db]
-        vals += [raw('원자재 출고', g2, yr_c, mo_c) for yr_c, mo_c in recent]
-        rows.append(('item', g2, vals, dec))
-
-    # 환산중량 합계행
-    환산_vals = [yr_avg_환산(yr) for yr in 연도_in_db]
-    환산_vals += [환산중량(yr_c, mo_c) for yr_c, mo_c in recent]
-    rows.append(('total', '환산중량', 환산_vals, 0))
-
-    # 부산물 섹션
-    rows.append(('sec', '부산물'))
-    판매량_vals = [yr_avg('부산물', '판매량', yr) for yr in 연도_in_db]
-    판매량_vals += [raw('부산물', '판매량', yr_c, mo_c) for yr_c, mo_c in recent]
-    rows.append(('item', '판매량', 판매량_vals, 0))
-
-    출고대비_vals = [
-        판매량_vals[i] / 환산_vals[i] * 100 if 환산_vals[i] else 0.0
-        for i in range(len(판매량_vals))
-    ]
-    rows.append(('pct', '(출고대비)', 출고대비_vals))
-
-    매출액_vals = [yr_avg('부산물', '매출액', yr) for yr in 연도_in_db]
-    매출액_vals += [raw('부산물', '매출액', yr_c, mo_c) for yr_c, mo_c in recent]
-    rows.append(('item', '매출액', 매출액_vals, 0))
-
-    return rows, col_hdrs, 환산_vals, 판매량_vals, 매출액_vals
-
-
-def _부산물증량_to_html(rows, col_hdrs):
-    n = len(col_hdrs) + 1
-    th = ''.join(f'<th style="{_TH}">{h}</th>' for h in ['구분'] + col_hdrs)
-    body = ''
-    sub_idx = 0
-    for row in rows:
-        kind = row[0]
-        if kind == 'sec':
-            sub_idx = 0
-            body += f'<tr><td colspan="{n}" style="{ROW_SEC}">{row[1]}</td></tr>'
-        elif kind == 'item':
-            _, label, vals, dec = row
-            bg = ';background:#f9f9fb' if sub_idx % 2 else ''
-            sub_idx += 1
-            cells = f'<td style="{ROW_ITEM + bg}">{label}</td>'
-            cells += ''.join(
-                f'<td style="{_TD_NUM + bg}">{_fmt(v, decimal=dec)}</td>' for v in vals
-            )
-            body += f'<tr>{cells}</tr>'
-        elif kind == 'total':
-            _, label, vals, dec = row
-            cells = f'<td style="{ROW_HDR_LBL}">{label}</td>'
-            cells += ''.join(
-                f'<td style="{ROW_HDR_NUM}">{_fmt(v, decimal=dec)}</td>' for v in vals
-            )
-            body += f'<tr>{cells}</tr>'
-        elif kind == 'pct':
-            _, label, vals = row
-            bg = ';background:#f9f9fb' if sub_idx % 2 else ''
-            sub_idx += 1
-            cells = f'<td style="{ROW_ITEM + bg}">{label}</td>'
-            cells += ''.join(
-                f'<td style="{_TD_NUM + bg}">{_fmt(v, is_pct=True, decimal=1)}%</td>'
-                for v in vals
-            )
-            body += f'<tr>{cells}</tr>'
-    return _html_table(f'<tr>{th}</tr>', body)
-
-
-def _build_부산물증량_chart(x_labels, 환산_vals, 판매량_vals, 매출액_vals):
-    fig = go.Figure()
-    fig.add_trace(go.Bar(
-        name='원자재 출고(환산중량)',
-        x=x_labels, y=환산_vals,
-        marker_color=C_NAVY, marker_line_width=0,
-        text=[str(round(v)) for v in 환산_vals],
-        textposition='inside',
-        textfont=dict(color='white', size=13),
-    ))
-    fig.add_trace(go.Scatter(
-        name='부산물 판매량',
-        x=x_labels, y=판매량_vals,
-        mode='lines+markers+text',
-        line=dict(color=C_ORANGE, width=2),
-        marker=dict(color='white', size=7, line=dict(color=C_ORANGE, width=2)),
-        text=[str(round(v)) for v in 판매량_vals],
-        textposition='top center',
-        textfont=dict(size=12, color=C_ORANGE),
-        yaxis='y2',
-    ))
-    fig.add_trace(go.Scatter(
-        name='부산물 매출액',
-        x=x_labels, y=매출액_vals,
-        mode='lines+markers+text',
-        line=dict(color=C_CHART_SEC, width=2),
-        marker=dict(color='white', size=7, line=dict(color=C_CHART_SEC, width=2)),
-        text=[str(round(v)) for v in 매출액_vals],
-        textposition='top center',
-        textfont=dict(size=12, color=C_CHART_SEC),
-        yaxis='y2',
-    ))
-
-    max_환산 = max(환산_vals) if 환산_vals else 1500
-
-    # y2: 두 라인 모두 포함하는 범위로 바 위에 띄우기
-    # (바: 하단 40%, 라인 전체: 50~90%)
-    all_line = [v for v in 판매량_vals + 매출액_vals if v > 0]
-    min_line  = min(all_line) if all_line else 0
-    max_line  = max(all_line) if all_line else 300
-    dr        = max(max_line - min_line, 20)
-    y2_total  = dr / 0.40
-    ymin2     = min_line - 0.50 * y2_total
-    ymax2     = ymin2 + y2_total
-
-    fig.update_layout(
-        height=380,
-        margin=dict(l=10, r=20, t=15, b=60),
-        legend=dict(
-            orientation='h', y=-0.28, x=0.5, xanchor='center',
-            font=dict(size=12), bgcolor='rgba(0,0,0,0)',
-        ),
-        xaxis=dict(
-            tickfont=dict(size=11, color='#4a5568'),
-            showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
-        ),
-        yaxis=dict(
-            showgrid=True, gridcolor=C_CHART_GRID, gridwidth=1,
-            range=[0, max_환산 * 2.5],
-            showticklabels=False,
-            showline=False, zeroline=False,
-        ),
-        yaxis2=dict(
-            overlaying='y', side='right',
-            range=[ymin2, ymax2],
-            showticklabels=False,
-            showgrid=False, showline=False, zeroline=False,
-        ),
-        plot_bgcolor='white', paper_bgcolor='white',
-        font=dict(size=12, family='sans-serif'),
-    )
-    return fig
-
-
-# ── 판매구성 - 4) 전월대비 부산물 판매 차이 ────────────────────────────────────
-
-def _build_부산물판매(year, month):
-    df = load_sheet(Sheets.부산물판매_DB)
-    df = _drop_empty(df, '연도', '월')
-    df['값'] = df['값'].apply(_parse)
-
-    vm = df.set_index(['구분1', '구분2', '연도', '월'])['값'].to_dict()
-    prev_yr, prev_mo = _prev(year, month, 1)
-
-    def raw(g1, g2, yr, mo):
-        return vm.get((g1, g2, yr, mo), 0.0)
-
-    def 단가(g1, yr, mo):
-        w = raw(g1, '중량', yr, mo)
-        return raw(g1, '금액', yr, mo) / w * 1000 if w else 0.0
-
-    def 평균단가(yr, mo):
-        w = raw('합금', '중량', yr, mo) + raw('분철', '중량', yr, mo)
-        g = raw('합금', '금액', yr, mo) + raw('분철', '금액', yr, mo)
-        return g / w * 1000 if w else 0.0
-
-    def row_vals(g1):
-        pw = raw(g1, '중량', prev_yr, prev_mo)
-        pg = raw(g1, '금액', prev_yr, prev_mo)
-        pd_ = 단가(g1, prev_yr, prev_mo)
-        cw = raw(g1, '중량', year, month)
-        cg = raw(g1, '금액', year, month)
-        cd = 단가(g1, year, month)
-        return [pw, pd_, pg, cw, cd, cg, cw - pw, cd - pd_, cg - pg]
-
-    합금_v = row_vals('합금')
-    분철_v = row_vals('분철')
-    pw_tot = 합금_v[0] + 분철_v[0]
-    pg_tot = 합금_v[2] + 분철_v[2]
-    cw_tot = 합금_v[3] + 분철_v[3]
-    cg_tot = 합금_v[5] + 분철_v[5]
-    pd_tot = 평균단가(prev_yr, prev_mo)
-    cd_tot = 평균단가(year, month)
-    합계_v = [pw_tot, pd_tot, pg_tot, cw_tot, cd_tot, cg_tot,
-              cw_tot - pw_tot, cd_tot - pd_tot, cg_tot - pg_tot]
-
-    rows = [
-        ('item', '합금', 합금_v),
-        ('item', '분철', 분철_v),
-        ('total', '합계', 합계_v),
-    ]
-
-    # 차트: 연도별 평균 + 최근 5개월 단가 추이
-    연도_in_db = sorted(df['연도'].unique().tolist())
-    recent = _recent_months(year, month)
-
-    def yr_단가(g1, yr):
-        w = sum(raw(g1, '중량', yr, m) for m in range(1, 13))
-        g = sum(raw(g1, '금액', yr, m) for m in range(1, 13))
-        return g / w * 1000 if w else 0.0
-
-    def yr_평균단가(yr):
-        w = sum(raw('합금', '중량', yr, m) + raw('분철', '중량', yr, m) for m in range(1, 13))
-        g = sum(raw('합금', '금액', yr, m) + raw('분철', '금액', yr, m) for m in range(1, 13))
-        return g / w * 1000 if w else 0.0
-
-    x_hdrs = _build_col_hdrs(연도_in_db, recent)
-    합금_t = [yr_단가('합금', yr) for yr in 연도_in_db] + [단가('합금', y, m) for y, m in recent]
-    분철_t = [yr_단가('분철', yr) for yr in 연도_in_db] + [단가('분철', y, m) for y, m in recent]
-    평균_t = [yr_평균단가(yr) for yr in 연도_in_db] + [평균단가(y, m) for y, m in recent]
-
-    return rows, x_hdrs, 합금_t, 분철_t, 평균_t
-
-
-def _부산물판매_to_html(rows):
-    th = ''.join(f'<th style="{_TH}">{h}</th>' for h in ['구분'] + _부산물판매_COL_HDRS)
-    body = ''
     for kind, label, vals in rows:
-        if kind == 'item':
-            cells = f'<td style="{ROW_ITEM}">{label}</td>'
-            for v in vals:
-                s = _TD_RED if v < 0 else _TD_NUM
-                cells += f'<td style="{s}">{_fmt(v)}</td>'
-        else:
-            cells = f'<td style="{ROW_HDR_LBL}">{label}</td>'
-            for v in vals:
-                s = ROW_HDR_RED if v < 0 else ROW_HDR_NUM
-                cells += f'<td style="{s}">{_fmt(v)}</td>'
-        body += f'<tr>{cells}</tr>'
-    return _html_table(f'<tr>{th}</tr>', body)
+        if kind == 'sub':
+            fig.add_trace(go.Bar(
+                name=label,
+                x=x_labels,
+                y=vals,
+                marker_color=colors[color_idx % len(colors)],
+                marker_line_width=0,
+                text=[f"{int(v):,}" if v > 0 else '' for v in vals],
+                textposition='inside',
+                insidetextanchor='middle',
+                textfont=dict(color='white', size=11),
+            ))
+            color_idx += 1
+            
+            # 합계 계산
+            for i, v in enumerate(vals):
+                totals[i] += v
 
-
-def _build_부산물판매_chart(x_labels, 합금단가, 분철단가, 평균단가):
-    fig = go.Figure()
-    traces = [
-        ('합금단가', 합금단가, C_NAVY,      'top center'),
-        ('분철단가', 분철단가, C_CHART_SEC,  'bottom center'),
-        ('평균단가', 평균단가, C_RED,        'top center'),
-    ]
-    for name, vals, color, pos in traces:
-        fig.add_trace(go.Scatter(
-            name=name, x=x_labels, y=vals,
-            mode='lines+markers+text',
-            line=dict(color=color, width=2),
-            marker=dict(color='white', size=7, line=dict(color=color, width=2)),
-            text=[str(round(v)) if v else '' for v in vals],
-            textposition=pos,
-            textfont=dict(size=12, color=color),
-        ))
-
-    all_v = [v for v in 합금단가 + 분철단가 + 평균단가 if v > 0]
-    min_v = min(all_v) if all_v else 0
-    max_v = max(all_v) if all_v else 500
-    pad   = (max_v - min_v) * 0.35
-
-    fig.update_layout(
-        height=320,
-        margin=dict(l=10, r=20, t=15, b=60),
-        legend=dict(
-            orientation='h', y=-0.28, x=0.5, xanchor='center',
-            font=dict(size=12), bgcolor='rgba(0,0,0,0)',
-        ),
-        xaxis=dict(
-            tickfont=dict(size=11, color='#4a5568'),
-            showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
-        ),
-        yaxis=dict(
-            showgrid=True, gridcolor=C_CHART_GRID, gridwidth=1,
-            range=[min_v - pad, max_v + pad],
-            showticklabels=False,
-            showline=False, zeroline=False,
-        ),
-        plot_bgcolor='white', paper_bgcolor='white',
-        font=dict(size=12, family='sans-serif'),
-    )
-    return fig
-
-
-# ── 판매구성 - 5) 만도 사급 매출 현황 ─────────────────────────────────────────
-
-def _build_만도사급(year, month):
-    df = load_sheet(Sheets.판매구성_DB)
-    df = _drop_empty(df, '연도', '월')
-    df['값'] = df['값'].apply(_parse)
-    df_s = df[df['구분1'] == '사급'].copy()
-    vm = df_s.set_index(['구분2', '구분3', '연도', '월'])['값'].to_dict()
-
-    def raw(g2, g3, yr, mo):
-        return vm.get((g2, g3, yr, mo), 0.0)
-
-    def 금액_원(prod, yr, mo):
-        if prod == '피니언':
-            return raw('매출액', '피니언-선삭', yr, mo) + raw('매출액', '피니언-열처리', yr, mo)
-        return raw('매출액', prod, yr, mo)
-
-    def 판매량_개(prod, yr, mo):
-        if prod == '피니언':
-            return raw('판매량', '피니언-선삭', yr, mo) + raw('판매량', '피니언-열처리', yr, mo)
-        return raw('판매량', prod, yr, mo)
-
-    def 단가(prod, yr, mo):
-        q = 판매량_개(prod, yr, mo)
-        return 금액_원(prod, yr, mo) / q if q else 0.0
-
-    products = ['열전', '열후', '피니언']
-
-    연도_in_db = sorted(df['연도'].unique().tolist())
-    recent = _recent_months(year, month)
-    col_hdrs = _build_col_hdrs(연도_in_db, recent, annual_suffix='.평균')
-
-    rows = []
-    금액_by_prod = {}
-
-    for prod in products:
-        rows.append(('sec', prod, []))
-        g_vals, d_vals, q_vals = [], [], []
-
-        for yr in 연도_in_db:
-            g_yr = sum(금액_원(prod, yr, m) for m in range(1, 13))
-            q_yr = sum(판매량_개(prod, yr, m) for m in range(1, 13))
-            g_vals.append(g_yr / 12 / 1e6)
-            d_vals.append(g_yr / q_yr if q_yr else 0.0)
-            q_vals.append(q_yr / 12 / 1e4)
-
-        for yr_c, mo_c in recent:
-            g_vals.append(금액_원(prod, yr_c, mo_c) / 1e6)
-            d_vals.append(단가(prod, yr_c, mo_c))
-            q_vals.append(판매량_개(prod, yr_c, mo_c) / 1e4)
-
-        금액_by_prod[prod] = g_vals
-        rows.append(('item', '금액', g_vals))
-        rows.append(('item', '단가', d_vals))
-        rows.append(('item', '판매량', q_vals))
-
-    # 합계
-    rows.append(('sec', '합계', []))
-    tot_g_v, tot_d_v, tot_q_v = [], [], []
-
-    for yr in 연도_in_db:
-        g_tot = sum(금액_원(p, yr, m) for p in products for m in range(1, 13))
-        q_tot = sum(판매량_개(p, yr, m) for p in products for m in range(1, 13))
-        tot_g_v.append(g_tot / 12 / 1e6)
-        tot_d_v.append(g_tot / q_tot if q_tot else 0.0)
-        tot_q_v.append(q_tot / 12 / 1e4)
-
-    for yr_c, mo_c in recent:
-        g_tot = sum(금액_원(p, yr_c, mo_c) for p in products)
-        q_tot = sum(판매량_개(p, yr_c, mo_c) for p in products)
-        tot_g_v.append(g_tot / 1e6)
-        tot_d_v.append(g_tot / q_tot if q_tot else 0.0)
-        tot_q_v.append(q_tot / 1e4)
-
-    rows.append(('total', '금액', tot_g_v))
-    rows.append(('total', '단가', tot_d_v))
-    rows.append(('total', '판매량', tot_q_v))
-
-    return rows, col_hdrs, 금액_by_prod['열전'], 금액_by_prod['열후'], 금액_by_prod['피니언']
-
-
-def _만도사급_to_html(rows, col_hdrs):
-    ncols = len(col_hdrs)
-    th = ''.join(f'<th style="{_TH}">{h}</th>' for h in ['구분'] + col_hdrs)
-    body = ''
-    for kind, label, vals in rows:
-        dec = 1 if label == '판매량' else 0
-        if kind == 'sec':
-            body += f'<tr><td colspan="{ncols + 1}" style="{ROW_SEC}">{label}</td></tr>'
-        elif kind == 'item':
-            cells = f'<td style="{ROW_ITEM}">{label}</td>'
-            for v in vals:
-                cells += f'<td style="{_TD_NUM}">{_fmt(v, decimal=dec)}</td>'
-            body += f'<tr>{cells}</tr>'
-        elif kind == 'total':
-            cells = f'<td style="{ROW_HDR_LBL}">{label}</td>'
-            for v in vals:
-                cells += f'<td style="{ROW_HDR_NUM}">{_fmt(v, decimal=dec)}</td>'
-            body += f'<tr>{cells}</tr>'
-    return _html_table(f'<tr>{th}</tr>', body)
-
-
-# ── 판매구성 - 6) 양산차종 매출 현황 ─────────────────────────────────────────
-
-def _build_양산차종(year, month):
-    df = load_sheet(Sheets.판매구성_DB)
-    df = _drop_empty(df, '연도', '월')
-    df['값'] = df['값'].apply(_parse)
-    df_p = df[(df['구분1'] == '제품') & (df['구분2'] == '판매량')].copy()
-    vm = df_p.set_index(['구분3', '연도', '월'])['값'].to_dict()
-
-    def raw(g3, yr, mo):
-        return vm.get((g3, yr, mo), 0.0)
-
-    연도_in_db = sorted(df['연도'].unique().tolist())
-    recent = _recent_months(year, month)
-    col_hdrs = _build_col_hdrs(연도_in_db, recent, annual_suffix='.평균')
-
-    양산_v, as_v, 합계_v, 비중_v = [], [], [], []
-
-    for yr in 연도_in_db:
-        s = sum(raw('양산', yr, m) for m in range(1, 13)) / 12 / 1e4
-        a = sum(raw('AS', yr, m) for m in range(1, 13)) / 12 / 1e4
-        t = s + a
-        양산_v.append(s); as_v.append(a); 합계_v.append(t)
-        비중_v.append(s / t * 100 if t else 0.0)
-
-    for yr_c, mo_c in recent:
-        s = raw('양산', yr_c, mo_c) / 1e4
-        a = raw('AS', yr_c, mo_c) / 1e4
-        t = s + a
-        양산_v.append(s); as_v.append(a); 합계_v.append(t)
-        비중_v.append(s / t * 100 if t else 0.0)
-
-    rows = [
-        ('item', '양산차종', 양산_v),
-        ('item', 'AS 차종', as_v),
-        ('total', '합계', 합계_v),
-        ('pct', '양산차종 비중', 비중_v),
-    ]
-    return rows, col_hdrs, 양산_v, as_v, 비중_v
-
-
-def _양산차종_to_html(rows, col_hdrs):
-    th = ''.join(f'<th style="{_TH}">{h}</th>' for h in ['구분'] + col_hdrs)
-    body = ''
-    for kind, label, vals in rows:
-        if kind == 'item':
-            cells = f'<td style="{ROW_ITEM}">{label}</td>'
-            for v in vals:
-                cells += f'<td style="{_TD_NUM}">{_fmt(v)}</td>'
-        elif kind in ('total', 'pct'):
-            suffix = '%' if kind == 'pct' else ''
-            cells = f'<td style="{ROW_HDR_LBL}">{label}</td>'
-            cells += ''.join(f'<td style="{ROW_HDR_NUM}">{_fmt(v)}{suffix}</td>' for v in vals)
-        body += f'<tr>{cells}</tr>'
-    return _html_table(f'<tr>{th}</tr>', body)
-
-
-def _build_양산차종_chart(x_labels, 양산_vals, as_vals, 비중_vals):
-    totals = [y + a for y, a in zip(양산_vals, as_vals)]
-
-    fig = go.Figure()
-    fig.add_trace(go.Bar(
-        name='양산차종', x=x_labels, y=양산_vals,
-        marker_color=C_NAVY, marker_line_width=0,
-        text=[str(round(v)) for v in 양산_vals],
-        textposition='inside', textfont=dict(color='white', size=13),
-        insidetextanchor='middle',
-    ))
-    fig.add_trace(go.Bar(
-        name='AS 차종', x=x_labels, y=as_vals,
-        marker_color=C_ORANGE, marker_line_width=0,
-        text=[str(round(v)) for v in as_vals],
-        textposition='inside', textfont=dict(color='white', size=12),
-        insidetextanchor='middle',
-    ))
+    # 💡 [추가] 막대 최상단에 합계 표시
     fig.add_trace(go.Scatter(
-        name='양산차종 비중', x=x_labels, y=비중_vals,
-        mode='lines+markers+text',
-        line=dict(color=C_NAVY, width=2),
-        marker=dict(color='white', size=7, line=dict(color=C_NAVY, width=2)),
-        text=[f"{round(v)}%" for v in 비중_vals],
+        x=x_labels,
+        y=[t for t in totals], 
+        mode='text',
+        text=[f"<b>{int(t):,}</b>" for t in totals],
         textposition='top center',
-        textfont=dict(size=12, color=C_NAVY),
-        yaxis='y2',
+        textfont=dict(color='#2d3748', size=12),
+        showlegend=False,
+        hoverinfo='skip'
     ))
 
-    max_tot = max(totals) if totals else 30
-    비중_data = [v for v in 비중_vals if v > 0]
-    min_b = min(비중_data) if 비중_data else 80
-    max_b = max(비중_data) if 비중_data else 100
-    dr    = max(max_b - min_b, 2)
-    y2_total = dr / 0.40
-    ymin2 = min_b - 0.50 * y2_total
-    ymax2 = ymin2 + y2_total
+    max_tot = max(totals) if totals else 30000
 
     fig.update_layout(
         barmode='stack',
@@ -1051,49 +360,106 @@ def _build_양산차종_chart(x_labels, 양산_vals, as_vals, 비중_vals):
         ),
         yaxis=dict(
             showgrid=True, gridcolor=C_CHART_GRID, gridwidth=1,
-            range=[0, max_tot * 2.5],
+            range=[0, max_tot * 1.20], # 합계 표시를 위한 여백 확보
             showticklabels=False, showline=False, zeroline=False,
-        ),
-        yaxis2=dict(
-            overlaying='y', side='right',
-            range=[ymin2, ymax2],
-            showticklabels=False, showgrid=False, showline=False, zeroline=False,
         ),
         plot_bgcolor='white', paper_bgcolor='white',
         font=dict(size=12, family='sans-serif'),
     )
     return fig
 
+# ── 판매구성 - 2) CHQ 제품 판매현황 (B급 제외) ───────────────────────────────
 
-def _build_만도사급_chart(x_labels, 열전_vals, 열후_vals, 피니언_vals):
-    totals = [a + b + c for a, b, c in zip(열전_vals, 열후_vals, 피니언_vals)]
+def _build_CHQ_B급제외_data(year, month):
+    df = load_sheet(Sheets.CHQ제품판매현황_B급제외_DB)
+    df = _drop_empty(df, '연도', '월')
+    df['값'] = df['값'].apply(_parse)
+    
+    # [강력한 데이터 클렌징]
+    df['연도'] = df['연도'].astype(str).str.replace('년', '', regex=False).str.replace(' ', '', regex=False)
+    df['연도'] = pd.to_numeric(df['연도'], errors='coerce').fillna(0).astype(int)
+    df['월'] = df['월'].astype(str).str.replace('.0', '', regex=False).str.replace(' ', '', regex=False)
+    
+    df = df[(df['구분2'] == 'CHQ') & (df['구분1'] != 'B급')]
+    df['구분3'] = df['구분3'].fillna('').astype(str).str.strip()
 
+    vm = df.groupby(['구분3', '연도', '월'])['값'].sum().to_dict()
+
+    def raw(g3, yr, mo):
+        return vm.get((g3, yr, str(mo)), 0.0)
+
+    def yr_avg(g3, yr):
+        if yr <= 2024:
+            val_avg = raw(g3, yr, '월평균')
+            if val_avg != 0.0:
+                return val_avg
+        vals = [v for m in range(1, 13) if (v := raw(g3, yr, m)) != 0]
+        return sum(vals) / len(vals) if vals else 0.0
+
+    yr_2, yr_1 = year - 2, year - 1
+    recent_4 = _recent_months(year, month, n=4) 
+
+    col_hdrs = [f"'{str(yr_2)[2:]}년 월평균", f"'{str(yr_1)[2:]}년 월평균"]
+    last_yr = None
+    for yr_c, mo_c in recent_4:
+        col_hdrs.append(f"'{str(yr_c)[2:]}.{mo_c}월" if yr_c != last_yr else f"{mo_c}월")
+        last_yr = yr_c
+
+    target_g3 = ['열처리', '비열처리']
+    rows = []
+    
+    for g3 in target_g3:
+        vals = [yr_avg(g3, yr_2), yr_avg(g3, yr_1)]
+        for yr_c, mo_c in recent_4:
+            vals.append(raw(g3, yr_c, mo_c))
+        rows.append(('sub', g3, vals))
+
+    return rows, col_hdrs
+
+def _build_CHQ_B급제외_chart(x_labels, rows):
     fig = go.Figure()
-    fig.add_trace(go.Bar(
-        name='열후 금액', x=x_labels, y=열후_vals,
-        marker_color=C_CHART_SEC, marker_line_width=0,
-        text=[str(round(v)) for v in 열후_vals],
-        textposition='inside',
-        textfont=dict(color='white', size=13),
-        insidetextanchor='middle',
-    ))
-    fig.add_trace(go.Bar(
-        name='피니언 금액', x=x_labels, y=피니언_vals,
-        marker_color=C_ORANGE, marker_line_width=0,
-    ))
-    fig.add_trace(go.Bar(
-        name='열전 금액', x=x_labels, y=열전_vals,
-        marker_color=C_NAVY, marker_line_width=0,
-        text=[str(round(t)) for t in totals],
-        textposition='outside',
-        textfont=dict(size=12, color=C_NAVY),
+
+    # 💡 2개 색상 활용: 짙은회색, 회색
+    color_map = {
+        '열처리': C_NAVY,       
+        '비열처리': C_CHART_SEC 
+    }
+    
+    totals = [0] * len(x_labels)
+
+    for kind, label, vals in rows:
+        if kind == 'sub':
+            fig.add_trace(go.Bar(
+                name=label,
+                x=x_labels,
+                y=vals,
+                marker_color=color_map.get(label, C_NAVY),
+                marker_line_width=0,
+                text=[f"{int(v):,}" if v > 0 else '' for v in vals],
+                textposition='inside',
+                insidetextanchor='middle',
+                textfont=dict(color='white', size=12),
+            ))
+            for i, v in enumerate(vals):
+                totals[i] += v
+
+    # 💡 [추가] 막대 최상단에 합계 표시
+    fig.add_trace(go.Scatter(
+        x=x_labels,
+        y=[t for t in totals], 
+        mode='text',
+        text=[f"<b>{int(t):,}</b>" for t in totals],
+        textposition='top center',
+        textfont=dict(color='#2d3748', size=12),
+        showlegend=False,
+        hoverinfo='skip'
     ))
 
-    max_tot = max(totals) if totals else 100
+    max_tot = max(totals) if totals else 30000
 
     fig.update_layout(
-        barmode='stack',
-        height=340,
+        barmode='stack', 
+        height=380,
         margin=dict(l=10, r=20, t=30, b=60),
         legend=dict(
             orientation='h', y=-0.22, x=0.5, xanchor='center',
@@ -1105,15 +471,338 @@ def _build_만도사급_chart(x_labels, 열전_vals, 열후_vals, 피니언_vals
         ),
         yaxis=dict(
             showgrid=True, gridcolor=C_CHART_GRID, gridwidth=1,
-            range=[0, max_tot * 1.25],
-            showticklabels=False,
-            showline=False, zeroline=False,
+            range=[0, max_tot * 1.20],
+            showticklabels=False, showline=False, zeroline=False,
         ),
         plot_bgcolor='white', paper_bgcolor='white',
         font=dict(size=12, family='sans-serif'),
     )
     return fig
 
+# ── 판매구성 - 3) CHQ 산업/중국재 제품 판매현황 ───────────────────────────────
+
+def _build_CHQ_산업중국재_data(year, month):
+    df = load_sheet(Sheets.CHQ제품판매현황_산업중국재_DB)
+    df = _drop_empty(df, '연도', '월')
+    df['값'] = df['값'].apply(_parse)
+    
+    # [강력한 데이터 클렌징]
+    df['연도'] = df['연도'].astype(str).str.replace('년', '', regex=False).str.replace(' ', '', regex=False)
+    df['연도'] = pd.to_numeric(df['연도'], errors='coerce').fillna(0).astype(int)
+    df['월'] = df['월'].astype(str).str.replace('.0', '', regex=False).str.replace(' ', '', regex=False)
+    
+    df = df[df['구분2'] == '산업/중국재']
+    df['구분3'] = df['구분3'].fillna('').astype(str).str.strip()
+
+    vm = df.groupby(['구분3', '연도', '월'])['값'].sum().to_dict()
+
+    def raw(g3, yr, mo):
+        return vm.get((g3, yr, str(mo)), 0.0)
+
+    def yr_avg(g3, yr):
+        if yr <= 2024:
+            val_avg = raw(g3, yr, '월평균')
+            if val_avg != 0.0:
+                return val_avg
+        vals = [v for m in range(1, 13) if (v := raw(g3, yr, m)) != 0]
+        return sum(vals) / len(vals) if vals else 0.0
+
+    yr_2, yr_1 = year - 2, year - 1
+    recent_4 = _recent_months(year, month, n=4) 
+
+    col_hdrs = [f"'{str(yr_2)[2:]}년 월평균", f"'{str(yr_1)[2:]}년 월평균"]
+    last_yr = None
+    for yr_c, mo_c in recent_4:
+        col_hdrs.append(f"'{str(yr_c)[2:]}.{mo_c}월" if yr_c != last_yr else f"{mo_c}월")
+        last_yr = yr_c
+
+    target_g3 = ['열처리', '비열처리']
+    rows = []
+    
+    for g3 in target_g3:
+        vals = [yr_avg(g3, yr_2), yr_avg(g3, yr_1)]
+        for yr_c, mo_c in recent_4:
+            vals.append(raw(g3, yr_c, mo_c))
+        rows.append(('sub', g3, vals))
+
+    return rows, col_hdrs
+
+def _build_CHQ_산업중국재_chart(x_labels, rows):
+    fig = go.Figure()
+
+    # 💡 2개 색상 활용: 짙은회색, 회색
+    color_map = {
+        '열처리': C_NAVY,       
+        '비열처리': C_CHART_SEC 
+    }
+    
+    totals = [0] * len(x_labels)
+
+    for kind, label, vals in rows:
+        if kind == 'sub':
+            fig.add_trace(go.Bar(
+                name=label,
+                x=x_labels,
+                y=vals,
+                marker_color=color_map.get(label, C_NAVY),
+                marker_line_width=0,
+                text=[f"{int(v):,}" if v > 0 else '' for v in vals],
+                textposition='inside',
+                insidetextanchor='middle',
+                textfont=dict(color='white', size=12),
+            ))
+            for i, v in enumerate(vals):
+                totals[i] += v
+
+    # 💡 [추가] 막대 최상단에 합계 표시
+    fig.add_trace(go.Scatter(
+        x=x_labels,
+        y=[t for t in totals], 
+        mode='text',
+        text=[f"<b>{int(t):,}</b>" for t in totals],
+        textposition='top center',
+        textfont=dict(color='#2d3748', size=12),
+        showlegend=False,
+        hoverinfo='skip'
+    ))
+
+    max_tot = max(totals) if totals else 5000
+
+    fig.update_layout(
+        barmode='stack',
+        height=380,
+        margin=dict(l=10, r=20, t=30, b=60),
+        legend=dict(
+            orientation='h', y=-0.22, x=0.5, xanchor='center',
+            font=dict(size=12), bgcolor='rgba(0,0,0,0)',
+        ),
+        xaxis=dict(
+            tickfont=dict(size=11, color='#4a5568'),
+            showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
+        ),
+        yaxis=dict(
+            showgrid=True, gridcolor=C_CHART_GRID, gridwidth=1,
+            range=[0, max_tot * 1.20],
+            showticklabels=False, showline=False, zeroline=False,
+        ),
+        plot_bgcolor='white', paper_bgcolor='white',
+        font=dict(size=12, family='sans-serif'),
+    )
+    return fig
+
+# ── 판매구성 - CD 제품 판매현황 (B급 제외 / 산업중국재) ─────────────────────────
+
+def _build_CD_B급제외_data(year, month):
+    df = load_sheet(Sheets.CD제품판매현황_B급제외_DB) 
+    df = _drop_empty(df, '연도', '월')
+    df['값'] = df['값'].apply(_parse)
+    
+    # [강력한 데이터 클렌징]
+    df['연도'] = df['연도'].astype(str).str.replace('년', '', regex=False).str.replace(' ', '', regex=False)
+    df['연도'] = pd.to_numeric(df['연도'], errors='coerce').fillna(0).astype(int)
+    df['월'] = df['월'].astype(str).str.replace('.0', '', regex=False).str.replace(' ', '', regex=False)
+    
+    df['구분3'] = df['구분3'].fillna('').astype(str).str.strip()
+
+    vm = df.groupby(['구분3', '연도', '월'])['값'].sum().to_dict()
+
+    def raw(g, yr, mo):
+        return vm.get((g, yr, str(mo)), 0.0)
+
+    def yr_avg(g, yr):
+        if yr <= 2024:
+            val_avg = raw(g, yr, '월평균')
+            if val_avg != 0.0:
+                return val_avg
+        vals = [v for m in range(1, 13) if (v := raw(g, yr, m)) != 0]
+        return sum(vals) / len(vals) if vals else 0.0
+
+    yr_2, yr_1 = year - 2, year - 1
+    recent_4 = _recent_months(year, month, n=4) 
+
+    col_hdrs = [f"'{str(yr_2)[2:]}년 월평균", f"'{str(yr_1)[2:]}년 월평균"]
+    for yr_c, mo_c in recent_4:
+        col_hdrs.append(f"'{str(yr_c)[2:]}년 {mo_c}월")
+
+    target_g = ['합금강', '쾌삭강', '일/탄']
+    rows = []
+    
+    for g in target_g:
+        vals = [yr_avg(g, yr_2), yr_avg(g, yr_1)]
+        for yr_c, mo_c in recent_4:
+            vals.append(raw(g, yr_c, mo_c))
+        rows.append(('sub', g, vals))
+
+    return rows, col_hdrs
+
+def _build_CD_B급제외_chart(x_labels, rows):
+    fig = go.Figure()
+
+    # 💡 3개 색상 활용: 짙은회색, 회색, 주황색
+    color_map = {
+        '일/탄': C_NAVY,       # 짙은 회색
+        '쾌삭강': C_CHART_SEC, # 회색
+        '합금강': C_ORANGE     # 주황색
+    }
+    
+    totals = [0] * len(x_labels)
+
+    for kind, label, vals in rows:
+        if kind == 'sub':
+            fig.add_trace(go.Bar(
+                name=label,
+                x=x_labels,
+                y=vals,
+                marker_color=color_map.get(label, C_NAVY),
+                marker_line_width=0,
+                text=[f"{int(v):,}" if v > 0 else '' for v in vals],
+                textposition='inside',
+                insidetextanchor='middle',
+                textfont=dict(color='white', size=11),
+            ))
+            for i, v in enumerate(vals):
+                totals[i] += v
+
+    fig.add_trace(go.Scatter(
+        x=x_labels,
+        y=[t for t in totals], 
+        mode='text',
+        text=[f"<b>{int(t):,}</b>" for t in totals],
+        textposition='top center',
+        textfont=dict(color='#2d3748', size=12),
+        showlegend=False,
+        hoverinfo='skip'
+    ))
+
+    max_tot = max(totals) if totals else 10000
+
+    fig.update_layout(
+        barmode='stack',
+        height=380,
+        margin=dict(l=10, r=20, t=30, b=60),
+        legend=dict(
+            orientation='h', y=-0.22, x=0.5, xanchor='center',
+            font=dict(size=12), bgcolor='rgba(0,0,0,0)',
+            traceorder='reversed'
+        ),
+        xaxis=dict(
+            tickfont=dict(size=11, color='#4a5568'),
+            showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
+        ),
+        yaxis=dict(
+            showgrid=True, gridcolor=C_CHART_GRID, gridwidth=1,
+            range=[0, max_tot * 1.20],
+            showticklabels=False, showline=False, zeroline=False,
+        ),
+        plot_bgcolor='white', paper_bgcolor='white',
+        font=dict(size=12, family='sans-serif'),
+    )
+    return fig
+
+def _build_CD_산업중국재_data(year, month):
+    df = load_sheet(Sheets.CD제품판매현황_산업중국재_DB) 
+    df = _drop_empty(df, '연도', '월')
+    df['값'] = df['값'].apply(_parse)
+    
+    # [강력한 데이터 클렌징]
+    df['연도'] = df['연도'].astype(str).str.replace('년', '', regex=False).str.replace(' ', '', regex=False)
+    df['연도'] = pd.to_numeric(df['연도'], errors='coerce').fillna(0).astype(int)
+    df['월'] = df['월'].astype(str).str.replace('.0', '', regex=False).str.replace(' ', '', regex=False)
+    
+    df['구분4'] = df['구분4'].fillna('').astype(str).str.strip()
+    vm = df.groupby(['구분4', '연도', '월'])['값'].sum().to_dict()
+
+    def raw(g, yr, mo):
+        return vm.get((g, yr, str(mo)), 0.0)
+
+    def yr_avg(g, yr):
+        if yr <= 2024:
+            val_avg = raw(g, yr, '월평균')
+            if val_avg != 0.0:
+                return val_avg
+        vals = [v for m in range(1, 13) if (v := raw(g, yr, m)) != 0]
+        return sum(vals) / len(vals) if vals else 0.0
+
+    yr_2, yr_1 = year - 2, year - 1
+    recent_4 = _recent_months(year, month, n=4) 
+
+    col_hdrs = [f"'{str(yr_2)[2:]}년 월평균", f"'{str(yr_1)[2:]}년 월평균"]
+    for yr_c, mo_c in recent_4:
+        col_hdrs.append(f"'{str(yr_c)[2:]}년 {mo_c}월")
+
+    target_g = ['합금강', '일/탄']
+    rows = []
+    
+    for g in target_g:
+        vals = [yr_avg(g, yr_2), yr_avg(g, yr_1)]
+        for yr_c, mo_c in recent_4:
+            vals.append(raw(g, yr_c, mo_c))
+        rows.append(('sub', g, vals))
+
+    return rows, col_hdrs
+
+def _build_CD_산업중국재_chart(x_labels, rows):
+    fig = go.Figure()
+
+    # 💡 2개 색상 활용: 짙은회색, 회색
+    color_map = {
+        '일/탄': C_NAVY,       # 짙은 회색
+        '합금강': C_CHART_SEC  # 회색
+    }
+    
+    totals = [0] * len(x_labels)
+
+    for kind, label, vals in rows:
+        if kind == 'sub':
+            fig.add_trace(go.Bar(
+                name=label,
+                x=x_labels,
+                y=vals,
+                marker_color=color_map.get(label, C_NAVY),
+                marker_line_width=0,
+                text=[f"{int(v):,}" if v > 0 else '' for v in vals],
+                textposition='inside',
+                insidetextanchor='middle',
+                textfont=dict(color='white', size=11),
+            ))
+            for i, v in enumerate(vals):
+                totals[i] += v
+
+    fig.add_trace(go.Scatter(
+        x=x_labels,
+        y=[t for t in totals], 
+        mode='text',
+        text=[f"<b>{int(t):,}</b>" for t in totals],
+        textposition='top center',
+        textfont=dict(color='#2d3748', size=12),
+        showlegend=False,
+        hoverinfo='skip'
+    ))
+
+    max_tot = max(totals) if totals else 3000
+
+    fig.update_layout(
+        barmode='stack',
+        height=380,
+        margin=dict(l=10, r=20, t=30, b=60),
+        legend=dict(
+            orientation='h', y=-0.22, x=0.5, xanchor='center',
+            font=dict(size=12), bgcolor='rgba(0,0,0,0)',
+            traceorder='reversed'
+        ),
+        xaxis=dict(
+            tickfont=dict(size=11, color='#4a5568'),
+            showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
+        ),
+        yaxis=dict(
+            showgrid=True, gridcolor=C_CHART_GRID, gridwidth=1,
+            range=[0, max_tot * 1.20],
+            showticklabels=False, showline=False, zeroline=False,
+        ),
+        plot_bgcolor='white', paper_bgcolor='white',
+        font=dict(size=12, family='sans-serif'),
+    )
+    return fig
 
 # ── render_page ───────────────────────────────────────────────────────────
 
@@ -1126,104 +815,84 @@ def render_page(app, year_state, month_state):
         )
     app.If(lambda: True, _render_title)
 
-    tabs = app.tabs(["품목별 매출", "판매구성"])
+    # 탭 명칭을 요구사항에 맞게 변경
+    tabs = app.tabs(["계획대비 매출실적", "판매구성"])
 
     with tabs[0]:
-        def _render_품목별매출():
+        def _render_계획대비_매출실적():
             year, month = int(year_state.value), int(month_state.value)
-            rows, col_headers = _build_품목별매출(year, month)
-            memo = _get_memo(Sheets.품목별매출_메모, year, month)
+            rows, col_headers = _build_계획대비_매출실적(year, month)
+            # 필요한 경우 관련 메모 DB 연동
+            memo = _get_memo(Sheets.계획대비매출실적_메모, year, month) 
             app.markdown(
-                _layout64("1) 품목별 매출",
-                          _품목별매출_to_html(rows, col_headers),
-                          memo, unit='[단위: 만개, 백만원]'),
+                _layout64("1) 계획대비 매출실적",
+                          _계획대비_매출실적_to_html(rows, col_headers),
+                          memo, unit='[단위: 톤, 백만원, 원/톤]'),
                 unsafe_allow_html=True,
             )
-        app.If(lambda: True, _render_품목별매출)
+        app.If(lambda: True, _render_계획대비_매출실적)
 
     with tabs[1]:
         def _render_판매구성():
             year, month = int(year_state.value), int(month_state.value)
-            rows1, col_hdrs1, data1, 계_vals1, 비중_vals1       = _build_판매구성_제품별(year, month)
-            rows2, col_hdrs2, 중량_vals, 단가_vals              = _build_부산물매출(year, month)
-            rows3, col_hdrs3, 환산_vals, 판매량_vals, 매출액_vals = _build_부산물증량(year, month)
-            rows4, x_hdrs4, 합금단가_t, 분철단가_t, 평균단가_t    = _build_부산물판매(year, month)
-            memo4 = _get_memo(Sheets.부산물판매_메모, year, month)
-            rows5, col_hdrs5, 열전_t, 열후_t, 피니언_t            = _build_만도사급(year, month)
-            memo5 = _get_memo(Sheets.판매구성_메모, year, month)
-            rows6, col_hdrs6, 양산_t, as_t, 비중_t               = _build_양산차종(year, month)
-
+            
+            rows_등급, hdrs_등급 = _build_판매현황_등급별(year, month)
+            rows_CHQ, hdrs_CHQ = _build_CHQ_B급제외_data(year, month)
+            rows_산업, hdrs_산업 = _build_CHQ_산업중국재_data(year, month)
+            rows_CD_B급제외, hdrs_CD_B급제외 = _build_CD_B급제외_data(year, month)
+            rows_CD_산업, hdrs_CD_산업 = _build_CD_산업중국재_data(year, month)
+            
             col_l, _ = app.columns([6, 4])
             with col_l:
+                # 1. 등급별 판매현황
                 app.markdown(
-                    _sec_title('1) 제품별 판매현황', '[단위: 만개]')
-                    + _판매구성_제품별_to_html(rows1, col_hdrs1),
+                    _sec_title('1) 등급별 판매현황', '[단위: 톤]')
+                    + _판매현황_등급별_to_html(rows_등급, hdrs_등급),
                     unsafe_allow_html=True,
                 )
                 app.plotly_chart(
-                    _build_제품별판매_chart(col_hdrs1, data1, 계_vals1, 비중_vals1),
-                    use_container_width=True,
-                )
-                app.markdown(
-                    _sec_title('2) 부산물 매출 판매 현황', '[단위: 톤, 백만원]')
-                    + _부산물매출_to_html(rows2, col_hdrs2),
-                    unsafe_allow_html=True,
-                )
-                app.plotly_chart(
-                    _build_부산물매출_chart(col_hdrs2, 중량_vals, 단가_vals),
-                    use_container_width=True,
-                )
-                app.markdown(
-                    _sec_title('3) 총 투입량 대비 부산물 중량 변동 추이',
-                               '[단위: 톤, 만개, 백만원]')
-                    + _부산물증량_to_html(rows3, col_hdrs3),
-                    unsafe_allow_html=True,
-                )
-                app.plotly_chart(
-                    _build_부산물증량_chart(col_hdrs3, 환산_vals, 판매량_vals, 매출액_vals),
+                    _build_판매현황_등급별_chart(hdrs_등급, rows_등급),
                     use_container_width=True,
                 )
 
-            col_l4, col_r4 = app.columns([6, 4])
-            with col_l4:
+                # 2) CHQ 제품 판매현황 (수정)
                 app.markdown(
-                    _sec_title('4) 전월대비 부산물 판매 차이', '[단위: kg, 천원, 원/kg]')
-                    + _부산물판매_to_html(rows4),
+                    _sec_title('2) CHQ 제품 판매현황', '[월별 CHQ 판매 추이 (산업/중국材 포함, B급 제외)]'),
                     unsafe_allow_html=True,
                 )
                 app.plotly_chart(
-                    _build_부산물판매_chart(x_hdrs4, 합금단가_t, 분철단가_t, 평균단가_t),
-                    use_container_width=True,
+                    _build_CHQ_B급제외_chart(hdrs_CHQ, rows_CHQ),
+                    use_container_width=True
                 )
-            with col_r4:
-                if memo4:
-                    app.markdown(_memo_html(memo4), unsafe_allow_html=True)
 
-            col_l5, col_r5 = app.columns([6, 4])
-            with col_l5:
+                # 3)산업/중국재 제품 판매현황 (수정 - 좌측 제목을 비움)
                 app.markdown(
-                    _sec_title('5) 만도 사급 매출 현황', '[단위: 만개, 백만원, 원/개]')
-                    + _만도사급_to_html(rows5, col_hdrs5),
+                    _sec_title('', '[월별 산업/중국材 판매 추이(B급 제외)]'),
                     unsafe_allow_html=True,
                 )
                 app.plotly_chart(
-                    _build_만도사급_chart(col_hdrs5, 열전_t, 열후_t, 피니언_t),
-                    use_container_width=True,
+                    _build_CHQ_산업중국재_chart(hdrs_산업, rows_산업),
+                    use_container_width=True
                 )
-            with col_r5:
-                if memo5:
-                    app.markdown(_memo_html(memo5), unsafe_allow_html=True)
+                
+                # 4) CD 강종류별 판매현황 (B급 제외) (추가)
+                app.markdown(
+                    _sec_title('3) CD 강종류별 판매현황', '[월별 CD 판매 추이 (산업/중국材 포함, B급 제외)]'),
+                    unsafe_allow_html=True,
+                )
+                app.plotly_chart(
+                    _build_CD_B급제외_chart(hdrs_CD_B급제외, rows_CD_B급제외),
+                    use_container_width=True
+                )
 
-            col_l6, _ = app.columns([6, 4])
-            with col_l6:
+                # 5) CD 산업/중국재 판매현황 (추가 - 좌측 제목을 비움)
                 app.markdown(
-                    _sec_title('6) 양산차종 매출 현황', '[단위: 만대]')
-                    + _양산차종_to_html(rows6, col_hdrs6),
+                    _sec_title('', '[월별 산업/중국材 CD 판매 추이(B급 제외)]'),
                     unsafe_allow_html=True,
                 )
                 app.plotly_chart(
-                    _build_양산차종_chart(col_hdrs6, 양산_t, as_t, 비중_t),
-                    use_container_width=True,
+                    _build_CD_산업중국재_chart(hdrs_CD_산업, rows_CD_산업),
+                    use_container_width=True
                 )
 
         app.If(lambda: True, _render_판매구성)
