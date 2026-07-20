@@ -29,20 +29,23 @@ def _get_memo(sheet_info, year, month):
     return str(row.iloc[0]['메모']) if not row.empty else ''
 
 
-# ── 0) 월평균 생산실적 ────────────────────────────────────────────────────
+# ── 월평균 생산실적 ────────────────────────────────────────────────────
 
 def _build_생산실적(year, month):
-    df = load_sheet(Sheets.월평균생산실적_DB)
+
+    df = load_sheet(Sheets.전체생산실적_DB)
     df.columns = df.columns.str.strip()
     df = _drop_empty(df, '연도', '월')
     df['값'] = df['값'].apply(_parse)
-    vm = df.set_index(['구분1', '연도', '월'])['값'].to_dict()
+    
+    # 구분1(상위구분), 구분2(하위구분)를 모두 인덱스로 설정
+    vm = df.set_index(['구분1', '구분2', '연도', '월'])['값'].to_dict()
 
-    def raw(g1, yr, mo):
-        return vm.get((g1, yr, mo), 0.0)
+    def raw(g1, g2, yr, mo):
+        return vm.get((g1, g2, yr, mo), 0.0)
 
-    def yr_avg(g1, yr):
-        vals = [raw(g1, yr, m) for m in range(1, 13) if (g1, yr, m) in vm]
+    def yr_avg(g1, g2, yr):
+        vals = [raw(g1, g2, yr, m) for m in range(1, 13) if (g1, g2, yr, m) in vm]
         return sum(vals) / len(vals) if vals else 0.0
 
     연도_in_db = sorted(df['연도'].unique().tolist())
@@ -50,28 +53,76 @@ def _build_생산실적(year, month):
     col_hdrs = _build_col_hdrs(연도_in_db, recent, annual_suffix='년 평균')
 
     prev_yr, prev_mo = _prev(year, month)
-    items = ['열전', '열후', '피니언']
+    
+    # 상위구분과 하위구분 매핑
+    structure = {
+        'CHQ': ['포항', '충주'],
+        'CD': ['포항', '충주2'],
+        'STS': ['포항', '충주2'],
+        'BTB': ['포항', '충주2'],
+        'PB': ['충주2']
+    }
 
     rows = []
     합계_main = [0.0] * (len(연도_in_db) + len(recent))
     합계_당월 = 0.0
     합계_전월 = 0.0
 
-    for g1 in items:
-        main = [yr_avg(g1, yr) for yr in 연도_in_db] + \
-               [raw(g1, yr_c, mo_c) for yr_c, mo_c in recent]
-        당월 = raw(g1, year, month)
-        전월 = raw(g1, prev_yr, prev_mo)
-        mom = 당월 - 전월
-        pct = mom / 전월 * 100 if 전월 else 0.0
-        rows.append(('item', g1, main, mom, pct))
-        합계_main = [a + b for a, b in zip(합계_main, main)]
-        합계_당월 += 당월
-        합계_전월 += 전월
+    factory_totals = {
+        '포항': {'main': [0.0] * (len(연도_in_db) + len(recent)), '당월': 0.0, '전월': 0.0},
+        '충주': {'main': [0.0] * (len(연도_in_db) + len(recent)), '당월': 0.0, '전월': 0.0},
+        '충주2': {'main': [0.0] * (len(연도_in_db) + len(recent)), '당월': 0.0, '전월': 0.0}
+    }
 
+
+    for g1, sub_items in structure.items():
+        소계_main = [0.0] * (len(연도_in_db) + len(recent))
+        소계_당월 = 0.0
+        소계_전월 = 0.0
+
+        # 하위구분(포항, 충주 등) 데이터 계산
+        for g2 in sub_items:
+            main = [yr_avg(g1, g2, yr) for yr in 연도_in_db] + \
+                   [raw(g1, g2, yr_c, mo_c) for yr_c, mo_c in recent]
+            당월 = raw(g1, g2, year, month)
+            전월 = raw(g1, g2, prev_yr, prev_mo)
+            mom = 당월 - 전월
+            pct = (mom / 전월 * 100) if 전월 else 0.0
+            
+            rows.append(('item', g2, main, mom, pct))
+            
+            소계_main = [a + b for a, b in zip(소계_main, main)]
+            소계_당월 += 당월
+            소계_전월 += 전월
+
+            if g2 in factory_totals:
+                factory_totals[g2]['main'] = [a + b for a, b in zip(factory_totals[g2]['main'], main)]
+                factory_totals[g2]['당월'] += 당월
+                factory_totals[g2]['전월'] += 전월
+
+        # 상위구분(CHQ, CD) 소계 계산
+        mom_소계 = 소계_당월 - 소계_전월
+        pct_소계 = (mom_소계 / 소계_전월 * 100) if 소계_전월 else 0.0
+        rows.append(('total', f'{g1} 소계', 소계_main, mom_소계, pct_소계))
+
+        합계_main = [a + b for a, b in zip(합계_main, 소계_main)]
+        합계_당월 += 소계_당월
+        합계_전월 += 소계_전월
+
+    # 전체 합계 계산
     mom_합 = 합계_당월 - 합계_전월
-    pct_합 = mom_합 / 합계_전월 * 100 if 합계_전월 else 0.0
+    pct_합 = (mom_합 / 합계_전월 * 100) if 합계_전월 else 0.0
     rows.append(('total', '합계', 합계_main, mom_합, pct_합))
+
+    for f_name in ['포항', '충주', '충주2']:
+        f_main = factory_totals[f_name]['main']
+        f_당월 = factory_totals[f_name]['당월']
+        f_전월 = factory_totals[f_name]['전월']
+        
+        f_mom = f_당월 - f_전월
+        f_pct = (f_mom / f_전월 * 100) if f_전월 else 0.0
+        
+        rows.append(('total', f'{f_name} 합계', f_main, f_mom, f_pct))
 
     return rows, col_hdrs
 
@@ -92,109 +143,215 @@ def _생산실적_to_html(rows, col_hdrs):
     return _html_table(f'<tr>{th}</tr>', body)
 
 
-# ── 1) 사내 불량 발생 현황 ────────────────────────────────────────────────
+# ── 부적합 발생 현황 ────────────────────────────────────────────────
 
-def _build_사내불량(year, month):
-    df = load_sheet(Sheets.사내불량발생현황_DB)
+def _build_부적합_포항(year, month):
+    df = load_sheet(Sheets.부적합발생추이_포항_충주_충주2_DB) 
     df.columns = df.columns.str.strip()
     df = _drop_empty(df, '연도', '월')
     df['값'] = df['값'].apply(_parse)
-    vm = df.set_index(['구분1', '구분2', '연도', '월'])['값'].to_dict()
+    
+    # 구분1(포항/충주), 구분2(CHQ/CD), 구분3(공정성/소재성) 모두 인덱스로 설정
+    vm = df.set_index(['구분1', '구분2', '구분3', '연도', '월'])['값'].to_dict()
 
-    def raw(g1, g2, yr, mo):
-        return vm.get((g1, g2, yr, mo), 0.0)
+    def raw(g1, g2, g3, yr, mo):
+        return vm.get((g1, g2, g3, yr, mo), 0.0)
 
-    # sum / count of DB entries (includes 0-value months stored as "-")
-    def yr_avg(g1, g2, yr):
-        vals = [raw(g1, g2, yr, m) for m in range(1, 13) if (g1, g2, yr, m) in vm]
+    # 전년도 평균 계산용 함수
+    def prev_yr_avg(g1, g2, g3, prev_yr):
+        vals = [raw(g1, g2, g3, prev_yr, m) for m in range(1, 13) if (g1, g2, g3, prev_yr, m) in vm]
         return sum(vals) / len(vals) if vals else 0.0
 
-    연도_in_db = sorted(df['연도'].unique().tolist())
+    prev_year = year - 1
     recent = _recent_months(year, month)
-    col_hdrs = _build_col_hdrs(연도_in_db, recent, annual_suffix='년 평균')
+    
+    # 헤더 생성: ['25년 월평균, '26년 목표, '25년 12월, '26년 1월, '26년 2월, 합계, 월평균]
+    prev_yr_str = str(prev_year)[-2:]
+    curr_yr_str = str(year)[-2:]
+    col_hdrs = [f"'{prev_yr_str}년 월평균", f"'{curr_yr_str}년 목표"]
+    for y, m in recent:
+        col_hdrs.append(f"'{str(y)[-2:]}년 {m}월")
+    col_hdrs.extend(["합계", "월평균"])
 
-    def item_vals(g1, g2):
-        return [yr_avg(g1, g2, yr) for yr in 연도_in_db] + \
-               [raw(g1, g2, yr_c, mo_c) for yr_c, mo_c in recent]
+    rows = []
+    num_cols = 2 + len(recent) + 2
+    
+    # 포항 전체(Grand Total) 누적용 리스트 초기화
+    grand_total_공정성 = [0.0] * num_cols
+    grand_total_소재성 = [0.0] * num_cols
+    grand_total = [0.0] * num_cols
 
-    def ppm_vals(g1):
-        return [yr_avg(g1, '불량률(PPM)', yr) for yr in 연도_in_db] + \
-               [raw(g1, '불량률(PPM)', yr_c, mo_c) for yr_c, mo_c in recent]
+    for g2 in ['CHQ', 'CD']:
+        subtotal = [0.0] * num_cols
+        
+        for g3 in ['공정성', '소재성']:
+            p_avg = prev_yr_avg('포항', g2, g3, prev_year)
+            target = 0.0  # 목표값 0으로 고정 (필요시 DB 연동)
+            recents = [raw('포항', g2, g3, y, m) for y, m in recent]
+            sum_r = sum(recents)
+            avg_r = sum_r / len(recents) if recents else 0.0
+            
+            row_data = [p_avg, target] + recents + [sum_r, avg_r]
+            rows.append(('item', g3, row_data))
+            
+            # 제품군(CHQ, CD) 소계 누적
+            subtotal = [a + b for a, b in zip(subtotal, row_data)]
+            
+            # 전체 합계(공정성/소재성 분리) 누적
+            if g3 == '공정성':
+                grand_total_공정성 = [a + b for a, b in zip(grand_total_공정성, row_data)]
+            else:
+                grand_total_소재성 = [a + b for a, b in zip(grand_total_소재성, row_data)]
+                
+        # 제품군(CHQ, CD) 소계 행 추가
+        rows.append(('total', g2, subtotal))
+        # 포항 전체 누적
+        grand_total = [a + b for a, b in zip(grand_total, subtotal)]
 
-    열전   = item_vals('랙바', '열전')
-    열후   = item_vals('랙바', '열후')
-    소계_r = [a + b for a, b in zip(열전, 열후)]
+    # 포항 하단 합계 영역 구성 (공정성 -> 소재성 -> 포항 총계)
+    rows.append(('item', '공정성', grand_total_공정성))
+    rows.append(('item', '소재성', grand_total_소재성))
+    rows.append(('total', '포항', grand_total))
 
-    선삭   = item_vals('피니언', '선삭')
-    열처리 = item_vals('피니언', '열처리')
-    소계_p = [a + b for a, b in zip(선삭, 열처리)]
-
-    합계   = [a + b for a, b in zip(소계_r, 소계_p)]
-
-    rows = [
-        ('item',  '열전',         열전),
-        ('item',  '열후',         열후),
-        ('total', '랙바 소계',    소계_r),
-        ('ppm',   '불량률(PPM)', ppm_vals('랙바')),
-        ('item',  '선삭',         선삭),
-        ('item',  '열처리',       열처리),
-        ('total', '피니언 소계',  소계_p),
-        ('ppm',   '불량률(PPM)', ppm_vals('피니언')),
-        ('total', '합계',         합계),
-        ('ppm',   '불량률(PPM)', ppm_vals('합계')),
-    ]
     return rows, col_hdrs
 
-
-# ── 2) 사외 불량 발생 현황 ────────────────────────────────────────────────
-
-def _build_사외불량(year, month):
-    df = load_sheet(Sheets.사외불량발생현황_DB)
+def _build_부적합_충주(year, month):
+    df = load_sheet(Sheets.부적합발생추이_포항_충주_충주2_DB) 
     df.columns = df.columns.str.strip()
     df = _drop_empty(df, '연도', '월')
     df['값'] = df['값'].apply(_parse)
-    vm = df.set_index(['구분1', '연도', '월'])['값'].to_dict()
+    
+    vm = df.set_index(['구분1', '구분2', '구분3', '연도', '월'])['값'].to_dict()
 
-    def raw(g1, yr, mo):
-        return vm.get((g1, yr, mo), 0.0)
+    def raw(g1, g2, g3, yr, mo):
+        return vm.get((g1, g2, g3, yr, mo), 0.0)
 
-    def yr_avg(g1, yr):
-        vals = [raw(g1, yr, m) for m in range(1, 13) if (g1, yr, m) in vm]
+    def prev_yr_avg(g1, g2, g3, prev_yr):
+        vals = [raw(g1, g2, g3, prev_yr, m) for m in range(1, 13) if (g1, g2, g3, prev_yr, m) in vm]
         return sum(vals) / len(vals) if vals else 0.0
 
-    연도_in_db = sorted(df['연도'].unique().tolist())
+    prev_year = year - 1
     recent = _recent_months(year, month)
-    col_hdrs = _build_col_hdrs(연도_in_db, recent, annual_suffix='.평균')
+    
+    prev_yr_str = str(prev_year)[-2:]
+    curr_yr_str = str(year)[-2:]
+    col_hdrs = [f"'{prev_yr_str}년 월평균", f"'{curr_yr_str}년 목표"]
+    for y, m in recent:
+        col_hdrs.append(f"'{str(y)[-2:]}년 {m}월")
+    col_hdrs.extend(["합계", "월평균"])
 
-    rows = [
-        ('item', '사외불량수량',
-         [yr_avg('사외불량수량', yr) for yr in 연도_in_db] +
-         [raw('사외불량수량', yr_c, mo_c) for yr_c, mo_c in recent]),
-        ('ppm',  '불량률(PPM)',
-         [yr_avg('불량률(PPM)', yr) for yr in 연도_in_db] +
-         [raw('불량률(PPM)', yr_c, mo_c) for yr_c, mo_c in recent]),
-    ]
+    rows = []
+    num_cols = 2 + len(recent) + 2
+    
+    grand_total_공정성 = [0.0] * num_cols
+    grand_total_소재성 = [0.0] * num_cols
+    grand_total = [0.0] * num_cols
+
+    g1 = '충주'
+    # DB에 존재하는 '충주'의 제품군(CHQ 등)을 자동으로 추출
+    g2_list = sorted(list(set([k[1] for k in vm.keys() if k[0] == g1])))
+    if not g2_list:
+        g2_list = ['CHQ'] # 데이터가 없을 경우 기본값
+
+    for g2 in g2_list:
+        subtotal = [0.0] * num_cols
+        
+        for g3 in ['공정성', '소재성']:
+            p_avg = prev_yr_avg(g1, g2, g3, prev_year)
+            target = 0.0
+            recents = [raw(g1, g2, g3, y, m) for y, m in recent]
+            sum_r = sum(recents)
+            avg_r = sum_r / len(recents) if recents else 0.0
+            
+            row_data = [p_avg, target] + recents + [sum_r, avg_r]
+            rows.append(('item', g3, row_data))
+            
+            subtotal = [a + b for a, b in zip(subtotal, row_data)]
+            
+            if g3 == '공정성':
+                grand_total_공정성 = [a + b for a, b in zip(grand_total_공정성, row_data)]
+            else:
+                grand_total_소재성 = [a + b for a, b in zip(grand_total_소재성, row_data)]
+                
+        rows.append(('total', g2, subtotal))
+        grand_total = [a + b for a, b in zip(grand_total, subtotal)]
+
     return rows, col_hdrs
 
 
-# ── HTML ─────────────────────────────────────────────────────────────────
+def _build_부적합_충주2(year, month):
+    df = load_sheet(Sheets.부적합발생추이_포항_충주_충주2_DB) 
+    df.columns = df.columns.str.strip()
+    df = _drop_empty(df, '연도', '월')
+    df['값'] = df['값'].apply(_parse)
+    
+    vm = df.set_index(['구분1', '구분2', '구분3', '연도', '월'])['값'].to_dict()
 
-def _불량_to_html(rows, col_hdrs):
+    def raw(g1, g2, g3, yr, mo):
+        return vm.get((g1, g2, g3, yr, mo), 0.0)
+
+    def prev_yr_avg(g1, g2, g3, prev_yr):
+        vals = [raw(g1, g2, g3, prev_yr, m) for m in range(1, 13) if (g1, g2, g3, prev_yr, m) in vm]
+        return sum(vals) / len(vals) if vals else 0.0
+
+    prev_year = year - 1
+    recent = _recent_months(year, month)
+    
+    prev_yr_str = str(prev_year)[-2:]
+    curr_yr_str = str(year)[-2:]
+    col_hdrs = [f"'{prev_yr_str}년 월평균", f"'{curr_yr_str}년 목표"]
+    for y, m in recent:
+        col_hdrs.append(f"'{str(y)[-2:]}년 {m}월")
+    col_hdrs.extend(["합계", "월평균"])
+
+    rows = []
+    num_cols = 2 + len(recent) + 2
+    
+    grand_total_공정성 = [0.0] * num_cols
+    grand_total_소재성 = [0.0] * num_cols
+    grand_total = [0.0] * num_cols
+
+    g1 = '충주2'
+    # DB에 존재하는 '충주2'의 제품군(CD, STS 등)을 자동으로 추출
+    g2_list = sorted(list(set([k[1] for k in vm.keys() if k[0] == g1])))
+    if not g2_list:
+        g2_list = ['CD'] # 데이터가 없을 경우 기본값
+
+    for g2 in g2_list:
+        subtotal = [0.0] * num_cols
+        
+        for g3 in ['공정성', '소재성']:
+            p_avg = prev_yr_avg(g1, g2, g3, prev_year)
+            target = 0.0
+            recents = [raw(g1, g2, g3, y, m) for y, m in recent]
+            sum_r = sum(recents)
+            avg_r = sum_r / len(recents) if recents else 0.0
+            
+            row_data = [p_avg, target] + recents + [sum_r, avg_r]
+            rows.append(('item', g3, row_data))
+            
+            subtotal = [a + b for a, b in zip(subtotal, row_data)]
+            
+            if g3 == '공정성':
+                grand_total_공정성 = [a + b for a, b in zip(grand_total_공정성, row_data)]
+            else:
+                grand_total_소재성 = [a + b for a, b in zip(grand_total_소재성, row_data)]
+                
+        rows.append(('total', g2, subtotal))
+        grand_total = [a + b for a, b in zip(grand_total, subtotal)]
+
+    return rows, col_hdrs
+
+def _부적합_표_to_html(rows, col_hdrs):
     th = ''.join(f'<th style="{_TH}">{h}</th>' for h in ['구분'] + col_hdrs)
     body = ''
     for kind, label, vals in rows:
-        if kind == 'item':
-            cells = f'<td style="{ROW_ITEM}">{label}</td>'
-            cells += ''.join(f'<td style="{_TD_NUM}">{_fmt(v)}</td>' for v in vals)
-        elif kind == 'total':
-            cells = f'<td style="{ROW_HDR_LBL}">{label}</td>'
-            cells += ''.join(f'<td style="{ROW_HDR_NUM}">{_fmt(v)}</td>' for v in vals)
-        elif kind == 'ppm':
-            cells = f'<td style="{_TD_LBL}">{label}</td>'
-            cells += ''.join(f'<td style="{_TD_NUM}">{_fmt(v)}</td>' for v in vals)
+        lbl_s = ROW_HDR_LBL if kind == 'total' else ROW_ITEM
+        num_s = ROW_HDR_NUM if kind == 'total' else _TD_NUM
+        cells = f'<td style="{lbl_s}">{label}</td>'
+        cells += ''.join(f'<td style="{num_s}">{_fmt(v)}</td>' for v in vals)
         body += f'<tr>{cells}</tr>'
     return _html_table(f'<tr>{th}</tr>', body)
-
 
 # ── render_page ───────────────────────────────────────────────────────────
 
@@ -207,42 +364,63 @@ def render_page(app, year_state, month_state):
         )
     app.If(lambda: True, _render_title)
 
-    tabs = app.tabs(["생산실적", "불량 발생내역"])
+    tabs = app.tabs(["생산실적", "부적합 발생내역(포항공장)", "부적합 발생내역(충주공장)"])
 
     with tabs[0]:
         def _render_생산실적():
             year, month = int(year_state.value), int(month_state.value)
             rows, col_hdrs = _build_생산실적(year, month)
-            memo = _get_memo(Sheets.월평균생산실적_메모, year, month)
+            memo = _get_memo(Sheets.전체생산실적_메모, year, month)
             app.markdown(
-                _layout64('1) 월평균 생산실적',
+                _layout64('1) 전체 생산실적',
                           _생산실적_to_html(rows, col_hdrs),
                           memo,
-                          unit='[단위: 만개]'),
+                          unit='(단위: 톤)'),
                 unsafe_allow_html=True,
             )
         app.If(lambda: True, _render_생산실적)
 
     with tabs[1]:
-        def _render_불량():
+        def _render_불량_포항():
             year, month = int(year_state.value), int(month_state.value)
-            rows1, col_hdrs1 = _build_사내불량(year, month)
-            memo1 = _get_memo(Sheets.사내불량발생현황_메모, year, month)
-            rows2, col_hdrs2 = _build_사외불량(year, month)
-            memo2 = _get_memo(Sheets.사외불량발생현황_메모, year, month)
+            rows, col_hdrs = _build_부적합_포항(year, month)
+            memo = _get_memo(Sheets.부적합발생추이_포항_메모, year, month) 
 
             app.markdown(
-                _layout64('1) 사내 불량 발생 현황',
-                          _불량_to_html(rows1, col_hdrs1),
-                          memo1,
-                          unit='[단위: 개]'),
+                _layout64('1) 부적합 발생내역 (포항)',
+                          _부적합_표_to_html(rows, col_hdrs),
+                          memo,
+                          unit='(단위 : 톤, %)'),
                 unsafe_allow_html=True,
             )
+        app.If(lambda: True, _render_불량_포항)
+        
+    with tabs[2]:
+        def _render_불량_충주():
+            year, month = int(year_state.value), int(month_state.value)
+            
+            # 1) 충주 1공장 렌더링
+            rows1, col_hdrs1 = _build_부적합_충주(year, month)
+            memo1 = _get_memo(Sheets.부적합발생추이_충주_충주2_메모, year, month)
+            
             app.markdown(
-                _layout64('2) 사외 불량 발생 현황',
-                          _불량_to_html(rows2, col_hdrs2),
-                          memo2,
-                          unit='[단위: 개]'),
+                _layout64('1) 부적합 발생내역 (충주 1공장)',
+                          _부적합_표_to_html(rows1, col_hdrs1),
+                          memo1,
+                          unit='(단위 : 톤, %)'),
                 unsafe_allow_html=True,
             )
-        app.If(lambda: True, _render_불량)
+
+            # 2) 충주 2공장 렌더링
+            rows2, col_hdrs2 = _build_부적합_충주2(year, month)
+            memo2 = "" # 필요 시 2공장 전용 메모 연동 가능
+            
+            app.markdown(
+                _layout64('2) 부적합 발생내역 (충주 2공장)',
+                          _부적합_표_to_html(rows2, col_hdrs2),
+                          memo2,
+                          unit='(단위 : 톤, %)'),
+                unsafe_allow_html=True,
+            )
+            
+        app.If(lambda: True, _render_불량_충주)

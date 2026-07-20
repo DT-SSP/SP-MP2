@@ -233,28 +233,50 @@ def _build_판매현황_등급별(year, month):
     df = _drop_empty(df, '연도', '월')
     df['값'] = df['값'].apply(_parse)
     
-    # [강력한 데이터 클렌징] '년' 글자와 모든 공백 제거
-    df['연도'] = df['연도'].astype(str).str.replace('년', '', regex=False).str.replace(' ', '', regex=False)
-    df['연도'] = pd.to_numeric(df['연도'], errors='coerce').fillna(0).astype(int)
-    
-    # [강력한 데이터 클렌징] .0 제거 및 '월 평균' 등의 공백 제거
-    df['월'] = df['월'].astype(str).str.replace('.0', '', regex=False).str.replace(' ', '', regex=False)
-    
     df['구분1'] = df['구분1'].fillna('').astype(str).str.strip()
     df['구분2'] = df['구분2'].fillna('').astype(str).str.strip()
 
-    vm = df.set_index(['구분1', '구분2', '연도', '월'])['값'].to_dict()
+    # --- 1. '월평균' 데이터 안전하게 분리 ---
+    avg_mask = df['월'].astype(str).str.contains('평균', na=False)
+    df_avg = df[avg_mask].copy()
+    
+    # 월평균 데이터의 '연도'만 숫자 변환
+    df_avg['연도'] = df_avg['연도'].astype(str).str.replace('년', '', regex=False).str.replace(' ', '', regex=False)
+    df_avg['연도'] = pd.to_numeric(df_avg['연도'], errors='coerce').fillna(0).astype(int)
+    
+    # 월평균 전용 딕셔너리 생성 (월 컬럼 제외)
+    avg_vm = df_avg.groupby(['구분1', '구분2', '연도'])['값'].sum().to_dict()
 
+    # --- 2. 일반(숫자) 월 데이터 분리 및 정수 변환 ---
+    df_num = df[~avg_mask].copy()
+    df_num['연도'] = df_num['연도'].astype(str).str.replace('년', '', regex=False).str.replace(' ', '', regex=False)
+    df_num['연도'] = pd.to_numeric(df_num['연도'], errors='coerce').fillna(0).astype(int)
+    
+    # 일반 월 데이터의 '월' 숫자 변환
+    df_num['월'] = df_num['월'].astype(str).str.replace('.0', '', regex=False).str.replace(' ', '', regex=False)
+    df_num['월'] = pd.to_numeric(df_num['월'], errors='coerce').fillna(0).astype(int)
+    
+    # 결측치나 0으로 변환된 잘못된 월 데이터 필터링
+    df_num = df_num[df_num['월'] > 0]
+
+    # 일반 실적 전용 딕셔너리 생성 (월 인덱스 포함)
+    vm = df_num.groupby(['구분1', '구분2', '연도', '월'])['값'].sum().to_dict()
+
+    # --- 3. 조회 헬퍼 함수 업데이트 ---
     def raw(g1, g2, yr, mo):
-        return vm.get((g1, g2, yr, str(mo)), 0.0)
+        return vm.get((g1, g2, yr, int(mo)), 0.0)
 
     def yr_avg(g1, g2, yr):
-        val_avg = raw(g1, g2, yr, '월평균')
+        # 1순위: 분리해둔 월평균 딕셔너리에서 직접 조회
+        val_avg = avg_vm.get((g1, g2, yr), 0.0)
         if val_avg != 0.0:
             return val_avg
+        
+        # 2순위: 당해 1~12월 실적을 직접 합산하여 평균 계산
         vals = [v for m in range(1, 13) if (v := raw(g1, g2, yr, m)) != 0]
         return sum(vals) / len(vals) if vals else 0.0
 
+    # --- 4. 데이터 조립 ---
     yr_1, yr_curr = year - 1, year
     recent_6 = _recent_months(year, month, n=6) 
 
@@ -282,6 +304,7 @@ def _build_판매현황_등급별(year, month):
     rows.append(('total', '합계', 계_vals))
 
     return rows, col_hdrs
+
 def _판매현황_등급별_to_html(rows, col_hdrs):
     # 테이블 헤더 (<th>) 구성
     th = ''.join(f'<th style="{_TH}">{h}</th>' for h in ['구분'] + col_hdrs)
@@ -289,7 +312,7 @@ def _판매현황_등급별_to_html(rows, col_hdrs):
     body = ''
     sub_idx = 0
     
-    # 테이블 본문 (<td>) 구성[cite: 1]
+    # 테이블 본문 (<td>) 구성
     for kind, label, vals in rows:
         if kind == 'sub':
             bg = ';background:#f9f9fb' if sub_idx % 2 else ';background:white'
@@ -375,27 +398,41 @@ def _build_CHQ_B급제외_data(year, month):
     df = _drop_empty(df, '연도', '월')
     df['값'] = df['값'].apply(_parse)
     
-    # [강력한 데이터 클렌징]
-    df['연도'] = df['연도'].astype(str).str.replace('년', '', regex=False).str.replace(' ', '', regex=False)
-    df['연도'] = pd.to_numeric(df['연도'], errors='coerce').fillna(0).astype(int)
-    df['월'] = df['월'].astype(str).str.replace('.0', '', regex=False).str.replace(' ', '', regex=False)
-    
     df = df[(df['구분2'] == 'CHQ') & (df['구분1'] != 'B급')]
     df['구분3'] = df['구분3'].fillna('').astype(str).str.strip()
 
-    vm = df.groupby(['구분3', '연도', '월'])['값'].sum().to_dict()
+    # --- 1. '월평균' 데이터 안전하게 분리 ---
+    avg_mask = df['월'].astype(str).str.contains('평균', na=False)
+    df_avg = df[avg_mask].copy()
+    
+    df_avg['연도'] = df_avg['연도'].astype(str).str.replace('년', '', regex=False).str.replace(' ', '', regex=False)
+    df_avg['연도'] = pd.to_numeric(df_avg['연도'], errors='coerce').fillna(0).astype(int)
+    
+    avg_vm = df_avg.groupby(['구분3', '연도'])['값'].sum().to_dict()
 
+    # --- 2. 일반(숫자) 월 데이터 분리 및 정수 변환 ---
+    df_num = df[~avg_mask].copy()
+    df_num['연도'] = df_num['연도'].astype(str).str.replace('년', '', regex=False).str.replace(' ', '', regex=False)
+    df_num['연도'] = pd.to_numeric(df_num['연도'], errors='coerce').fillna(0).astype(int)
+    
+    df_num['월'] = df_num['월'].astype(str).str.replace('.0', '', regex=False).str.replace(' ', '', regex=False)
+    df_num['월'] = pd.to_numeric(df_num['월'], errors='coerce').fillna(0).astype(int)
+    df_num = df_num[df_num['월'] > 0]
+
+    vm = df_num.groupby(['구분3', '연도', '월'])['값'].sum().to_dict()
+
+    # --- 3. 조회 헬퍼 함수 업데이트 ---
     def raw(g3, yr, mo):
-        return vm.get((g3, yr, str(mo)), 0.0)
+        return vm.get((g3, yr, int(mo)), 0.0)
 
     def yr_avg(g3, yr):
-        if yr <= 2024:
-            val_avg = raw(g3, yr, '월평균')
-            if val_avg != 0.0:
-                return val_avg
+        val_avg = avg_vm.get((g3, yr), 0.0)
+        if val_avg != 0.0:
+            return val_avg
         vals = [v for m in range(1, 13) if (v := raw(g3, yr, m)) != 0]
         return sum(vals) / len(vals) if vals else 0.0
 
+    # --- 4. 데이터 조립 ---
     yr_2, yr_1 = year - 2, year - 1
     recent_4 = _recent_months(year, month, n=4) 
 
@@ -804,6 +841,392 @@ def _build_CD_산업중국재_chart(x_labels, rows):
     )
     return fig
 
+# ── 비가공품 판매현황 (BAR, CHQ, 거래처 수) ─────────────────────────────────────────
+
+def _build_비가공품판매현황_data(year, month):
+    df = load_sheet(Sheets.비가공품판매현황_DB) 
+    df = _drop_empty(df, '연도', '월')
+    
+    if '구분1' in df.columns:
+        df = df.drop(columns=['구분1'])
+        
+    df['값'] = df['값'].apply(_parse)
+    
+    # 1. 보이지 않는 공백 제거 및 문자열 강제 변환 (가장 안전한 클렌징)
+    df['연도_str'] = df['연도'].astype(str).str.replace('년', '', regex=False).str.replace(' ', '', regex=False)
+    # '월평균'을 '13'으로 함께 치환
+    df['월_str'] = df['월'].astype(str).str.replace(' ', '', regex=False).str.replace('월평균', '13', regex=False)
+
+    # 2. '13'인 행만 완전히 별도 데이터프레임으로 분리
+    mask_avg = (df['월_str'] == '13')
+    
+    df_avg = df[mask_avg].copy()
+    df_avg['연도_int'] = pd.to_numeric(df_avg['연도_str'], errors='coerce').fillna(0).astype(int)
+    # 별도로 저장해둔 데이터프레임 딕셔너리화
+    avg_vm = df_avg.groupby(['구분2', '연도_int'])['값'].sum().to_dict()
+    
+    # 3. 나머지 일반 월별 데이터 분리 및 안전한 정수 변환 (10.0 -> 10 보장)
+    df_monthly = df[~mask_avg].copy()
+    df_monthly['연도_int'] = pd.to_numeric(df_monthly['연도_str'], errors='coerce').fillna(0).astype(int)
+    df_monthly['월_int'] = pd.to_numeric(df_monthly['월_str'], errors='coerce').fillna(0).astype(int)
+    vm = df_monthly.groupby(['구분2', '연도_int', '월_int'])['값'].sum().to_dict()
+
+    def raw(g, yr, mo):
+        return vm.get((g, yr, int(mo)), 0.0)
+
+    def yr_avg(g, yr):
+        # 요청하신 대로 2023년 이하인 경우에만 따로 저장해둔 데이터프레임(avg_vm) 활용
+        if yr <= 2023:
+            val_avg = avg_vm.get((g, yr), 0.0)
+            if val_avg > 0:
+                return val_avg
+                
+        # 2024년 이후이거나 월평균 값이 누락된 경우 월별 실적을 합산하여 직접 계산
+        vals = [v for m in range(1, 13) if (v := raw(g, yr, m)) != 0]
+        return sum(vals) / len(vals) if vals else 0.0
+
+    yr_2, yr_1 = year - 2, year - 1
+    recent_4 = _recent_months(year, month, n=4) 
+
+    col_hdrs = [f"'{str(yr_2)[2:]}년 월평균", f"'{str(yr_1)[2:]}년 월평균"]
+    for yr_c, mo_c in recent_4:
+        col_hdrs.append(f"'{str(yr_c)[2:]}.{mo_c}월")
+
+    target_g = ['BAR', 'CHQ', '거래처 수']
+    rows = []
+    
+    for g in target_g:
+        vals = [yr_avg(g, yr_2), yr_avg(g, yr_1)]
+        for yr_c, mo_c in recent_4:
+            vals.append(raw(g, yr_c, mo_c))
+        rows.append(('sub', g, vals))
+
+    return rows, col_hdrs
+
+def _build_비가공품판매현황_chart(x_labels, rows):
+    fig = go.Figure()
+
+    color_map = {
+        'BAR': C_NAVY,       
+        'CHQ': C_CHART_SEC   
+    }
+    
+    totals = [0] * len(x_labels)
+    line_data = None
+    line_label = ''
+
+    for kind, label, vals in rows:
+        if kind == 'sub':
+            if label in ['BAR', 'CHQ']:
+                fig.add_trace(go.Bar(
+                    name=label,
+                    x=x_labels,
+                    y=vals,
+                    marker_color=color_map.get(label, C_NAVY),
+                    marker_line_width=0,
+                    text=[f"{int(v):,}" if v > 0 else '' for v in vals],
+                    textposition='inside',
+                    insidetextanchor='middle',
+                    textfont=dict(color='white', size=11),
+                    yaxis='y'
+                ))
+                for i, v in enumerate(vals):
+                    totals[i] += v
+            elif label == '거래처 수':
+                line_data = vals
+                line_label = label
+
+    # 막대 최상단에 누적 합계 표시
+    fig.add_trace(go.Scatter(
+        x=x_labels,
+        y=[t for t in totals], 
+        mode='text',
+        text=[f"<b>{int(t):,}</b>" for t in totals],
+        textposition='top center',
+        textfont=dict(color='#2d3748', size=12),
+        showlegend=False,
+        hoverinfo='skip',
+        yaxis='y'
+    ))
+
+    # 거래처 수 꺾은선 그래프 추가
+    if line_data:
+        # 💡 값이 0인 경우 차트가 바닥으로 떨어지지 않도록 None(결측치)으로 변환
+        line_y = [v if v > 0 else None for v in line_data]
+        
+        fig.add_trace(go.Scatter(
+            name=line_label,
+            x=x_labels,
+            y=line_y,
+            mode='lines+markers+text',
+            marker=dict(color=C_ORANGE, size=8),
+            line=dict(color=C_ORANGE, width=2),
+            text=[f"{int(v):,}개" if v is not None else '' for v in line_y],
+            textposition='top center',
+            textfont=dict(color=C_ORANGE, size=11, weight='bold'),
+            yaxis='y2',
+            connectgaps=True # 데이터가 비어있어도 앞뒤 선을 자연스럽게 연결
+        ))
+
+    max_tot = max(totals) if totals else 5000
+    # None 값을 제외한 최대값 계산
+    valid_lines = [v for v in (line_data or []) if v > 0]
+    max_line = max(valid_lines) if valid_lines else 100
+
+    fig.update_layout(
+        barmode='stack',
+        height=500, 
+        margin=dict(l=10, r=10, t=30, b=60),
+        legend=dict(
+            orientation='h', y=-0.15, x=0.5, xanchor='center',
+            font=dict(size=12), bgcolor='rgba(0,0,0,0)',
+        ),
+        xaxis=dict(
+            tickfont=dict(size=11, color='#4a5568'),
+            showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
+        ),
+        # 1차 축 (누적 막대용): 차트 하단 60% 영역 (간격 넓힘)[cite: 2]
+        yaxis=dict(
+            domain=[0, 0.60],
+            showgrid=True, gridcolor=C_CHART_GRID, gridwidth=1,
+            range=[0, max_tot * 1.20],
+            showticklabels=False, showline=False, zeroline=False,
+        ),
+        # 2차 축 (거래처 수 꺾은선용): 차트 상단 25% 영역 (완전 분리)[cite: 2]
+        yaxis2=dict(
+            domain=[0.75, 1.0],
+            range=[0, max_line * 1.40],
+            showgrid=False,
+            showticklabels=False, showline=False, zeroline=False,
+        ),
+        plot_bgcolor='white', paper_bgcolor='white',
+        font=dict(size=12, family='sans-serif'),
+    )
+    return fig
+
+# ── 동일거래매입매출 현황 (꺾은선 그래프 제외, 누적 막대 전용) ─────────────────────────
+
+def _build_동일거래매입매출_data(year, month):
+    df = load_sheet(Sheets.동일거래매입매출현황_DB) 
+    df = _drop_empty(df, '연도', '월')
+    
+    if '구분1' in df.columns:
+        df = df.drop(columns=['구분1'])
+        
+    df['값'] = df['값'].apply(_parse)
+    
+    # 1. 보이지 않는 공백 제거 및 문자열 강제 변환
+    df['연도_str'] = df['연도'].astype(str).str.replace('년', '', regex=False).str.replace(' ', '', regex=False)
+    df['월_str'] = df['월'].astype(str).str.replace(' ', '', regex=False).str.replace('월평균', '13', regex=False)
+
+    # 2. '13'(월평균)인 행 분리
+    mask_avg = (df['월_str'] == '13')
+    
+    df_avg = df[mask_avg].copy()
+    df_avg['연도_int'] = pd.to_numeric(df_avg['연도_str'], errors='coerce').fillna(0).astype(int)
+    avg_vm = df_avg.groupby(['구분2', '연도_int'])['값'].sum().to_dict()
+    
+    # 3. 일반 월별 데이터 분리
+    df_monthly = df[~mask_avg].copy()
+    df_monthly['연도_int'] = pd.to_numeric(df_monthly['연도_str'], errors='coerce').fillna(0).astype(int)
+    df_monthly['월_int'] = pd.to_numeric(df_monthly['월_str'], errors='coerce').fillna(0).astype(int)
+    vm = df_monthly.groupby(['구분2', '연도_int', '월_int'])['값'].sum().to_dict()
+
+    def raw(g, yr, mo):
+        return vm.get((g, yr, int(mo)), 0.0)
+
+    def yr_avg(g, yr):
+        if yr <= 2023:
+            val_avg = avg_vm.get((g, yr), 0.0)
+            if val_avg > 0:
+                return val_avg
+        vals = [v for m in range(1, 13) if (v := raw(g, yr, m)) != 0]
+        return sum(vals) / len(vals) if vals else 0.0
+
+    yr_2, yr_1 = year - 2, year - 1
+    recent_4 = _recent_months(year, month, n=4) 
+
+    col_hdrs = [f"'{str(yr_2)[2:]}년 월평균", f"'{str(yr_1)[2:]}년 월평균"]
+    for yr_c, mo_c in recent_4:
+        col_hdrs.append(f"'{str(yr_c)[2:]}.{mo_c}월")
+
+    # 시트 내에 존재하는 구분2 항목들을 동적으로 추출 (또는 필요한 특정 품목 리스트 지정 가능)
+    target_g = sorted(df['구분2'].dropna().unique().tolist())
+    rows = []
+    
+    for g in target_g:
+        vals = [yr_avg(g, yr_2), yr_avg(g, yr_1)]
+        for yr_c, mo_c in recent_4:
+            vals.append(raw(g, yr_c, mo_c))
+        rows.append(('sub', g, vals))
+
+    return rows, col_hdrs
+
+def _build_동일거래매입매출_chart(x_labels, rows):
+    fig = go.Figure()
+
+    # 다중 항목 구분을 위한 컬러 팔레트 정의
+    colors = [C_NAVY, C_CHART_SEC, C_ORANGE, '#3182ce', '#38a169']
+    
+    totals = [0] * len(x_labels)
+    color_idx = 0
+
+    for kind, label, vals in rows:
+        if kind == 'sub':
+            fig.add_trace(go.Bar(
+                name=label,
+                x=x_labels,
+                y=vals,
+                marker_color=colors[color_idx % len(colors)],
+                marker_line_width=0,
+                text=[f"{int(v):,}" if v > 0 else '' for v in vals],
+                textposition='inside',
+                insidetextanchor='middle',
+                textfont=dict(color='white', size=11),
+            ))
+            color_idx += 1
+            for i, v in enumerate(vals):
+                totals[i] += v
+
+    # 막대 최상단에 누적 합계 표시
+    fig.add_trace(go.Scatter(
+        x=x_labels,
+        y=[t for t in totals], 
+        mode='text',
+        text=[f"<b>{int(t):,}</b>" for t in totals],
+        textposition='top center',
+        textfont=dict(color='#2d3748', size=12),
+        showlegend=False,
+        hoverinfo='skip'
+    ))
+
+    max_tot = max(totals) if totals else 5000
+
+    fig.update_layout(
+        barmode='stack',
+        height=380, # 단일 y축 레이아웃에 맞추어 높이 최적화
+        margin=dict(l=10, r=20, t=30, b=60),
+        legend=dict(
+            orientation='h', y=-0.22, x=0.5, xanchor='center',
+            font=dict(size=12), bgcolor='rgba(0,0,0,0)',
+        ),
+        xaxis=dict(
+            tickfont=dict(size=11, color='#4a5568'),
+            showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
+        ),
+        yaxis=dict(
+            showgrid=True, gridcolor=C_CHART_GRID, gridwidth=1,
+            range=[0, max_tot * 1.20],
+            showticklabels=False, showline=False, zeroline=False,
+        ),
+        plot_bgcolor='white', paper_bgcolor='white',
+        font=dict(size=12, family='sans-serif'),
+    )
+    return fig
+
+# ── PSI 공통 데이터 빌더 ─────────────────────────────────────────────────────────────
+
+def _build_PSI_data(sheet_info, year, month, n_months=12):
+    """
+    PSI 데이터를 불러와 최근 n개월간의 입고, 판매, 재고 및 비율 데이터를 계산합니다.
+    """
+    df = load_sheet(sheet_info)
+    df = _drop_empty(df, '연도', '월')
+    df['값'] = df['값'].apply(_parse)
+    
+    # 데이터 클렌징
+    df['연도'] = df['연도'].astype(str).str.replace('년', '', regex=False).str.replace(' ', '', regex=False)
+    df['연도'] = pd.to_numeric(df['연도'], errors='coerce').fillna(0).astype(int)
+    df['월'] = df['월'].astype(str).str.replace('.0', '', regex=False).str.replace(' ', '', regex=False)
+    df['월'] = pd.to_numeric(df['월'], errors='coerce').fillna(0).astype(int)
+    df['구분2'] = df['구분2'].fillna('').astype(str).str.strip()
+
+    # (구분2, 연도, 월) 기준으로 값 합산
+    vm = df.groupby(['구분2', '연도', '월'])['값'].sum().to_dict()
+
+    def raw(g, yr, mo):
+        return vm.get((g, yr, int(mo)), 0.0)
+
+    # 최근 n개월 (기본 12개월) 날짜 리스트 생성
+    recent_months = _recent_months(year, month, n=n_months)
+    
+    rows = []
+    for yr_c, mo_c in recent_months:
+        lbl = f"{str(yr_c)[2:]}.{mo_c}" # 예: '25.8'
+        
+        # 구분2 명칭에 맞춰 값 추출
+        in_val = raw('원재료입고①', yr_c, mo_c) 
+        out_val = raw('매출②', yr_c, mo_c)
+        inv_val = raw('총재고③', yr_c, mo_c)
+        
+        # 비율 계산: 출고율(②/①) 및 재고율(③/②)
+        out_rate = (out_val / in_val * 100) if in_val > 0 else 0.0
+        inv_rate = (inv_val / out_val * 100) if out_val > 0 else 0.0
+        
+        rows.append({
+            'label': lbl,
+            'in_val': in_val,
+            'out_val': out_val,
+            'inv_val': inv_val,
+            'out_rate': out_rate,
+            'inv_rate': inv_rate
+        })
+        
+    return rows
+
+def _build_PSI_html_table(rows):
+    """
+    계산된 PSI 데이터를 바탕으로 HTML 테이블을 생성합니다.
+    """
+    # 테이블 헤더
+    th_html = (
+        f'<tr><th style="{_TH}; width: 10%;"></th>'
+        f'<th style="{_TH}; width: 18%;">원재료 입고①</th>'
+        f'<th style="{_TH}; width: 18%;">매출②</th>'
+        f'<th style="{_TH}; width: 18%;">총재고③</th>'
+        f'<th style="{_TH}; width: 18%;">출고율(②/①)</th>'
+        f'<th style="{_TH}; width: 18%;">재고율(③/②)</th></tr>'
+    )
+    
+    body_html = ''
+    for idx, row in enumerate(rows):
+        bg = ';background:#f9f9fb' if idx % 2 == 1 else ';background:white'
+        
+        # 포맷팅 (0일 경우 0 또는 - 로 표기)[cite: 1]
+        in_str = f"{int(row['in_val']):,}" if row['in_val'] > 0 else "0"
+        out_str = f"{int(row['out_val']):,}" if row['out_val'] > 0 else "0"
+        inv_str = f"{int(row['inv_val']):,}" if row['inv_val'] > 0 else "0"
+        
+        out_rate_str = f"{row['out_rate']:.1f}%" if row['out_rate'] > 0 else ("0%" if row['in_val'] == 0 else "-")
+        inv_rate_str = f"{row['inv_rate']:.1f}%" if row['inv_rate'] > 0 else "-"
+        
+        cells = (
+            f'<td style="{ROW_ITEM + bg}; text-align:center; font-weight:bold; color:#4a5568;">{row["label"]}</td>'
+            f'<td style="{_TD_NUM + bg}">{in_str}</td>'
+            f'<td style="{_TD_NUM + bg}">{out_str}</td>'
+            f'<td style="{_TD_NUM + bg}">{inv_str}</td>'
+            f'<td style="{_TD_NUM + bg}">{out_rate_str}</td>'
+            f'<td style="{_TD_NUM + bg}">{inv_rate_str}</td>'
+        )
+        body_html += f'<tr>{cells}</tr>'
+        
+    return _html_table(th_html, body_html)
+
+
+# ── PSI 최종 테이블 생성 함수 ───────────────────────────────────────────────────────
+
+def _build_PSI_매입매출포함_table(year, month):
+    # 매입매출 포함 DB 시트 정보 (필요시 Sheets.XXX 로 수정)
+    sheet_info = Sheets.PSI_매입매출포함_DB 
+    rows = _build_PSI_data(sheet_info, year, month, n_months=12)
+    return _build_PSI_html_table(rows)
+
+def _build_PSI_매입매출제외_table(year, month):
+    # 매입매출 제외 DB 시트 정보 (필요시 Sheets.XXX 로 수정)
+    sheet_info = Sheets.PSI_매입매출제외_DB 
+    rows = _build_PSI_data(sheet_info, year, month, n_months=12)
+    return _build_PSI_html_table(rows)
+
 # ── render_page ───────────────────────────────────────────────────────────
 
 def render_page(app, year_state, month_state):
@@ -841,6 +1264,9 @@ def render_page(app, year_state, month_state):
             rows_산업, hdrs_산업 = _build_CHQ_산업중국재_data(year, month)
             rows_CD_B급제외, hdrs_CD_B급제외 = _build_CD_B급제외_data(year, month)
             rows_CD_산업, hdrs_CD_산업 = _build_CD_산업중국재_data(year, month)
+            rows_비가공품, hdrs_비가공품 = _build_비가공품판매현황_data(year, month)
+            rows_동일거래, hdrs_동일거래 = _build_동일거래매입매출_data(year, month)
+
             
             col_l, _ = app.columns([6, 4])
             with col_l:
@@ -893,6 +1319,37 @@ def render_page(app, year_state, month_state):
                 app.plotly_chart(
                     _build_CD_산업중국재_chart(hdrs_CD_산업, rows_CD_산업),
                     use_container_width=True
+                )
+
+                app.markdown(
+                    _sec_title('4) 비가공품 판매현황', '[월별/품목별 비가공품 판매 추이]'),
+                    unsafe_allow_html=True,
+                )
+                app.plotly_chart(
+                    _build_비가공품판매현황_chart(hdrs_비가공품, rows_비가공품),
+                    use_container_width=True
+                )
+
+                app.markdown(
+                    _sec_title('동일거래 매입매출 현황', '[월별 동일거래 매입/매출 추이]'),
+                    unsafe_allow_html=True,
+                )
+                app.plotly_chart(
+                    _build_동일거래매입매출_chart(hdrs_동일거래, rows_동일거래),
+                    use_container_width=True,
+                )
+
+                app.markdown(
+                    _sec_title('(6-1) PSI (입고, 판매, 재고) 지표 (매입매출 포함)', '[단위: 톤]')
+                    + _build_PSI_매입매출포함_table(year, month),
+                    unsafe_allow_html=True
+                )
+                app.markdown("<br>", unsafe_allow_html=True)
+
+                app.markdown(
+                    _sec_title('(6-2) PSI (입고, 판매, 재고) 지표 (매입매출 제외)', '[단위: 톤]')
+                    + _build_PSI_매입매출제외_table(year, month),
+                    unsafe_allow_html=True
                 )
 
         app.If(lambda: True, _render_판매구성)
