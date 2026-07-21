@@ -1,4 +1,5 @@
 ﻿import datetime
+import plotly.graph_objects as go
 import pandas as pd
 from data.loader import load_sheet
 from data.config import Sheets
@@ -10,7 +11,7 @@ from views.common import (
     TH as _TH, TD_NUM as _TD_NUM, TD_LBL as _TD_LBL, TD_RED as _TD_RED, C_RED as _C_RED,
     ROW_SEC, ROW_GRP, ROW_HDR_LBL, ROW_HDR_NUM, ROW_HDR_RED, ROW_ITEM,
     ROW_CAL_LBL, ROW_CAL_NUM, ROW_CAL_RED,
-    html_table as _html_table, layout64 as _layout64,
+    html_table as _html_table, layout64 as _layout64, layout100 as _layout100, C_NAVY
 )
 
 # 외주용역비 수량 키 감지 키워드 (구분2 값에 포함될 경우 qty로 판별)
@@ -35,449 +36,502 @@ def _get_memo(sheet_info, year, month):
     return str(row.iloc[0]['메모']) if not row.empty else ''
 
 
-# ── 1) 운반 실적 및 컨테이너당 단가 추이 ─────────────────────────────────
+# ── 1) 부재료 사용량 원단위 ─────────────────────────────────
 
-def _build_운반비(year, month):
-    df = load_sheet(Sheets.운반실적및컨테이너단가_DB)
+def _build_부재료_data(사업장, year, month):
+    # 1. DB 로드
+    df = load_sheet(Sheets.부재료사용량_DB) 
+    
+    # 컬럼명 공백 제거
     df.columns = df.columns.str.strip()
-    df = _drop_empty(df, '연도', '월')
+    
+    # 💡 [수정] 선택한 월 기준으로 과거 12개월의 (연, 월) 리스트 명시적 생성
+    recent = []
+    curr_y, curr_m = year, month
+    for _ in range(12):
+        recent.insert(0, (curr_y, curr_m))
+        curr_y, curr_m = _prev(curr_y, curr_m)
+    
+    # 2. 필수 컬럼 존재 여부 확인 (시트가 잘못 연결된 경우 방지)
+    required_cols = ['사업장', '구분1', '연도', '월', '값']
+    for col in required_cols:
+        if col not in df.columns:
+            return [(f'오류: [{col}] 컬럼 없음', [0.0] * 12)], [f"'{str(y)[2:]}년 {m:02d}월" for y, m in recent]
 
-    # 신규 컬럼 구조: 구분1, 조건, 업체, 연도, 월, 실적
-    val_col = '실적' if '실적' in df.columns else '값'
-    df[val_col]  = df[val_col].apply(_parse)
-    df['조건']   = df['조건'].fillna('').astype(str).str.strip()
-    df['업체']   = df['업체'].fillna('').astype(str).str.strip()
+    # 3. [핵심] 기존 _drop_empty() 함수 사용 배제
+    df['사업장'] = df['사업장'].astype(str).str.replace(' ', '', regex=False)
+    df['구분1'] = df['구분1'].astype(str).str.strip()
+    
+    # 연도/월 숫자 강제 변환
+    df['연도'] = df['연도'].astype(str).str.replace('년', '', regex=False).str.replace(' ', '', regex=False)
+    df['연도'] = pd.to_numeric(df['연도'], errors='coerce').fillna(0).astype(int)
+    
+    df['월'] = df['월'].astype(str).str.replace('월', '', regex=False).str.replace(' ', '', regex=False)
+    df['월'] = pd.to_numeric(df['월'], errors='coerce').fillna(0).astype(int)
 
-    vm = df.set_index(['구분1', '조건', '업체', '연도', '월'])[val_col].to_dict()
+    df['값'] = df['값'].apply(_parse)
 
-    qty_key       = next(k for k in df['구분1'].unique() if '수량' in k)
-    expense_items = list(dict.fromkeys(k for k in df['구분1'] if k != qty_key))
+    # 4. 사업장 필터링
+    target_사업장 = 사업장.replace(' ', '')
+    df_target = df[df['사업장'] == target_사업장]
+    
+    vm = df_target.set_index(['구분1', '연도', '월'])['값'].to_dict()
 
-    연도_in_db = sorted(df['연도'].unique().tolist())
-    prev_yr, prev_mo = _prev(year, month)
+    # 테이블 헤더용 텍스트 생성 ('25년 03월 형식)
+    col_hdrs = [f"'{str(y)[2:]}년 {m:02d}월" for y, m in recent]
 
-    def raw(g1, cond, company, yr, mo):
-        return vm.get((g1, cond, company, yr, mo), 0.0)
+    # 5. DB에 등록된 항목 리스트 추출
+    items = list(dict.fromkeys(df_target['구분1'].tolist()))
+    
+    # 💡 [디버깅 안전장치]
+    if not items:
+        items = [f'데이터 없음 (DB 내 {사업장} 확인 필요)']
 
-    def get_conds(yr, mo):
-        mask = (df['연도'] == yr) & (df['월'] == mo) & (df['조건'] != '')
-        return sorted(df[mask]['조건'].unique().tolist())
+    rows = []
+    for item in items:
+        # 생성한 12개월(recent) 리스트를 바탕으로 값 추출
+        vals = [vm.get((item, y, m), 0.0) for y, m in recent]
+        rows.append((item, vals))
 
-    def get_업체s(cond, yr, mo):
-        mask = (df['연도'] == yr) & (df['월'] == mo) & (df['조건'] == cond) & (df['업체'] != '')
-        return sorted(df[mask]['업체'].unique().tolist())
-
-    def get_month_pairs(yr, mo):
-        """업체 있으면 (cond, 업체), 없으면 (cond, '') 형태로 컬럼 pair 목록 반환"""
-        pairs = []
-        for cond in get_conds(yr, mo):
-            businesses = get_업체s(cond, yr, mo)
-            if businesses:
-                for b in businesses:
-                    pairs.append((cond, b))
-            else:
-                pairs.append((cond, ''))
-        return pairs
-
-    def total_agg(g1, yr, mo):
-        return raw(g1, '', '', yr, mo)
-
-    prev_pairs = get_month_pairs(prev_yr, prev_mo)
-    curr_pairs = get_month_pairs(year, month)
-
-    def yr_avg_total(g1, yr):
-        vals = [raw(g1, '', '', yr, m) for m in range(1, 13) if (g1, '', '', yr, m) in vm]
-        return sum(vals) / len(vals) if vals else 0.0
-
-    def container_cost_total(yr, mo):
-        return sum(total_agg(it, yr, mo) for it in expense_items)
-
-    def pair_cost(cond, company, yr, mo):
-        return sum(raw(it, cond, company, yr, mo) for it in expense_items)
-
-    def yr_avg_cost(yr):
-        vals = [container_cost_total(yr, m) for m in range(1, 13) if (qty_key, '', '', yr, m) in vm]
-        return sum(vals) / len(vals) if vals else 0.0
-
-    def make_row(g1):
-        v  = [yr_avg_total(g1, yr) for yr in 연도_in_db]
-        v += [raw(g1, c, b, prev_yr, prev_mo) for c, b in prev_pairs]
-        v.append(total_agg(g1, prev_yr, prev_mo))
-        v += [raw(g1, c, b, year, month) for c, b in curr_pairs]
-        v.append(total_agg(g1, year, month))
-        v.append(total_agg(g1, year, month) - total_agg(g1, prev_yr, prev_mo))
-        return v
-
-    def make_cost_row():
-        v  = [yr_avg_cost(yr) for yr in 연도_in_db]
-        v += [pair_cost(c, b, prev_yr, prev_mo) for c, b in prev_pairs]
-        v.append(container_cost_total(prev_yr, prev_mo))
-        v += [pair_cost(c, b, year, month) for c, b in curr_pairs]
-        v.append(container_cost_total(year, month))
-        v.append(container_cost_total(year, month) - container_cost_total(prev_yr, prev_mo))
-        return v
-
-    def make_total_row():
-        def tot(yr, mo):
-            return container_cost_total(yr, mo) * total_agg(qty_key, yr, mo)
-        def pair_tot(c, b, yr, mo):
-            return pair_cost(c, b, yr, mo) * raw(qty_key, c, b, yr, mo)
-        v  = [yr_avg_total(qty_key, yr) * yr_avg_cost(yr) for yr in 연도_in_db]
-        v += [pair_tot(c, b, prev_yr, prev_mo) for c, b in prev_pairs]
-        v.append(tot(prev_yr, prev_mo))
-        v += [pair_tot(c, b, year, month) for c, b in curr_pairs]
-        v.append(tot(year, month))
-        v.append(tot(year, month) - tot(prev_yr, prev_mo))
-        return v
-
-    rows = [
-        ('qty',      qty_key,            make_row(qty_key)),
-        ('subtotal', '컨테이너당 운반비', make_cost_row()),
-        *[('item',   g1,                 make_row(g1)) for g1 in expense_items],
-        ('total',    '총 비용',           make_total_row()),
-    ]
-
-    col_spec = {
-        'annual_yrs': 연도_in_db,
-        'prev': (prev_yr, prev_mo, prev_pairs),
-        'curr': (year, month, curr_pairs),
-    }
-    return rows, col_spec
+    return rows, col_hdrs
 
 
-def _운반비_to_html(rows, col_spec):
-    annual_yrs = col_spec['annual_yrs']
-    prev_yr, prev_mo, prev_pairs = col_spec['prev']
-    curr_yr, curr_mo, curr_pairs = col_spec['curr']
-
-    n_prev = len(prev_pairs) + 1   # pairs + '-'
-    n_curr = len(curr_pairs) + 1
-
-    def mo_label(yr, mo):
-        return f"'{str(yr)[2:]}.{mo}월" if yr != curr_yr else f"{mo}월"
-
-    def pair_label(cond, company):
-        return f"{cond}/{company}" if company else cond
-
-    th1 = f'<th style="{_TH}" rowspan="2">구분</th>'
-    for yr in annual_yrs:
-        th1 += f'<th style="{_TH}" rowspan="2">\'{str(yr)[2:]}.평균</th>'
-    th1 += f'<th style="{_TH}" colspan="{n_prev}">{mo_label(prev_yr, prev_mo)}</th>'
-    th1 += f'<th style="{_TH}" colspan="{n_curr}">{curr_mo}월</th>'
-    th1 += f'<th style="{_TH}" rowspan="2">전월대비</th>'
-
-    th2 = ''
-    for c, b in prev_pairs:
-        th2 += f'<th style="{_TH}">{pair_label(c, b)}</th>'
-    th2 += f'<th style="{_TH}">-</th>'
-    for c, b in curr_pairs:
-        th2 += f'<th style="{_TH}">{pair_label(c, b)}</th>'
-    th2 += f'<th style="{_TH}">-</th>'
-
-    thead = f'<tr>{th1}</tr><tr>{th2}</tr>'
+def _build_부재료_table_html(사업장, rows, col_hdrs):
+    """부재료 사용량 테이블 HTML을 생성합니다."""
+    th = f'<th style="{_TH}">{사업장}</th>'
+    for h in col_hdrs:
+        th += f'<th style="{_TH}">{h}</th>'
+    thead = f'<tr>{th}</tr>'
 
     body = ''
-    for kind, label, vals in rows:
-        if kind == 'total':
-            lbl_s, num_s, red_s = ROW_CAL_LBL, ROW_CAL_NUM, ROW_CAL_RED
-        elif kind == 'subtotal':
-            lbl_s, num_s, red_s = ROW_HDR_LBL, ROW_HDR_NUM, ROW_HDR_RED
-        elif kind == 'item':
-            lbl_s, num_s, red_s = ROW_ITEM, _TD_NUM, _TD_RED
-        else:  # qty
-            lbl_s, num_s, red_s = _TD_LBL, _TD_NUM, _TD_RED
-
-        cells = f'<td style="{lbl_s}">{label}</td>'
-        last  = len(vals) - 1
-        for i, v in enumerate(vals):
-            s = (red_s if v < 0 else num_s) if i == last else num_s
-            cells += f'<td style="{s}">{_fmt(v)}</td>'
+    for item, vals in rows:
+        cells = f'<td style="{ROW_ITEM}">{item}</td>'
+        for v in vals:
+            cells += f'<td style="{_TD_NUM}">{_fmt(v)}</td>'
         body += f'<tr>{cells}</tr>'
 
     return _html_table(thead, body)
 
 
-# ── 2) 외주용역비 ─────────────────────────────────────────────────────────
+def _build_부재료_chart(사업장, rows, col_hdrs):
+    """부재료 사용량 Plotly 차트를 생성합니다."""
+    fig = go.Figure()
 
-def _build_외주용역비(year, month):
-    df = load_sheet(Sheets.외주용역비_DB)
+    # 이미지에 맞춘 기본 색상 배열 (필요시 수정)
+    colors = ['#1f77b4', '#aec7e8', '#d62728', '#ff9896', '#2ca02c']
+
+    for idx, (item, vals) in enumerate(rows):
+        fig.add_trace(go.Scatter(
+            name=item,
+            x=col_hdrs,
+            y=vals,
+            mode='lines+markers+text',
+            text=[f"{v:.1f}" if v else '' for v in vals],
+            textposition='top center',
+            textfont=dict(size=10, color='#4a5568'),
+            marker=dict(size=6, color=colors[idx % len(colors)]),
+            line=dict(width=2, color=colors[idx % len(colors)])
+        ))
+
+    # 차트 레이아웃 설정
+    fig.update_layout(
+        #title=dict(text=f"[{사업장}]", font=dict(size=13, color="#404448", weight='bold')),
+        height=350,
+        margin=dict(l=10, r=120, t=40, b=40),
+        legend=dict(
+            orientation='v', 
+            y=0.5, x=1.02, # 범례를 우측 중앙에 배치
+            xanchor='left', yanchor='middle',
+            font=dict(size=11), bgcolor='rgba(0,0,0,0)',
+        ),
+        xaxis=dict(
+            tickfont=dict(size=10, color='#4a5568'),
+            showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
+            tickangle=45
+        ),
+        yaxis=dict(
+            showgrid=True, gridcolor='#e2e8f0', gridwidth=1,
+            showticklabels=False, showline=False, zeroline=False,
+        ),
+        plot_bgcolor='white', paper_bgcolor='white',
+        font=dict(size=11, family='sans-serif'),
+    )
+    return fig
+
+# ── 1-2) 주요 부재료 단가 추이 (4번 항목 전용) ───────────────────────────
+
+def _build_단가추이_data(year, month):
+    df = load_sheet(Sheets.부재료단가추이_DB) 
     df.columns = df.columns.str.strip()
-    df = _drop_empty(df, '연도', '월')
+    
+    # 12개월 (연, 월) 리스트 명시적 생성
+    recent = []
+    curr_y, curr_m = year, month
+    for _ in range(12):
+        recent.insert(0, (curr_y, curr_m))
+        curr_y, curr_m = _prev(curr_y, curr_m)
+    
+    required_cols = ['구분1', '연도', '월', '값']
+    for col in required_cols:
+        if col not in df.columns:
+            return [(f'오류: [{col}] 컬럼 없음', [0.0] * 12)], [f"'{str(y)[2:]}년 {m:02d}월" for y, m in recent]
+
+    # 데이터 클렌징 (사업장 제외)
+    df['구분1'] = df['구분1'].astype(str).str.strip()
+    df['연도'] = df['연도'].astype(str).str.replace('년', '', regex=False).str.replace(' ', '', regex=False)
+    df['연도'] = pd.to_numeric(df['연도'], errors='coerce').fillna(0).astype(int)
+    df['월'] = df['월'].astype(str).str.replace('월', '', regex=False).str.replace(' ', '', regex=False)
+    df['월'] = pd.to_numeric(df['월'], errors='coerce').fillna(0).astype(int)
     df['값'] = df['값'].apply(_parse)
-    vm = df.set_index(['구분1', '구분2', '연도', '월'])['값'].to_dict()
 
-    연도_in_db = sorted(df['연도'].unique().tolist())
-    recent    = _recent_months(year, month)
-    col_hdrs  = _build_col_hdrs(연도_in_db, recent, annual_suffix='년 평균')
-    prev_yr, prev_mo = _prev(year, month)
+    vm = df.set_index(['구분1', '연도', '월'])['값'].to_dict()
+    col_hdrs = [f"'{str(y)[2:]}년 {m:02d}월" for y, m in recent]
 
-    groups_order = list(dict.fromkeys(df['구분1'].tolist()))
-
-    def raw(g1, g2, yr, mo):
-        return vm.get((g1, g2, yr, mo), 0.0)
-
-    def yr_avg(g1, g2, yr):
-        vals = [raw(g1, g2, yr, m) for m in range(1, 13) if (g1, g2, yr, m) in vm]
-        return sum(vals) / len(vals) if vals else 0.0
-
-    def make_item_vals(g1, g2):
-        v = [yr_avg(g1, g2, yr) for yr in 연도_in_db]
-        v += [raw(g1, g2, yr_c, mo_c) for yr_c, mo_c in recent]
-        v.append(raw(g1, g2, year, month) - raw(g1, g2, prev_yr, prev_mo))
-        return v
-
-    def make_rate_vals(g1, qty_key, cost_key, scale):
-        def rate(yr, mo):
-            q = raw(g1, qty_key, yr, mo)
-            return raw(g1, cost_key, yr, mo) * scale / q if q else 0.0
-
-        v = []
-        for yr in 연도_in_db:
-            q_avg = yr_avg(g1, qty_key, yr)
-            c_avg = yr_avg(g1, cost_key, yr)
-            v.append(c_avg * scale / q_avg if q_avg else 0.0)
-        v += [rate(yr_c, mo_c) for yr_c, mo_c in recent]
-        v.append(rate(year, month) - rate(prev_yr, prev_mo))
-        return v
-
-    def get_keys(g1):
-        types = df[df['구분1'] == g1]['구분2'].unique().tolist()
-        qty_key  = next((k for k in types if any(kw in k for kw in _외주_QTY_KW)), None)
-        cost_key = next((k for k in types if k != qty_key), None)
-        if qty_key is None or cost_key is None:
-            raise ValueError(f"외주용역비 구분2 키 자동 감지 실패: {types}")
-        return qty_key, cost_key
-
-    groups = []
-    for g1 in groups_order:
-        qty_key, cost_key = get_keys(g1)
-        scale = next((v for kw, v in _외주_단가_배율.items() if kw in qty_key), 100)
-        metrics = [
-            (qty_key,  make_item_vals(g1, qty_key),                  'qty'),
-            (cost_key, make_item_vals(g1, cost_key),                 'cost'),
-            ('단가',   make_rate_vals(g1, qty_key, cost_key, scale), 'rate'),
-        ]
-        groups.append((g1, metrics))
-
-    return groups, col_hdrs
-
-
-def _외주용역비_to_html(groups, col_hdrs):
-    n_cols = len(col_hdrs) + 2  # 구분 + 연도/월 컬럼들 + 전월비
-    th = (f'<th style="{_TH}">구분</th>' +
-          ''.join(f'<th style="{_TH}">{h}</th>' for h in col_hdrs) +
-          f'<th style="{_TH}">전월비</th>')
-
-    body = ''
-    for grp_name, metrics in groups:
-        body += f'<tr><td colspan="{n_cols}" style="{ROW_GRP}">{grp_name}</td></tr>'
-        for metric_name, vals, kind in metrics:
-            lbl_s = _TD_LBL if kind == 'rate' else ROW_ITEM
-            cells = f'<td style="{lbl_s}">{metric_name}</td>'
-            last = len(vals) - 1
-            for j, v in enumerate(vals):
-                s = (_TD_RED if v < 0 else _TD_NUM) if j == last else _TD_NUM
-                cells += f'<td style="{s}">{_fmt(v)}</td>'
-            body += f'<tr>{cells}</tr>'
-
-    return _html_table(f'<tr>{th}</tr>', body)
-
-
-# ── 3) 멕시코향 환차소급 ─────────────────────────────────────────────────
-
-def _build_환차소급(year, month):
-    df = load_sheet(Sheets.멕시코향환차소급_DB)
-    df.columns = df.columns.str.strip()
-    df = _drop_empty(df, '연도', '월')
-    df['값'] = df['값'].apply(_parse)
-    vm = df.set_index(['연도', '월', '구분1', '구분2'])['값'].to_dict()
-
-    연도_in_db = sorted(df['연도'].unique().tolist())
-    g2_types = list(dict.fromkeys(df['구분2'].tolist()))  # SGAM, MCM 순서 유지
-
-    def raw(yr, mo, g1, g2):
-        return vm.get((yr, mo, g1, g2), 0.0)
-
-    def total(yr, mo, g1):
-        return sum(raw(yr, mo, g1, g2) for g2 in g2_types)
-
-    def make_note(yr, mo, g1):
-        parts = [f"{g2} {int(round(raw(yr, mo, g1, g2))):,} USD"
-                 for g2 in g2_types if raw(yr, mo, g1, g2) != 0.0]
-        return ("- " + ", ".join(parts)) if parts else ""
+    items = list(dict.fromkeys(df['구분1'].tolist()))
+    if not items:
+        items = ['데이터 없음 (DB 시트 연결 확인 필요)']
 
     rows = []
-
-    for yr in 연도_in_db:
-        if yr > year:
-            break
-        max_mo = month if yr == year else 12
-        yr_net = 0.0
-
-        for mo in range(1, max_mo + 1):
-            실적_t   = total(yr, mo, '실적')
-            취소_t   = total(yr, mo, '예상분 취소')
-            예상분_t = total(yr, mo, '예상분')
-            monthly_net = 실적_t + 취소_t + 예상분_t
-
-            if 실적_t == 0.0 and 취소_t == 0.0 and 예상분_t == 0.0:
-                continue
-
-            yr_net += monthly_net
-            prev_yr, prev_mo = _prev(yr, mo)
-
-            rows.append(('month_hdr', f"'{str(yr)[2:]}.{mo}월", monthly_net, ''))
-
-            if 실적_t != 0.0:
-                rows.append(('실적',
-                              f"'{str(prev_yr)[2:]}.{prev_mo}월분",
-                              실적_t, make_note(yr, mo, '실적')))
-            if 취소_t != 0.0:
-                rows.append(('취소',
-                              f"'{str(prev_yr)[2:]}.{prev_mo}월 예상분 취소",
-                              취소_t, make_note(yr, mo, '예상분 취소')))
-            if 예상분_t != 0.0:
-                rows.append(('예상',
-                              f"'{str(yr)[2:]}.{mo}월 예상분",
-                              예상분_t, make_note(yr, mo, '예상분')))
-
-        rows.append(('cum', f"'{str(yr)[2:]}년 환차소급 누계액", yr_net, ''))
-
-    return rows
-
-
-def _환차소급_to_html(rows):
-    th = (f'<th style="{_TH}">구분</th>'
-          f'<th style="{_TH}">금액</th>'
-          f'<th style="{_TH}">비고</th>')
-
-    body = ''
-    for kind, label, amount, note in rows:
-        if kind == 'month_hdr':
-            _sec_num = ROW_SEC + (f';text-align:right;color:{_C_RED}' if amount < 0 else ';text-align:right')
-            cells = (f'<td style="{ROW_SEC}">{label}</td>'
-                     f'<td style="{_sec_num}">{_fmt(amount)}</td>'
-                     f'<td style="{ROW_SEC}"></td>')
-        elif kind == '취소':
-            cells = (f'<td style="{ROW_ITEM}">{label}</td>'
-                     f'<td style="{_TD_RED}">{_fmt(amount)}</td>'
-                     f'<td style="{_TD_LBL}">{note}</td>')
-        elif kind in ('실적', '예상'):
-            cells = (f'<td style="{ROW_ITEM}">{label}</td>'
-                     f'<td style="{_TD_NUM}">{_fmt(amount)}</td>'
-                     f'<td style="{_TD_LBL}">{note}</td>')
-        else:  # cum
-            num_s = ROW_CAL_RED if amount < 0 else ROW_CAL_NUM
-            cells = (f'<td style="{ROW_CAL_LBL}">{label}</td>'
-                     f'<td style="{num_s}">{_fmt(amount)}</td>'
-                     f'<td style="{ROW_CAL_LBL}"></td>')
-        body += f'<tr>{cells}</tr>'
-
-    return _html_table(f'<tr>{th}</tr>', body)
-
-
-# ── 4) 원주-멕시코 월별 환차소급 현황 ────────────────────────────────────
-
-def _build_원주멕시코환차소급(year, month):
-    df = load_sheet(Sheets.원주멕시코환차소급_DB)
-    df.columns = df.columns.str.strip()
-    df = _drop_empty(df, '연도', '월')
-
-    df_txt = df[df['구분1'] == '지급월'].copy()
-    df_num = df[df['구분1'] != '지급월'].copy()
-    df_num['값'] = df_num['값'].apply(_parse)
-
-    vm = df_num.set_index(['연도', '월', '구분1'])['값'].to_dict()
-    tm = {(r['연도'], r['월']): str(r['값']).strip() for _, r in df_txt.iterrows()}
-
-    연도_in_db = sorted(df['연도'].unique().tolist())
-    recent     = _recent_months(year, month)
-    col_hdrs   = _build_col_hdrs(연도_in_db, recent, annual_suffix='년 평균')
-
-    def raw(yr, mo, g1):
-        return vm.get((yr, mo, g1), 0.0)
-
-    def text(yr, mo):
-        sv = str(tm.get((yr, mo), '')).strip()
-        return '' if sv in ('0', '0.0', 'nan', '', 'None') else sv
-
-    def yr_avg(g1, yr):
-        vals = [raw(yr, m, g1) for m in range(1, 13) if raw(yr, m, g1) != 0.0]
-        return sum(vals) / len(vals) if vals else 0.0
-
-    def diff_krw(yr, mo):
-        last = raw(yr, mo, '최종환율')
-        return (last - raw(yr, mo, '기준환율')) if last else 0.0
-
-    def diff_usd(yr, mo):
-        last = raw(yr, mo, '최종환율')
-        return diff_krw(yr, mo) / last if last else 0.0
-
-    def yr_avg_diff_krw(yr):
-        avg_last = yr_avg('최종환율', yr)
-        return (avg_last - yr_avg('기준환율', yr)) if avg_last else 0.0
-
-    def yr_avg_diff_usd(yr):
-        avg_last = yr_avg('최종환율', yr)
-        return yr_avg_diff_krw(yr) / avg_last if avg_last else 0.0
-
-    def make_num_row(g1):
-        v  = [yr_avg(g1, yr) for yr in 연도_in_db]
-        v += [raw(yr_c, mo_c, g1) for yr_c, mo_c in recent]
-        return v
-
-    rows = [
-        ('소급금액', None,
-         make_num_row('소급금액'), 'num', 0),
-        ('매출액',   None,
-         make_num_row('매출액'),   'num', 0),
-        ('환율차이', 'KRW',
-         [yr_avg_diff_krw(yr) for yr in 연도_in_db] + [diff_krw(yr_c, mo_c) for yr_c, mo_c in recent],
-         'num', 0),
-        ('환율차이', 'USD',
-         [yr_avg_diff_usd(yr) for yr in 연도_in_db] + [diff_usd(yr_c, mo_c) for yr_c, mo_c in recent],
-         'num', 2),
-        ('기준환율', None,
-         make_num_row('기준환율'), 'num', 0),
-        ('최종환율', None,
-         make_num_row('최종환율'), 'num', 0),
-        ('지급월',   None,
-         [''] * len(연도_in_db) + [text(yr_c, mo_c) for yr_c, mo_c in recent],
-         'text', 0),
-    ]
+    for item in items:
+        vals = [vm.get((item, y, m), 0.0) for y, m in recent]
+        rows.append((item, vals))
 
     return rows, col_hdrs
 
 
-def _원주멕시코환차소급_to_html(rows, col_hdrs):
-    th = (f'<th style="{_TH}" colspan="2">구분</th>' +
-          ''.join(f'<th style="{_TH}">{h}</th>' for h in col_hdrs))
+def _build_단가추이_table_html(rows, col_hdrs):
+    th = f'<th style="{_TH}"></th>'
+    for h in col_hdrs:
+        th += f'<th style="{_TH}">{h}</th>'
+    thead = f'<tr>{th}</tr>'
 
     body = ''
-    for label1, label2, vals, kind, decimal in rows:
-        is_krw = (label1 == '환율차이' and label2 == 'KRW')
-        is_usd = (label1 == '환율차이' and label2 == 'USD')
-
-        cells = ''
-        if is_krw:
-            cells += f'<td style="{_TD_LBL}" rowspan="2">환율차이</td>'
-            cells += f'<td style="{ROW_ITEM}">KRW</td>'
-        elif is_usd:
-            cells += f'<td style="{ROW_ITEM}">USD</td>'
-        else:
-            cells += f'<td style="{_TD_LBL}" colspan="2">{label1}</td>'
-
-        if kind == 'text':
-            for v in vals:
-                cells += f'<td style="{_TD_LBL}">{v}</td>'
-        else:
-            for v in vals:
-                cells += f'<td style="{_TD_NUM}">{_fmt(v, decimal=decimal)}</td>'
-
+    for item, vals in rows:
+        cells = f'<td style="{ROW_ITEM}">{item}</td>'
+        for v in vals:
+            cells += f'<td style="{_TD_NUM}">{_fmt(v)}</td>'
         body += f'<tr>{cells}</tr>'
 
+    return _html_table(thead, body)
+
+
+def _build_단가추이_chart(rows, col_hdrs):
+    fig = go.Figure()
+
+    colors = ['#1f77b4', '#ff7f0e', '#7f7f7f', '#bcbd22', '#ffbb78', '#d62728']
+
+    for idx, (item, vals) in enumerate(rows):
+        fig.add_trace(go.Scatter(
+            name=item,
+            x=col_hdrs,
+            y=vals,
+            mode='lines+markers+text',
+            text=[f"{v:.1f}" if v else '' for v in vals],
+            textposition='top center',
+            textfont=dict(size=10, color='#4a5568'),
+            marker=dict(size=6, color=colors[idx % len(colors)]),
+            line=dict(width=2, color=colors[idx % len(colors)])
+        ))
+
+    fig.update_layout(
+        height=350,
+        margin=dict(l=10, r=120, t=40, b=40),
+        legend=dict(
+            orientation='v', 
+            y=0.5, x=1.02, 
+            xanchor='left', yanchor='middle',
+            font=dict(size=11), bgcolor='rgba(0,0,0,0)',
+        ),
+        xaxis=dict(
+            tickfont=dict(size=10, color='#4a5568'),
+            showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
+            tickangle=45
+        ),
+        yaxis=dict(
+            showgrid=True, gridcolor='#e2e8f0', gridwidth=1,
+            showticklabels=False, showline=False, zeroline=False,
+        ),
+        plot_bgcolor='white', paper_bgcolor='white',
+        font=dict(size=11, family='sans-serif'),
+    )
+    return fig
+
+# ── 클레임 현황 (월 평균 & 당월) ──────────────────────────────────────────
+
+def _build_월평균클레임_data(year, month):
+    df = load_sheet(Sheets.월평균클레임_DB) 
+    df.columns = df.columns.str.strip()
+
+    required_cols = ['구분1', '연도', '월', '값']
+    for col in required_cols:
+        if col not in df.columns:
+            return [('item', f'오류: [{col}] 없음', [0.0] * 4)], [f"'{str(year-3)[2:]}년", f"'{str(year-2)[2:]}년", f"'{str(year-1)[2:]}년", f"'{str(year)[2:]}년"]
+
+    # 데이터 클렌징
+    df['구분1'] = df['구분1'].astype(str).str.strip()
+    df['연도'] = df['연도'].astype(str).str.replace('년', '', regex=False).str.replace(' ', '', regex=False)
+    df['연도'] = pd.to_numeric(df['연도'], errors='coerce').fillna(0).astype(int)
+    
+    # 값 파싱 및 백만원 단위 환산
+    df = df.copy()
+    df['값'] = df['값'].apply(_parse) / 1_000_000.0
+    df['값'] = df['값'].round(0).astype(int)
+    #df['값'] = df['값'].apply(_parse)
+
+    # 연도별 월평균 계산
+    avg_df = df.groupby(['구분1', '연도'])['값'].mean().reset_index()
+    vm = avg_df.set_index(['구분1', '연도'])['값'].to_dict()
+
+    # 최근 4개년 (예: '23, '24, '25, '26)
+    years = [year - 3, year - 2, year - 1, year]
+    col_hdrs = [f"'{str(y)[2:]}년" for y in years]
+
+    items = ['선재', '봉강', '부산', '대구', '글로벌']
+    rows = []
+    totals = [0.0] * len(years)
+
+    for item in items:
+        vals = [vm.get((item, y), 0.0) for y in years]
+        rows.append(('item', item, vals))
+        for i, v in enumerate(vals):
+            totals[i] += v
+
+    rows.append(('total', '합계', totals))
+    return rows, col_hdrs
+
+def _build_월평균클레임_table_html(rows, col_hdrs):
+    th = f'<th style="{_TH}">구분</th>' + ''.join(f'<th style="{_TH}">{h}</th>' for h in col_hdrs)
+    body = ''
+    for kind, label, vals in rows:
+        lbl_s = ROW_HDR_LBL if kind == 'total' else ROW_ITEM
+        num_s = ROW_HDR_NUM if kind == 'total' else _TD_NUM
+        
+        cells = f'<td style="{lbl_s}">{label}</td>'
+        for v in vals:
+            formatted_v = f"{v:,.0f}" if v != 0 else "0"
+            cells += f'<td style="{num_s}">{formatted_v}</td>'
+        body += f'<tr>{cells}</tr>'
+        
     return _html_table(f'<tr>{th}</tr>', body)
 
+
+def _build_당월클레임_data(year, month):
+    df = load_sheet(Sheets.당월클레임_DB)
+    df.columns = df.columns.str.strip()
+
+    required_cols = ['구분1', '구분2', '연도', '월', '값']
+    for col in required_cols:
+        if col not in df.columns:
+            return [('item', f'오류: [{col}] 없음', [0.0] * 4)], ["오류"] * 4
+
+    # 데이터 클렌징
+    df['구분1'] = df['구분1'].astype(str).str.strip()
+    df['구분2'] = df['구분2'].astype(str).str.strip()
+    df['연도'] = df['연도'].astype(str).str.replace('년', '', regex=False).str.replace(' ', '', regex=False)
+    df['연도'] = pd.to_numeric(df['연도'], errors='coerce').fillna(0).astype(int)
+    df['월'] = df['월'].astype(str).str.replace('월', '', regex=False).str.replace(' ', '', regex=False)
+    df['월'] = pd.to_numeric(df['월'], errors='coerce').fillna(0).astype(int)
+    
+    # 값 파싱 및 백만원 단위 환산
+    df = df.copy()
+    df['값'] = df['값'].apply(_parse) / 1_000_000.0
+    df['값'] = df['값'].round(0).astype(int)
+    #df['값'] = df['값'].apply(_parse)
+
+    vm = df.groupby(['구분1', '구분2', '연도', '월'])['값'].sum().to_dict()
+
+    # 최근 3개월 (과거순 -> 당월)
+    recent = []
+    curr_y, curr_m = year, month
+    for _ in range(3):
+        recent.insert(0, (curr_y, curr_m))
+        curr_y, curr_m = _prev(curr_y, curr_m)
+
+    col_hdrs = [f"'{str(y)[2:]}년 {m}월" for y, m in recent] + ['증감']
+
+    items = ['선재', '봉강', '부산', '대구', '글로벌']
+    sub_items = ['선별비', '불량 보상']
+
+    rows = []
+    grand_totals = {'total': [0.0]*3, '선별비': [0.0]*3, '불량 보상': [0.0]*3}
+
+    for item in items:
+        item_totals = [0.0] * 3
+        sub_rows = []
+        for sub in sub_items:
+            vals = [vm.get((item, sub, y, m), 0.0) for y, m in recent]
+            for i, v in enumerate(vals):
+                item_totals[i] += v
+                grand_totals[sub][i] += v
+                grand_totals['total'][i] += v
+            
+            # 증감 계산 (최근월 - 직전월)
+            diff = vals[-1] - vals[-2] if len(vals) >= 2 else 0.0
+            sub_rows.append(('sub', sub, vals + [diff]))
+
+        diff_total = item_totals[-1] - item_totals[-2] if len(item_totals) >= 2 else 0.0
+        rows.append(('item', item, item_totals + [diff_total]))
+        rows.extend(sub_rows)
+
+    # 전체 합계 행 구성
+    diff_g = grand_totals['total'][-1] - grand_totals['total'][-2]
+    rows.append(('total', '합계', grand_totals['total'] + [diff_g]))
+    
+    for sub in sub_items:
+        diff_s = grand_totals[sub][-1] - grand_totals[sub][-2]
+        rows.append(('sub', sub, grand_totals[sub] + [diff_s]))
+
+    return rows, col_hdrs
+
+def _build_당월클레임_table_html(rows, col_hdrs):
+    th = f'<th style="{_TH}">클레임비</th>' + ''.join(f'<th style="{_TH}">{h}</th>' for h in col_hdrs)
+    body = ''
+    for kind, label, vals in rows:
+        if kind == 'total':
+            lbl_s, num_s = ROW_HDR_LBL, ROW_HDR_NUM
+        elif kind == 'item':
+            lbl_s, num_s = ROW_ITEM, _TD_NUM
+        else:
+            lbl_s, num_s = f'{ROW_ITEM}; color: #4b5563;', _TD_NUM
+            label = f'&nbsp;&nbsp;&nbsp;&nbsp; {label}'
+
+        cells = f'<td style="{lbl_s}">{label}</td>'
+        for i, v in enumerate(vals):
+            is_diff = (i == len(vals) - 1) # 증감 컬럼 여부
+            
+            # 음수일 경우 붉은색 텍스트 적용
+            s = ROW_HDR_RED if (kind == 'total' and is_diff and v < 0) else \
+                _TD_RED if (is_diff and v < 0) else num_s
+            
+            formatted_v = f"{v:,.0f}" if v != 0 else "0"
+            if formatted_v == "-0": formatted_v = "0"
+            
+            cells += f'<td style="{s}">{formatted_v}</td>'
+        body += f'<tr>{cells}</tr>'
+        
+    return _html_table(f'<tr>{th}</tr>', body)
+
+# ── 3) 영업외 비용 내역 (최근 3개월) ──────────────────────────────────────
+
+def _build_영업외비용_data(year, month):
+    df = load_sheet(Sheets.영업외비용_DB)
+    df.columns = df.columns.str.strip()
+    
+    required_cols = ['구분1', '구분2', '구분3', '연도', '월', '값']
+    for col in required_cols:
+        if col not in df.columns:
+            if col == '구분3':
+                df['구분3'] = '' # 구분3이 없는 DB 구조일 경우 빈 문자열로 안전하게 처리
+            else:
+                return [('item', f'오류: [{col}] 없음', [0.0] * 4)], ["오류"] * 4
+
+    # 데이터 클렌징
+    df['구분1'] = df['구분1'].astype(str).str.strip()
+    df['구분2'] = df['구분2'].astype(str).str.strip()
+    df['구분3'] = df['구분3'].fillna('').astype(str).str.strip()
+    
+    df['연도'] = df['연도'].astype(str).str.replace('년', '', regex=False).str.replace(' ', '', regex=False)
+    df['연도'] = pd.to_numeric(df['연도'], errors='coerce').fillna(0).astype(int)
+    df['월'] = df['월'].astype(str).str.replace('월', '', regex=False).str.replace(' ', '', regex=False)
+    df['월'] = pd.to_numeric(df['월'], errors='coerce').fillna(0).astype(int)
+    
+    # 값 파싱 및 백만원 단위 환산
+    df = df.copy()
+    df['값'] = df['값'].apply(_parse) / 1_000_000.0
+    df['값'] = df['값'].round(0).astype(int)
+    #df['값'] = df['값'].apply(_parse)
+
+    vm = df.groupby(['구분1', '구분2', '구분3', '연도', '월'])['값'].sum().to_dict()
+    
+    # 최근 3개월 (이미지 요청사항에 따라 역순 배열: 당월 -> 전월 -> 전전월)
+    recent = []
+    curr_y, curr_m = year, month
+    for _ in range(3):
+        recent.append((curr_y, curr_m))
+        curr_y, curr_m = _prev(curr_y, curr_m)
+        
+    col_hdrs = [f"'{str(y)[2:]}년 {m}월 실적" for y, m in recent] + ['증감']
+    
+    rows = []
+    grand_totals = [0.0] * 3
+    
+    # 구분1(상위구분) 목록 추출 (순서 유지를 위해 unique 사용)
+    g1_list = df[df['구분1'] != '']['구분1'].unique()
+    
+    for g1 in g1_list:
+        g1_totals = [0.0] * 3
+        g2_list = df[df['구분1'] == g1]['구분2'].unique()
+        
+        for g2 in g2_list:
+            g2_totals = [0.0] * 3
+            g3_list = df[(df['구분1'] == g1) & (df['구분2'] == g2)]['구분3'].unique()
+            
+            # 하위 항목(고철매각 등)이 존재하는지 여부 확인
+            has_sub = len([g for g in g3_list if g != '']) > 0
+            sub_rows = []
+            
+            for g3 in g3_list:
+                vals = [vm.get((g1, g2, g3, y, m), 0.0) for y, m in recent]
+                
+                # 하드코딩 없이 하위->중위->상위 순으로 누적 합산(Roll-up)
+                for i, v in enumerate(vals):
+                    g2_totals[i] += v
+                    g1_totals[i] += v
+                    grand_totals[i] += v
+                    
+                if has_sub:
+                    label = '기타' if g3 == '' else g3
+                    # 이미지의 증감 계산 로직 반영: 당월(0번 인덱스) - 전전월(2번 인덱스)
+                    diff = vals[0] - vals[2] if len(vals) == 3 else 0.0
+                    sub_rows.append(('sub', label, vals + [diff]))
+                    
+            # 중위구분 행 추가
+            diff_g2 = g2_totals[0] - g2_totals[2] if len(g2_totals) == 3 else 0.0
+            rows.append(('item', g2, g2_totals + [diff_g2]))
+            
+            # 하위구분이 있으면 중위구분 아래에 펼쳐서 추가
+            if has_sub:
+                rows.extend(sub_rows)
+                
+        # 상위구분 합계 행 추가 (예: 기타비용 합계)
+        diff_g1 = g1_totals[0] - g1_totals[2] if len(g1_totals) == 3 else 0.0
+        rows.append(('total', f'{g1} 합계', g1_totals + [diff_g1]))
+        
+    # 총 합계 행 추가
+    diff_grand = grand_totals[0] - grand_totals[2] if len(grand_totals) == 3 else 0.0
+    rows.append(('total', '총 합계', grand_totals + [diff_grand]))
+    
+    return rows, col_hdrs
+
+
+def _build_영업외비용_table_html(rows, col_hdrs):
+    th = f'<th style="{_TH}">구분</th>' + ''.join(f'<th style="{_TH}">{h}</th>' for h in col_hdrs)
+    body = ''
+    
+    for kind, label, vals in rows:
+        if kind == 'total':
+            lbl_s, num_s = ROW_HDR_LBL, ROW_HDR_NUM
+        elif kind == 'item':
+            lbl_s, num_s = ROW_ITEM, _TD_NUM
+        else: # sub (고철매각작업비 등 들여쓰기)
+            lbl_s, num_s = f'{ROW_ITEM}; color: #4b5563;', _TD_NUM
+            label = f'&nbsp;&nbsp;&nbsp;&nbsp; {label}'
+            
+        cells = f'<td style="{lbl_s}">{label}</td>'
+        for i, v in enumerate(vals):
+            is_diff = (i == len(vals) - 1)
+            
+            # 음수 붉은색 처리
+            s = ROW_HDR_RED if (kind == 'total' and v < 0) else \
+                _TD_RED if (v < 0) else num_s
+                
+            formatted_v = f"{v:,.0f}"  
+            if formatted_v == "-0": formatted_v = "0"
+            
+            cells += f'<td style="{s}">{formatted_v}</td>'
+        body += f'<tr>{cells}</tr>'
+        
+    return _html_table(f'<tr>{th}</tr>', body)
 
 # ── render_page ───────────────────────────────────────────────────────────
 
@@ -490,53 +544,96 @@ def render_page(app, year_state, month_state):
         )
     app.If(lambda: True, _render_title)
 
-    tabs = app.tabs(["멕시코向 운반비", "외주용역비", "멕시코向 환차소급"])
+    tabs = app.tabs(["사용량 원단위 추이", "클레임 현황", "영업외 비용 내역"])
 
     with tabs[0]:
-        def _render_운반비():
+        def _render_사용량():
             year, month = int(year_state.value), int(month_state.value)
-            rows, col_spec = _build_운반비(year, month)
-            memo = _get_memo(Sheets.운반실적및컨테이너단가_메모, year, month)
+            unit_text = '※ 사용량원단위 : 부재료사용량/공정처리량'
+            
+            # 1~3번 항목 (사업장별 부재료 사용량)
+            locations = [
+                ('1) 부재료 사용량 원단위 (포항)', '포항'),
+                ('2) 부재료 사용량 원단위 (충주)', '충주'),
+                ('3) 부재료 사용량 원단위 (충주2)', '충주2')
+            ]
+
+            for title, loc in locations:
+                rows, hdrs = _build_부재료_data(loc, year, month)
+                
+                app.markdown(
+                    _layout100(title,
+                              _build_부재료_table_html(loc, rows, hdrs),
+                              "",
+                              unit=unit_text),
+                    unsafe_allow_html=True,
+                )
+                
+                fig = _build_부재료_chart(loc, rows, hdrs)
+                app.plotly_chart(fig, use_container_width=True)
+                
+
+                app.markdown('<div style="margin-top:48px;"></div>', unsafe_allow_html=True)
+
+            rows_단가, hdrs_단가 = _build_단가추이_data(year, month)
+            
             app.markdown(
-                _layout64('1) 운반 실적 및 컨테이너당 단가 추이',
-                          _운반비_to_html(rows, col_spec),
-                          memo,
-                          unit='[단위: EA, 천원]'),
+                _layout100('4) 단가 추이',
+                          _build_단가추이_table_html(rows_단가, hdrs_단가),
+                          ""),
                 unsafe_allow_html=True,
             )
-        app.If(lambda: True, _render_운반비)
+            
+            fig_단가 = _build_단가추이_chart(rows_단가, hdrs_단가)
+            app.plotly_chart(fig_단가, use_container_width=True)
+
+        app.If(lambda: True, _render_사용량)
 
     with tabs[1]:
-        def _render_외주():
+        def _render_클레임():
             year, month = int(year_state.value), int(month_state.value)
-            groups, col_hdrs = _build_외주용역비(year, month)
-            memo = _get_memo(Sheets.외주용역비_메모, year, month)
+            unit_text = '(단위 : 백만원)'
+
+            # 1. 월 평균 클레임 지급액
+            rows_월평균, hdrs_월평균 = _build_월평균클레임_data(year, month)
             app.markdown(
-                _layout64('1) 외주용역비',
-                          _외주용역비_to_html(groups, col_hdrs),
-                          memo,
-                          unit='[단위: 만개, 백만원, 원]'),
+                _layout64('1) 월 평균 클레임 지급액',
+                          _build_월평균클레임_table_html(rows_월평균, hdrs_월평균),
+                          "",
+                          unit=unit_text),
                 unsafe_allow_html=True,
             )
-        app.If(lambda: True, _render_외주)
+
+            # 항목 간 여백
+            app.markdown('<div style="margin-top:48px;"></div>', unsafe_allow_html=True)
+
+            # 2. 당월 클레임 내역
+            rows_당월, hdrs_당월 = _build_당월클레임_data(year, month)
+            app.markdown(
+                _layout64('2) 당월 클레임 내역',
+                          _build_당월클레임_table_html(rows_당월, hdrs_당월),
+                          "",
+                          unit=unit_text),
+                unsafe_allow_html=True,
+            )
+            
+        app.If(lambda: True, _render_클레임)
 
     with tabs[2]:
-        def _render_환차():
+        def _render_영업외비용():
             year, month = int(year_state.value), int(month_state.value)
-            rows = _build_환차소급(year, month)
-            memo = _get_memo(Sheets.멕시코향환차소급_메모, year, month)
-            rows2, col_hdrs2 = _build_원주멕시코환차소급(year, month)
-            memo2 = _get_memo(Sheets.원주멕시코환차소급_메모, year, month)
+            
+            # 1. 데이터 및 메모 가져오기
+            rows, hdrs = _build_영업외비용_data(year, month)
+            memo = _get_memo(Sheets.영업외비용_메모, year, month)
+            
+            # 2. _layout64 컴포넌트에 표와 메모 함께 렌더링
             app.markdown(
-                _layout64('1) 국내 월별 환차소급',
-                          _환차소급_to_html(rows),
+                _layout64('1) 영업외 비용 (최근 3개월)',
+                          _build_영업외비용_table_html(rows, hdrs),
                           memo,
-                          unit='[단위: USD]') +
-                '<div style="margin-top:24px"></div>' +
-                _layout64('2) 국내-멕시코(SGAM) 월별 환차 소급 현황',
-                          _원주멕시코환차소급_to_html(rows2, col_hdrs2),
-                          memo2,
-                          unit='[단위: USD]'),
+                          unit='(단위 : 백만원)'),
                 unsafe_allow_html=True,
             )
-        app.If(lambda: True, _render_환차)
+            
+        app.If(lambda: True, _render_영업외비용)

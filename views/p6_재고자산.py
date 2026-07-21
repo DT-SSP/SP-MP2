@@ -18,7 +18,7 @@ from views.common import (
 # ── 공통 상수 ─────────────────────────────────────────────────────────────
 
 _N_RECENT = 3
-_SUM_KW   = ('금액', '중량', '수량')
+_SUM_KW   = ('금액', '중량')
 
 
 
@@ -54,6 +54,11 @@ def _build_재고현황(year, month):
     df['값']   = df['값'].apply(_parse)
     df['구분1'] = df['구분1'].astype(str).str.strip()
     df['구분2'] = df['구분2'].astype(str).str.strip()
+
+    # '구분2'에 '금액'이 포함된 행의 '값'을 1,000,000으로 나누고 반올림
+    df.loc[df['구분2'].str.contains('금액'), '값'] = (df['값'] / 1_000_000).round()
+    # '구분2'에 '중량'이 포함된 행의 '값'을 1,000으로 나누고 반올림
+    df.loc[df['구분2'].str.contains('중량'), '값'] = (df['값'] / 1_000).round()
 
     vm = df.set_index(['구분1', '구분2', '연도', '월'])['값'].to_dict()
 
@@ -195,9 +200,11 @@ def _load_연령별(year, month):
     df.columns = df.columns.str.strip()
     df = _drop_empty(df, '연도', '월')
     df['값'] = df['값'].apply(_parse)
-    for c in ['구분1', '구분2', '구분3']:
-        df[c] = df[c].astype(str).str.strip()
-    df['구분4'] = df['구분4'].fillna('').astype(str).str.strip()
+    df['값'] = (df['값'] / 1_000).round()
+
+    for c in ['구분1', '구분2']:
+        if c in df.columns:
+            df[c] = df[c].astype(str).str.strip()
 
     연도_in_db  = sorted(df['연도'].unique().tolist())
     recent_curr = _recent_months(year, month, n=_N_RECENT)
@@ -214,7 +221,6 @@ def _load_연령별(year, month):
         'prev': (prev_yr, prev_mo),
     }
     return df, col_spec
-
 
 def _col_labels(col_spec):
     labels  = [f"'{str(yr)[2:]}년말" for yr in col_spec['past_years']]
@@ -237,13 +243,12 @@ def _build_원재료_rows(df, col_spec):
     prev_yr, prev_mo = col_spec['prev']
 
     df1 = df[df['구분1'] == '원재료'].copy()
-    agg4 = df1.groupby(['구분2', '구분3', '구분4', '연도', '월'])['값'].sum().to_dict()
-    agg3 = df1.groupby(['구분2', '구분4', '연도', '월'])['값'].sum().to_dict()
-    agg1 = df1.groupby(['구분4', '연도', '월'])['값'].sum().to_dict()
+    agg = df1.groupby(['구분2', '연도', '월'])['값'].sum().to_dict()
 
-    def v4(g2, g3, g4, yr, mo): return agg4.get((g2, g3, g4, yr, mo), 0.0)
-    def v3(g2, g4, yr, mo):     return agg3.get((g2, g4, yr, mo), 0.0)
-    def v1(g4, yr, mo):         return agg1.get((g4, yr, mo), 0.0)
+    def v(g2, yr, mo): return agg.get((g2, yr, mo), 0.0)
+    def v_정상(yr, mo): return v('3개월 이하', yr, mo) + v('3개월 초과', yr, mo)
+    def v_장기(yr, mo): return v('6개월 초과', yr, mo) + v('1년 초과', yr, mo)
+    def v_총계(yr, mo): return v_정상(yr, mo) + v_장기(yr, mo)
 
     def cvs(fn, *keys):
         return ([fn(*keys, yr, 12) for yr in past_years]
@@ -252,52 +257,36 @@ def _build_원재료_rows(df, col_spec):
     def mom(fn, *keys):
         return fn(*keys, curr_yr, curr_mo) - fn(*keys, prev_yr, prev_mo)
 
-    def pct_col(장기_fn, 장기_keys, total_fn, total_keys):
+    def pct_col(장기_fn, total_fn):
         def p(yr, mo):
-            t = total_fn(*total_keys, yr, mo)
-            return 장기_fn(*장기_keys, yr, mo) / t * 100 if t else 0.0
+            t = total_fn(yr, mo)
+            return 장기_fn(yr, mo) / t * 100 if t else 0.0
         p_vals = [p(yr, 12) for yr in past_years] + [p(yr_c, mo_c) for yr_c, mo_c in recent_curr]
         p_mom  = p(curr_yr, curr_mo) - p(prev_yr, prev_mo)
         return p_vals, p_mom
 
-    G3_정상 = ['3개월 이하', '3개월 초과']
-    G3_장기 = ['6개월 초과', '1년 초과']
-    UNITS   = ['ton', 'ea']
+    def detail_row(g2):
+        sub_rows = [('ton', cvs(v, g2), mom(v, g2), 0, False)]
+        return {'label': g2, 'kind': 'detail', 'sub_rows': sub_rows}
 
-    def detail_row(g2, g3):
-        sub_rows = []
-        for g4 in UNITS:
-            dec = 0 if g4 == 'ton' else 1
-            sub_rows.append((g4, cvs(v4, g2, g3, g4), mom(v4, g2, g3, g4), dec, False))
-        return {'label': g3, 'kind': 'detail', 'sub_rows': sub_rows}
-
-    def subtotal_row(g2, with_pct=False):
-        sub_rows = []
-        for g4 in UNITS:
-            dec = 0 if g4 == 'ton' else 1
-            sub_rows.append((g4, cvs(v3, g2, g4), mom(v3, g2, g4), dec, False))
-            if with_pct:
-                p_vals, p_mom = pct_col(v3, ('장기재고', g4), v1, (g4,))
-                sub_rows.append(('(%)', p_vals, p_mom, None, True))
-        return {'label': g2, 'kind': 'subtotal', 'sub_rows': sub_rows}
+    def subtotal_row(label, fn, with_pct=False):
+        sub_rows = [('ton', cvs(fn), mom(fn), 0, False)]
+        if with_pct:
+            p_vals, p_mom = pct_col(fn, v_총계)
+            sub_rows.append(('(%)', p_vals, p_mom, None, True))
+        return {'label': label, 'kind': 'subtotal', 'sub_rows': sub_rows}
 
     rows = []
-    for g3 in G3_정상:
-        rows.append(detail_row('정상재고', g3))
-    rows.append(subtotal_row('정상재고'))
-    for g3 in G3_장기:
-        rows.append(detail_row('장기재고', g3))
-    rows.append(subtotal_row('장기재고', with_pct=True))
+    rows.append(detail_row('3개월 이하'))
+    rows.append(detail_row('3개월 초과'))
+    rows.append(subtotal_row('정상재고', v_정상))
+    
+    rows.append(detail_row('6개월 초과'))
+    rows.append(detail_row('1년 초과'))
+    rows.append(subtotal_row('장기재고', v_장기, with_pct=True))
 
-    # 합계
-    sub_rows = []
-    for g4 in UNITS:
-        dec = 0 if g4 == 'ton' else 1
-        sub_rows.append((g4, cvs(v1, g4), mom(v1, g4), dec, False))
-    rows.append({'label': '원재료 합계', 'kind': 'total', 'sub_rows': sub_rows})
-
+    rows.append({'label': '원재료 합계', 'kind': 'total', 'sub_rows': [('ton', cvs(v_총계), mom(v_총계), 0, False)]})
     return rows
-
 
 def _원재료_to_html(rows, col_spec):
     col_lbls = _col_labels(col_spec)
@@ -343,13 +332,12 @@ def _build_단품_rows(g1, df, col_spec):
     prev_yr, prev_mo = col_spec['prev']
 
     df1  = df[df['구분1'] == g1].copy()
-    agg3 = df1.groupby(['구분2', '구분3', '연도', '월'])['값'].sum().to_dict()
-    agg2 = df1.groupby(['구분2', '연도', '월'])['값'].sum().to_dict()
-    agg1 = df1.groupby(['연도', '월'])['값'].sum().to_dict()
+    agg = df1.groupby(['구분2', '연도', '월'])['값'].sum().to_dict()
 
-    def v3(g2, g3, yr, mo): return agg3.get((g2, g3, yr, mo), 0.0)
-    def v2(g2, yr, mo):     return agg2.get((g2, yr, mo), 0.0)
-    def v1(yr, mo):         return agg1.get((yr, mo), 0.0)
+    def v(g2, yr, mo): return agg.get((g2, yr, mo), 0.0)
+    def v_정상(yr, mo): return v('3개월 이하', yr, mo) + v('3개월 초과', yr, mo)
+    def v_장기(yr, mo): return v('6개월 초과', yr, mo) + v('1년 초과', yr, mo)
+    def v_총계(yr, mo): return v_정상(yr, mo) + v_장기(yr, mo)
 
     def cvs(fn, *keys):
         return ([fn(*keys, yr, 12) for yr in past_years]
@@ -359,27 +347,24 @@ def _build_단품_rows(g1, df, col_spec):
         return fn(*keys, curr_yr, curr_mo) - fn(*keys, prev_yr, prev_mo)
 
     def pct_v(yr, mo):
-        t = v1(yr, mo)
-        return v2('장기재고', yr, mo) / t * 100 if t else 0.0
+        t = v_총계(yr, mo)
+        return v_장기(yr, mo) / t * 100 if t else 0.0
 
     pct_vals = [pct_v(yr, 12) for yr in past_years] + [pct_v(yr_c, mo_c) for yr_c, mo_c in recent_curr]
     pct_mom  = pct_v(curr_yr, curr_mo) - pct_v(prev_yr, prev_mo)
 
     dec = 1
     rows = []
-    for g3 in ['3개월 이하', '3개월 초과']:
-        rows.append({'label': g3, 'kind': 'detail',
-                     'vals': cvs(v3, '정상재고', g3), 'mom': mom(v3, '정상재고', g3), 'dec': dec})
-    rows.append({'label': '정상재고', 'kind': 'subtotal',
-                 'vals': cvs(v2, '정상재고'), 'mom': mom(v2, '정상재고'), 'dec': dec})
-    for g3 in ['6개월 초과', '1년 초과']:
-        rows.append({'label': g3, 'kind': 'detail',
-                     'vals': cvs(v3, '장기재고', g3), 'mom': mom(v3, '장기재고', g3), 'dec': dec})
-    rows.append({'label': '장기재고', 'kind': '장기소계',
-                 'vals': cvs(v2, '장기재고'), 'mom': mom(v2, '장기재고'), 'dec': dec,
+    for g2 in ['3개월 이하', '3개월 초과']:
+        rows.append({'label': g2, 'kind': 'detail', 'vals': cvs(v, g2), 'mom': mom(v, g2), 'dec': dec})
+    rows.append({'label': '정상재고', 'kind': 'subtotal', 'vals': cvs(v_정상), 'mom': mom(v_정상), 'dec': dec})
+    
+    for g2 in ['6개월 초과', '1년 초과']:
+        rows.append({'label': g2, 'kind': 'detail', 'vals': cvs(v, g2), 'mom': mom(v, g2), 'dec': dec})
+    rows.append({'label': '장기재고', 'kind': '장기소계', 'vals': cvs(v_장기), 'mom': mom(v_장기), 'dec': dec,
                  'pct_vals': pct_vals, 'pct_mom': pct_mom})
-    rows.append({'label': f'{g1} 계', 'kind': 'total',
-                 'vals': cvs(v1), 'mom': mom(v1), 'dec': dec})
+    
+    rows.append({'label': f'{g1} 계', 'kind': 'total', 'vals': cvs(v_총계), 'mom': mom(v_총계), 'dec': dec})
     return rows
 
 
@@ -420,16 +405,16 @@ def _단품_to_html(rows, col_spec, g1_label):
 
 # ── 차트 함수 ──────────────────────────────────────────────────────────────
 
-def _build_단품_chart_data(g1, g4, df, col_spec):
+def _build_단품_chart_data(g1, df, col_spec):
     past_years  = col_spec['past_years']
     recent_curr = col_spec['recent_curr']
 
     df1 = df[df['구분1'] == g1]
-    if g4:
-        df1 = df1[df1['구분4'] == g4]
 
-    agg_all  = df1.groupby(['연도', '월'])['값'].sum().to_dict()
-    agg_장기 = df1[df1['구분2'] == '장기재고'].groupby(['연도', '월'])['값'].sum().to_dict()
+    # 매입매출 등 무관한 데이터 필터링 (연령 데이터 4종만 합산)
+    valid_ages = ['3개월 이하', '3개월 초과', '6개월 초과', '1년 초과']
+    agg_all  = df1[df1['구분2'].isin(valid_ages)].groupby(['연도', '월'])['값'].sum().to_dict()
+    agg_장기 = df1[df1['구분2'].isin(['6개월 초과', '1년 초과'])].groupby(['연도', '월'])['값'].sum().to_dict()
 
     def v_all(yr, mo):  return agg_all.get((yr, mo), 0.0)
     def v_장기(yr, mo): return agg_장기.get((yr, mo), 0.0)
@@ -445,30 +430,31 @@ def _build_종합_chart_data(df, col_spec):
     past_years  = col_spec['past_years']
     recent_curr = col_spec['recent_curr']
     cols = [(yr, 12) for yr in past_years] + list(recent_curr)
+    
+    valid_ages = ['3개월 이하', '3개월 초과', '6개월 초과', '1년 초과']
+    df_valid = df[df['구분2'].isin(valid_ages)]
 
     def agg_vals(df_f):
         a = df_f.groupby(['연도', '월'])['값'].sum().to_dict()
         return [a.get((yr, mo), 0.0) for yr, mo in cols]
 
-    df_원재료 = df[(df['구분1'] == '원재료') & (df['구분4'] == 'ea')]
-    df_재공품 = df[df['구분1'] == '재공품']
-    df_제품   = df[df['구분1'] == '제품']
+    df_원재료 = df_valid[df_valid['구분1'] == '원재료']
+    df_재공품 = df_valid[df_valid['구분1'] == '재공품']
+    df_제품   = df_valid[df_valid['구분1'] == '제품']
 
     원재료_v = agg_vals(df_원재료)
     재공품_v = agg_vals(df_재공품)
     제품_v   = agg_vals(df_제품)
 
     def agg_장기(df_f):
-        a = df_f[df_f['구분2'] == '장기재고'].groupby(['연도', '월'])['값'].sum().to_dict()
+        a = df_f[df_f['구분2'].isin(['6개월 초과', '1년 초과'])].groupby(['연도', '월'])['값'].sum().to_dict()
         return [a.get((yr, mo), 0.0) for yr, mo in cols]
 
-    장기_v  = [a + b + c for a, b, c in
-               zip(agg_장기(df_원재료), agg_장기(df_재공품), agg_장기(df_제품))]
+    장기_v  = [a + b + c for a, b, c in zip(agg_장기(df_원재료), agg_장기(df_재공품), agg_장기(df_제품))]
     total_v = [a + b + c for a, b, c in zip(원재료_v, 재공품_v, 제품_v)]
     pct_v   = [j / t * 100 if t else 0.0 for j, t in zip(장기_v, total_v)]
 
     return 제품_v, 재공품_v, 원재료_v, 장기_v, pct_v
-
 
 def _chart_단품(x_labels, total_vals, 장기_vals, pct_vals, decimal=0):
     fig = go.Figure()
@@ -570,6 +556,161 @@ def _fig_to_iframe(fig):
             f'height="{h}" width="100%" scrolling="no" '
             f'style="border:none;display:block;margin:0;padding:0"></iframe>')
 
+# ══════════════════════════════════════════════════════════════════════════
+# ── 탭 3: 등급별 재고현황 ──────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════
+
+def _load_등급별(year, month):
+    df = load_sheet(Sheets.등급별재고현황_DB)  # 설정된 시트명에 맞게 확인 필요
+    df.columns = df.columns.str.strip()
+    df = _drop_empty(df, '연도', '월')
+    df['값'] = df['값'].apply(_parse)
+    df['값'] = (df['값'] / 1_000).round()  # 톤 단위 변환 및 반올림
+
+    for c in ['구분1', '구분2']:
+        if c in df.columns:
+            df[c] = df[c].astype(str).str.strip()
+
+    연도_in_db  = sorted(df['연도'].unique().tolist())
+    recent_curr = _recent_months(year, month, n=_N_RECENT)
+    prev_year_end = max((yr for yr in 연도_in_db if yr < year), default=None)
+    past_years    = ([prev_year_end]
+                     if prev_year_end is not None and (prev_year_end, 12) not in recent_curr
+                     else [])
+    
+    col_spec = {
+        'past_years':  past_years,
+        'recent_curr': recent_curr,
+        'curr': (year, month),
+    }
+    return df, col_spec
+
+
+def _build_등급별_rows(df, col_spec):
+    past_years  = col_spec['past_years']
+    recent_curr = col_spec['recent_curr']
+
+    agg = df.groupby(['구분1', '구분2', '연도', '월'])['값'].sum().to_dict()
+
+    def v(g1, g2, yr, mo): 
+        return agg.get((g1, g2, yr, mo), 0.0)
+
+    def cvs(g1, g2):
+        return ([v(g1, g2, yr, 12) for yr in past_years]
+                + [v(g1, g2, yr_c, mo_c) for yr_c, mo_c in recent_curr])
+
+    # 제품 합계 계산용
+    grades = ['B급', 'C급', 'D급', 'D2급', 'X급']
+    def v_제품합계(yr, mo):
+        return sum(v('제품', g, yr, mo) for g in grades)
+
+    def cvs_제품합계():
+        return ([v_제품합계(yr, 12) for yr in past_years]
+                + [v_제품합계(yr_c, mo_c) for yr_c, mo_c in recent_curr])
+
+    rows = []
+    # 1. 제품 개별 등급
+    for g2 in grades:
+        rows.append({'label': f'제품 ({g2})', 'kind': 'detail', 'vals': cvs('제품', g2)})
+    
+    # 2. 제품 합계
+    rows.append({'label': '제품 (합계)', 'kind': 'total', 'vals': cvs_제품합계()})
+    
+    # 3. 재공품
+    rows.append({'label': '재공품 (재공품)', 'kind': 'detail', 'vals': cvs('재공품', '재공품')})
+
+    return rows
+
+
+def _등급별_to_html(rows, col_spec):
+    col_lbls = _col_labels(col_spec)
+    n_cols   = len(col_lbls) + 1  # 구분 + 날짜 컬럼들
+
+    th = f'<th style="{_TH}">구분</th>'
+    for lbl in col_lbls:
+        th += f'<th style="{_TH}">{lbl}</th>'
+
+    body = ''
+    for row in rows:
+        kind  = row['kind']
+        vals  = row['vals']
+        
+        if kind == 'detail':
+            lbl_s, num_s = ROW_ITEM, _TD_NUM
+        else:
+            lbl_s, num_s = ROW_HDR_LBL, ROW_HDR_NUM
+
+        cells = f'<td style="{lbl_s}">{row["label"]}</td>'
+        for val in vals:
+            cells += f'<td style="{num_s}">{_fmt(val, decimal=0)}</td>'
+        body += f'<tr>{cells}</tr>'
+
+    return _html_table(f'<tr>{th}</tr>', body)
+
+
+def _build_등급별_chart_data(df, col_spec):
+    past_years  = col_spec['past_years']
+    recent_curr = col_spec['recent_curr']
+    cols = [(yr, 12) for yr in past_years] + list(recent_curr)
+
+    agg = df.groupby(['구분1', '구분2', '연도', '월'])['값'].sum().to_dict()
+
+    def get_vals(g1, g2):
+        return [agg.get((g1, g2, yr, mo), 0.0) for yr, mo in cols]
+
+    grades = ['B급', 'C급', 'D급', 'D2급', 'X급']
+    grade_data = {g: get_vals('제품', g) for g in grades}
+    rework_data = get_vals('재공품', '재공품')
+
+    return grade_data, rework_data
+
+
+def _chart_등급별(x_labels, grade_data, rework_data):
+    fig = go.Figure()
+
+    # 이미지 기준 색상 매칭 (B급: 어두운 네이비, C급: 주황/다홍, D급: 회색 계열 등)
+    colors = {
+        'B급': '#34495e',
+        'C급': '#e74c3c',
+        'D급': '#95a5a6',
+        'D2급': '#bdc3c7',
+        'X급': '#3498db',
+        '재공품': '#2ecc71'
+    }
+
+    # 스택 바 차트 생성 (아래에서 위로 쌓이는 순서)
+    order = ['B급', 'C급', 'D급', 'D2급', 'X급']
+    for g in order:
+        vals = grade_data[g]
+        fig.add_trace(go.Bar(
+            name=f'제품({g})', x=x_labels, y=vals,
+            marker_color=colors.get(g, C_NAVY), marker_line_width=0,
+            text=[_fmt(v, decimal=0) if v > 0 else '' for v in vals],
+            textposition='inside', textfont=dict(color='white', size=10),
+        ))
+
+    # 재공품 스택 추가
+    fig.add_trace(go.Bar(
+        name='재공품(재공품)', x=x_labels, y=rework_data,
+        marker_color=colors['재공품'], marker_line_width=0,
+        text=[_fmt(v, decimal=0) if v > 0 else '' for v in rework_data],
+        textposition='outside', textfont=dict(color='#333333', size=10),
+    ))
+
+    fig.update_layout(
+        barmode='stack', height=320,
+        margin=dict(l=10, r=10, t=20, b=20),
+        showlegend=True,
+        legend=dict(orientation='h', x=0.5, xanchor='center',
+                    y=-0.2, yanchor='top',
+                    font=dict(size=11), bgcolor='rgba(255,255,255,0.8)',
+                    borderwidth=0),
+        xaxis=dict(showgrid=False, tickfont=dict(size=11, color=C_NAVY)),
+        yaxis=dict(showgrid=True, gridcolor=C_CHART_GRID, showticklabels=False),
+        plot_bgcolor='white', paper_bgcolor='white', bargap=0.3,
+    )
+    return fig
+
 
 # ══════════════════════════════════════════════════════════════════════════
 # ── render_page ──────────────────────────────────────────────────────────
@@ -584,7 +725,7 @@ def render_page(app, year_state, month_state):
         )
     app.If(lambda: True, _render_title)
 
-    tabs = app.tabs(["제품∙재공∙원재료 재고 현황", "연령별 재고현황"])
+    tabs = app.tabs(["제품∙재공∙원재료 재고 현황", "연령별 재고현황", "등급별 재고현황"])
 
     # ── 탭 0: 재고자산 현황 ─────────────────────────────────────────────
     with tabs[0]:
@@ -611,12 +752,12 @@ def render_page(app, year_state, month_state):
 
             # 1) 원재료 현황
             rows_원재료 = _build_원재료_rows(df, col_spec)
-            tot_ton, 장기_ton, pct_ton = _build_단품_chart_data('원재료', 'ton', df, col_spec)
+            tot_ton, 장기_ton, pct_ton = _build_단품_chart_data('원재료', df, col_spec)
 
             col_l, col_r = app.columns([6, 4])
             with col_l:
                 app.markdown(
-                    _sec_title('1) 원재료 현황', '[단위: 톤, 만개]')
+                    _sec_title('1) 원재료 현황', '[단위: 톤]') # 만개 삭제
                     + _fig_to_iframe(_chart_단품(x_labels, tot_ton, 장기_ton, pct_ton, decimal=0))
                     + _원재료_to_html(rows_원재료, col_spec),
                     unsafe_allow_html=True)
@@ -626,24 +767,26 @@ def render_page(app, year_state, month_state):
 
             # 2) 재공품 현황
             rows_재공품 = _build_단품_rows('재공품', df, col_spec)
-            tot_재공품, 장기_재공품, pct_재공품 = _build_단품_chart_data('재공품', '', df, col_spec)
+            # 두 번째 파라미터였던 ''(빈 문자열)을 삭제합니다.
+            tot_재공품, 장기_재공품, pct_재공품 = _build_단품_chart_data('재공품', df, col_spec)
 
             col_l2, _ = app.columns([6, 4])
             with col_l2:
                 app.markdown(
-                    _sec_title('2) 재공품 현황', '[단위: 만개]')
+                    _sec_title('2) 재공품 현황', '[단위: 톤]') # 필요시 만개 -> 톤 등 올바른 단위로 수정
                     + _fig_to_iframe(_chart_단품(x_labels, tot_재공품, 장기_재공품, pct_재공품, decimal=1))
                     + _단품_to_html(rows_재공품, col_spec, '재공품'),
                     unsafe_allow_html=True)
 
             # 3) 제품 현황
             rows_제품 = _build_단품_rows('제품', df, col_spec)
-            tot_제품, 장기_제품, pct_제품 = _build_단품_chart_data('제품', '', df, col_spec)
+            # 두 번째 파라미터였던 ''(빈 문자열)을 삭제합니다.
+            tot_제품, 장기_제품, pct_제품 = _build_단품_chart_data('제품', df, col_spec)
 
             col_l3, _ = app.columns([6, 4])
             with col_l3:
                 app.markdown(
-                    _sec_title('3) 제품 현황', '[단위: 만개]')
+                    _sec_title('3) 제품 현황', '[단위: 톤]') # 필요시 만개 -> 톤 등 올바른 단위로 수정
                     + _fig_to_iframe(_chart_단품(x_labels, tot_제품, 장기_제품, pct_제품, decimal=1))
                     + _단품_to_html(rows_제품, col_spec, '제품'),
                     unsafe_allow_html=True)
@@ -659,3 +802,27 @@ def render_page(app, year_state, month_state):
                     unsafe_allow_html=True)
 
         app.If(lambda: True, _render_연령별)
+
+    # ── 탭 2: 등급별 재고현황 ─────────────────────────────────────────────
+    with tabs[2]:
+        def _render_등급별():
+            year, month = int(year_state.value), int(month_state.value)
+            df, col_spec = _load_등급별(year, month)
+            x_labels = _col_labels(col_spec)
+            rows_등급 = _build_등급별_rows(df, col_spec)
+            grade_data, rework_data = _build_등급별_chart_data(df, col_spec)
+            memo = _get_memo(Sheets.등급별재고현황_메모, year, month)  # 메모 시트 키 명칭 확인 필요
+
+            col_l, col_r = app.columns([6, 4])
+            with col_l:
+                app.markdown(
+                    _sec_title('1) 등급별 재고현황', '[단위: 톤]')
+                    + _fig_to_iframe(_chart_등급별(x_labels, grade_data, rework_data))
+                    + _등급별_to_html(rows_등급, col_spec),
+                    unsafe_allow_html=True,
+                )
+            with col_r:
+                if memo:
+                    app.markdown(_memo_html(memo), unsafe_allow_html=True)
+
+        app.If(lambda: True, _render_등급별)

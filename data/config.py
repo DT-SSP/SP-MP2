@@ -23,6 +23,10 @@ class SheetID:
     성과급및격려금 = "1GX9D7YQvUnYJRW9p7GmxHVsdbvgxKacTilCfiY0WU44"
     매출 = "1e_FIcLph-1C8EX06lJYmdoFIpXVZ4gIGylg7iVYj9yY"
     생산및부적합 = "1WABVdyXrAdOkDi5ikAoqmsN4K5T3qIokVGsOKUtvq8o"
+    부재료사용량 = "12Spw-7Y96WyX3NgU13hjFm3fIk2KZMlnAyXAmAyX20k"
+    부재료단가추이 = "1Q1rNxawD2zcnSPM1IuvTEvPQZ_pdIDwSzgZ7KsnEpUU"
+    비용 = "1ijzF72pX7P0s5PdKlb9Nup1_PT5LFyTF_VrHzKJAvE4"
+    재고 = "1KsOiSjozqRGD3N8YMzhBFG7MykP3masHe1eIosEbcTM"
 
 class Sheets:
 
@@ -152,12 +156,29 @@ class Sheets:
 
     #여기까지함
 
+    # 5. 비용분석 43~49
+    부재료사용량_DB = (SheetID.부재료사용량, "부재료 사용량 원단위 추이_DB")
+    부재료사용량_메모 = (SheetID.부재료사용량, "부재료 사용량 원단위 추이_메모")
+    부재료단가추이_DB = (SheetID.부재료단가추이, "부재료 사용량 원단위 추이")
+    부재료단가추이_메모 = (SheetID.부재료단가추이, "부재료 사용량 원단위 추이_메모")
+    월평균클레임_DB =(SheetID.비용, "47. 월 평균 클레임 지급액_DB")
+    월평균클레임_메모 = (SheetID.비용, "48. 당월 클레임 내역_메모")
+    당월클레임_DB = (SheetID.비용, "48. 당월 클레임 내역_DB")
+    영업외비용_DB = (SheetID.비용, "49. 영업외 비용 내역_DB")
+    영업외비용_메모 = (SheetID.비용, "49. 영업외 비용 내역_메모")
+
+    # 6. 재고자산 분석 50~55
+    재고현황_DB = (SheetID.재고, "50. 재고자산 현황_DB")
+    재고현황_메모 = (SheetID.재고, "50. 재고자산 현황_메모")
+    연령별재고현황_DB = (SheetID.재고, "51~54. 연령별 재고현황_DB")
+    연령별재고현황_메모 = (SheetID.재고, "54. 총 재고 및 장개재고 현황_메모")
+    등급별재고현황_DB = (SheetID.재고, "55. 등급별 재고현황_DB")
+    등급별재고현황_메모 = (SheetID.재고, "55. 등급별 재고현황_메모")
+    
+    
+
+
 '''
-
-    ## 5. 비용분석 43~49
-
-
-
     # 27. 인원 현황
     인원현황_DB = (SheetID.인원현황, "27. 인원 현황_DB")
     인원현황_메모 = (SheetID.인원현황, "27. 인원 현황_메모")
