@@ -99,7 +99,6 @@ def _build_계획대비_매출실적(year, month):
     def ytd(g1, g2, typ, yr, mo):
         return sum(raw(g1, g2, typ, yr, m) for m in range(1, mo + 1))
 
-    # 이미지에 나타난 품목 목록
     품목_list = ['CHQ', 'CD', 'STS', 'BTB', 'PB', '기타']
     단가_품목 = ['CHQ', 'CD', 'STS', 'BTB', 'PB']  # 기타 제외
 

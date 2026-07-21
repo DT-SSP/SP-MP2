@@ -466,10 +466,42 @@ def _build_영업외비용_data(year, month):
             g2_totals = [0.0] * 3
             g3_list = df[(df['구분1'] == g1) & (df['구분2'] == g2)]['구분3'].unique()
             
-            # 하위 항목(고철매각 등)이 존재하는지 여부 확인
+            # 하위 항목이 존재하는지 여부 확인
             has_sub = len([g for g in g3_list if g != '']) > 0
             sub_rows = []
             
+            # '잡손실' 항목에 대한 기타(총액 - 고철매각작업비) 계산 로직
+            if g2 == '잡손실' and '고철매각작업비' in g3_list:
+                # DB의 잡손실 총액 (구분3이 빈칸인 데이터)
+                vals_total = [vm.get((g1, g2, '', y, m), 0.0) for y, m in recent]
+                # DB의 고철매각작업비
+                vals_scrap = [vm.get((g1, g2, '고철매각작업비', y, m), 0.0) for y, m in recent]
+                # 계산: 기타 = 총액 - 고철매각작업비
+                vals_etc = [vals_total[i] - vals_scrap[i] for i in range(len(recent))]
+                
+                # 상위, 총 합계에는 '잡손실 총액'만 누적하여 중복 합산 방지
+                for i in range(len(recent)):
+                    g2_totals[i] += vals_total[i]
+                    g1_totals[i] += vals_total[i]
+                    grand_totals[i] += vals_total[i]
+                
+                # 1. 기타(계산값) 서브 행 추가
+                diff_etc = vals_etc[0] - vals_etc[2] if len(vals_etc) == 3 else 0.0
+                sub_rows.append(('sub', '기타', vals_etc + [diff_etc]))
+                
+                # 2. 고철매각작업비 서브 행 추가
+                diff_scrap = vals_scrap[0] - vals_scrap[2] if len(vals_scrap) == 3 else 0.0
+                sub_rows.append(('sub', '고철매각작업비', vals_scrap + [diff_scrap]))
+                
+                # 중위구분(잡손실) 행 추가 및 서브 행 펼치기
+                diff_g2 = g2_totals[0] - g2_totals[2] if len(g2_totals) == 3 else 0.0
+                rows.append(('item', g2, g2_totals + [diff_g2]))
+                rows.extend(sub_rows)
+                
+                # 잡손실 처리가 끝났으므로 다음 g2 항목으로 넘어감
+                continue 
+
+            # 👇 기존 로직 (잡손실이 아닌 나머지 항목들)
             for g3 in g3_list:
                 vals = [vm.get((g1, g2, g3, y, m), 0.0) for y, m in recent]
                 
@@ -480,7 +512,9 @@ def _build_영업외비용_data(year, month):
                     grand_totals[i] += v
                     
                 if has_sub:
+                    # g3 값이 비어있을 때 '기타'로 처리하고, 값이 있으면 그대로 사용
                     label = '기타' if g3 == '' else g3
+                    
                     # 이미지의 증감 계산 로직 반영: 당월(0번 인덱스) - 전전월(2번 인덱스)
                     diff = vals[0] - vals[2] if len(vals) == 3 else 0.0
                     sub_rows.append(('sub', label, vals + [diff]))

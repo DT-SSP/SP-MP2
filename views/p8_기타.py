@@ -72,7 +72,7 @@ def _fig_to_iframe(fig):
 # ══════════════════════════════════════════════════════════════════════════
 
 def _build_인원변동내역(year, month):
-    df = load_sheet(Sheets.인원현황_DB)
+    df = load_sheet(Sheets.인원_DB)
     df = _drop_empty(df, '연도', '월')
     df['값'] = df['값'].apply(_parse)
     df['구분2'] = df['구분2'].fillna('').astype(str).str.strip()
@@ -83,7 +83,7 @@ def _build_인원변동내역(year, month):
         vm[key] = float(row['값'])
 
     years = sorted(df['연도'].unique().tolist())
-    자사계_subs = ['사무직', '기능직']
+    자사계_subs = ['사무기술직', '기능직']
 
     def get(g1, g2, yr, mo):
         return vm.get((g1, g2, yr, mo), 0.0)

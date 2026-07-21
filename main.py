@@ -15,7 +15,7 @@ from violit.context import layout_ctx
 
 from data.config import Sheets
 from data.loader import load_sheet, preload_all, refresh_all
-from views import p1_실적요약 ,p2_손익분석, p3_매출분석, p4_생산분석, p5_비용분석, p6_재고자산
+from views import p1_실적요약 ,p2_손익분석, p3_매출분석, p4_생산분석, p5_비용분석, p6_재고자산, p7_채권분석
 #from views import p2_손익분석, p3_매출분석, p4_생산분석
 #from views import p5_비용분석, p6_재고자산, p7_기타, p8_해외법인
 
@@ -194,6 +194,7 @@ app.navigation([
     vl.Page(_protected(p4_생산분석.render_page),     title="4. 생산분석"),
     vl.Page(_protected(p5_비용분석.render_page),     title="5. 비용분석"),
     vl.Page(_protected(p6_재고자산.render_page),     title="6. 재고자산분석"),
+    vl.Page(_protected(p7_채권분석.render_page),     title="7. 채권분석"),
 ])
 
 '''
