@@ -29,6 +29,18 @@ class SheetID:
     재고 = "1KsOiSjozqRGD3N8YMzhBFG7MykP3masHe1eIosEbcTM"
     채권 = "1tSEGWM361HLKGmg2HeubDXvA_tk4iJtuP91nJVAwxVk"
     인원 = "1QNo5SJZ8kjAZC8XD80dfCB3S9DEnj0Z4-sqQDQUY_OM"
+    해외손익요약 = "1XVw9yCNDPp-EuTO4hedWEsY5MWFgx9P8frFLF7zQxZg"
+    해외현금흐름 = "18UySHi-SUI00g1aB_2Q7-8HhlzBwdEbvTlB8lg8lX7Q"
+    해외재무상태표 = "16rw-E6XMz7vmVn-E9W0kTi2uVt0TcWa3cL8nePWt_Ps"
+    해외등급별판매 = "1eLXkoFo8pp0WT_LB5ACrx-cyxb0BdhpzccUwCtUekP0"
+    해외판매현황 = "1FqpL0pFDk8jKuFnNngDOAbERelVNSnhjMqJKXmauAL0"
+    해외손익차이 = "1prlXtlX0lhfL7rzeyMusS-m5Rej7PI8wZ3qtdKLRAJg"
+    해외재고자산 = "1Q9YxAQm5TsiqA_cXPJ8Qrv4hYMR3Zj9bLvc4cKwJk9M"
+    해외부적합장기재고 = "1ZwCa8FHPz_FBpEod2889nLnrfDnTUGMJhYgBBWgfePM"
+    해외연령별재고 = "1zb0kILJsKu9iiN5jKU5VClRoUs7GFpo038mL_tYy7JI"
+    해외채권 = "18imG7hmw68PfVQQpGrs--1DglQcaB7qWhBsUX4QFMKg"
+    해외인원 = "1zv2xxJaM7BfVDhqgj4tuI-vh97tfHEO-YwdLVbTVBUE"
+
 
 class Sheets:
 
@@ -190,6 +202,48 @@ class Sheets:
     # 8. 기타 60
     인원_DB = (SheetID.인원, "60. 인원현황_DB")
 
+    #9. 해외법인실적 61~88
+    해외손익요약_DB = (SheetID.해외손익요약, "(해외)손익요약")
+    해외손익요약_메모 = (SheetID.해외손익요약, "(해외)손익요약_메모")
+
+    해외현금흐름_DB = (SheetID.해외현금흐름, "(해외)현금흐름")
+    해외현금흐름_중국_메모 = (SheetID.해외현금흐름, "(해외)현금흐름 중국_메모")
+    해외현금흐름_태국_메모 = (SheetID.해외현금흐름, "(해외)현금흐름 태국_메모")
+
+    해외재무상태표_DB = (SheetID.해외재무상태표, "(해외)재무상태표")
+    해외재무상태표_중국_메모 = (SheetID.해외재무상태표, "(해외)재무상태표 중국_메모")
+    해외재무상태표_태국_메모 = (SheetID.해외재무상태표, "(해외)재무상태표 태국_메모")
+
+    해외등급별판매_DB = (SheetID.해외등급별판매, "(해외)등급별 판매현황")
+    해외등급별판매_메모 = (SheetID.해외등급별판매, "(해외)등급별 판매현황_메모")
+
+    해외판매현황_DB = (SheetID.해외판매현황, "(해외)CHQ열처리제품, 비가공품, 제품임가공 판매현황")
+    해외판매현황_CHQ_메모 = (SheetID.해외판매현황, "(해외)CHQ열처리제품 판매현황_메모")
+    해외판매현황_비가공품_메모 = (SheetID.해외판매현황, "(해외)비가공품 판매현황_메모")
+    해외판매현황_제품임가공_메모 = (SheetID.해외판매현황, "(해외)제품임가공 판매현황_메모")
+
+    해외손익차이_DB = (SheetID.해외손익차이, "(해외)전월대비 손익차이_DB")
+    해외손익차이_메모 = (SheetID.해외손익차이, "(해외)전월대비 손익차이_메모")
+
+    해외재고자산_DB = (SheetID.해외재고자산, "(해외)재고자산 현황")
+    해외재고자산_중국_메모 = (SheetID.해외재고자산, "(해외)재고자산 현황 중국_메모")
+    해외재고자산_태국_메모 = (SheetID.해외재고자산, "(해외)재고자산 현황 태국_메모")
+
+    해외부적합장기재고_DB = (SheetID.해외부적합장기재고, "(해외)부적합 및 장기재고 현황")
+    해외부적합장기재고_중국_메모 = (SheetID.해외부적합장기재고, "(해외)부적합 및 장기재고 현황 중국_메모")
+    해외부적합장기재고_태국_메모 = (SheetID.해외부적합장기재고, "(해외)부적합 및 장기재고 현황 태국_메모")
+
+    해외연령별재고_DB = (SheetID.해외연령별재고, "(해외)연령별 재고 현황")
+    해외연령별재고_중국_메모 = (SheetID.해외연령별재고, "(해외)연령별 재고 현황 중국_메모")
+    해외연령별재고_태국_메모 = (SheetID.해외연령별재고, "(해외)연령별 재고 현황 태국_메모")
+
+    해외채권_DB = (SheetID.해외채권, "(해외)채권 현황")
+    해외채권_중국_메모 = (SheetID.해외채권, "(해외)채권 현황 중국_메모")
+    해외채권_태국_메모 = (SheetID.해외채권, "(해외)채권 현황 태국_메모")
+
+    해외인원_DB = (SheetID.해외인원, "(해외)인원 현황")
+    해외인원_메모 = (SheetID.해외인원, "(해외)인원 현황_메모")
+    해외인원_생산량_메모 = (SheetID.해외인원, "(해외)인당 월평균 생산량_메모")
 
 선재_국내_사업장 = '본사'
 
@@ -275,3 +329,11 @@ SONIK2_판매량_순서   = ['열전', '열후']
 SONIK2_매출원가_순서 = ['제품원가', '임가공', '수출선임비']
 SONIK2_판관비_순서   = ['인건비', '관리비', '판매비']
 
+# ── 해외 손익 테이블 설정 ──────────────────────────────────────────
+overseas_SONIK_구분_순서  = ['매출액', '판매량', '영업이익']
+overseas_SONIK_표시명     = {'매출액': '매출액', '판매량': '판매량', '영업이익': '영업이익'}
+
+SONIK_단위      = {'매출액': 1e6, '판매량': 1e4, '영업이익': 1e6,
+                   '순금융비용': 1e6, '경상이익': 1e6}
+SONIK_소수점    = {'판매량': 0}              # 소수점 자릿수 (미지정 시 0)
+SONIK_PCT_대상  = {'영업이익', '경상이익'}   # % 행 추가할 항목

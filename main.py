@@ -15,7 +15,7 @@ from violit.context import layout_ctx
 
 from data.config import Sheets
 from data.loader import load_sheet, preload_all, refresh_all
-from views import p1_실적요약 ,p2_손익분석, p3_매출분석, p4_생산분석, p5_비용분석, p6_재고자산, p7_채권분석, p8_기타
+from views import p1_실적요약 ,p2_손익분석, p3_매출분석, p4_생산분석, p5_비용분석, p6_재고자산, p7_채권분석, p8_기타, p9_해외법인
 #from views import p2_손익분석, p3_매출분석, p4_생산분석
 #from views import p5_비용분석, p6_재고자산, p7_기타, p8_해외법인
 
@@ -196,27 +196,9 @@ app.navigation([
     vl.Page(_protected(p6_재고자산.render_page),     title="6. 재고자산분석"),
     vl.Page(_protected(p7_채권분석.render_page),     title="7. 채권분석"),
     vl.Page(_protected(p8_기타.render_page),         title="8. 기타"),
+    vl.Page(_protected(p9_해외법인.render_page),     title="9. 해외법인실적"),
 ])
 
-'''
-app.navigation([
-    vl.Page(_public(p1_실적요약.render_page),        title="1. 실적요약")
-])
-'''
-
-'''
-app.navigation([
-    vl.Page(login_page,                              title="Login"),
-    vl.Page(_protected(p1_실적요약.render_page),     title="1. 실적요약"),
-    vl.Page(_protected(p2_손익분석.render_page),     title="2. 손익분석"),
-    vl.Page(_protected(p3_매출분석.render_page),     title="3. 매출분석"),
-    vl.Page(_protected(p4_생산분석.render_page),     title="4. 생산분석"),
-    vl.Page(_protected(p5_비용분석.render_page),     title="5. 비용분석"),
-    vl.Page(_protected(p6_재고자산.render_page),     title="6. 재고자산분석"),
-    vl.Page(_protected(p7_기타.render_page),         title="7. 기타"),
-    vl.Page(_protected(p8_해외법인.render_page),     title="8. 해외법인실적"),
-])
-'''
 
 if __name__ == "__main__":
     app.run(port=int(os.environ.get("PORT", 8000)))
