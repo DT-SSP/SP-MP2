@@ -43,6 +43,7 @@ class SheetID:
     별첨 = "1B2jxlRAau6yXjLe7Zs6J12Pz9aHdVn1iqf-n_JcC-Yw"
     손익계산서수정 = "1FhJMtgXIBPd0C9QXg2UI3Ems3xhUi6B1tHjlR6IYfUc"
     유형별손익 = "1PHoRSoY6vjge7JabpimzCiD5csgCHHowIRnGYhZMDWE"
+    유형별부서별손익 = "1GScomsP1JpIZIOTvydHgVdH_xU4gB4XZ-2BUdnfZJhQ"
 
 class Sheets:
 
@@ -250,10 +251,17 @@ class Sheets:
 
     전체실적요약_DB = (SheetID.별첨, "89~92. 전체 실적요약_DB")
     환율_DB = (SheetID.별첨, "94. 환율추이_DB")
+
     손익계산서_DB = (SheetID.손익계산서수정, "95. 손익계산서_수정정상원가_DB")
+
     산업군별영업이익_DB = (SheetID.유형별손익, "96. 산업군별 영업이익_DB")
     실수요유통영업이익_DB = (SheetID.유형별손익, "97. 실수요유통 영업이익_DB")
     메이커별영업이익_DB = (SheetID.유형별손익, "98. 메이커별 영업이익_DB")
+
+    부서메이커별영업이익_DB = (SheetID.유형별부서별손익, "99. 부서메이커별 영업이익_DB")
+    부서사업장메이커별영업이익_DB = (SheetID.유형별부서별손익, "100. 부서사업장메이커별 영업이익_DB")
+    부서별인당영업이익_DB = (SheetID.유형별부서별손익, "101. 부서별 인당 영업이익_DB")
+
 
 선재_국내_사업장 = '본사'
 

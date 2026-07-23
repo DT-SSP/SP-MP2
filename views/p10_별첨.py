@@ -7,11 +7,15 @@ from data.config import Sheets
 from views.common import (
     parse as _parse, fmt as _fmt,
     prev_month as _prev, drop_empty as _drop_empty,
-    layout100 as _layout100,
+    layout100 as _layout100, layout64 as _layout64,
     TH as _TH, TD_NUM as _TD_NUM, ROW_HDR_LBL as ROW_HDR_LBL, ROW_HDR_NUM as ROW_HDR_NUM, ROW_ITEM as ROW_ITEM,
     html_table as _html_table,
-    C_NAVY, C_ORANGE, C_RED, C_CHART_SEC, C_CHART_GRID,
+    C_NAVY as _C_NAVY, C_ORANGE, C_RED as _C_RED, C_CHART_SEC, C_CHART_GRID, C_LT_GRAY as _C_LT_GRAY,
+    sort_by_order as _sort,
+    TD_RED as _TD_RED, TD_SUB_NUM as _TD_SUB_NUM, TD_SUB_RED as _TD_SUB_RED,
+    ROW_SEC, ROW_HDR_RED,
 )
+
 
 # ── 공통 유틸 및 헬퍼 함수 ─────────────────────────────────────────────
 
@@ -134,7 +138,7 @@ def _build_실적요약_chart(x_labels, sales_list, volume_list, op_profit_list,
         marker=dict(color='#64748B', size=7),
         line=dict(color='#64748B', width=2.5),
         text=line_text, textposition='top center',
-        textfont=dict(color='#1E293B', size=11),
+        textfont=dict(color='#1E293B', size=10),
         yaxis='y2', connectgaps=True
     ))
 
@@ -142,26 +146,32 @@ def _build_실적요약_chart(x_labels, sales_list, volume_list, op_profit_list,
     max_line = max(op_profit_list) if op_profit_list else 100
     min_line = min(op_profit_list) if op_profit_list else 0
 
+    # 💡 [Fix] 그래프 잘림 방지를 위해 마진/여백/범례 위치 및 자동 크기 최적화
     fig.update_layout(
-        barmode='group', height=450, margin=dict(l=20, r=20, t=50, b=60),
+        barmode='group', height=400,
+        margin=dict(l=40, r=40, t=40, b=40),
+        autosize=True,
         legend=dict(
-            orientation='h', y=-0.18, x=0.5, xanchor='center',
-            font=dict(size=12, color='#334155'), bgcolor='rgba(0,0,0,0)',
+            orientation='h', y=-0.15, x=0.5, xanchor='center',
+            font=dict(size=11, color='#334155'), bgcolor='rgba(0,0,0,0)',
         ),
         xaxis=dict(
-            tickfont=dict(size=11, color='#64748B'),
+            tickfont=dict(size=10, color='#64748B'),
             showgrid=False, linecolor='#CBD5E1', linewidth=1, showline=True,
+            automargin=True
         ),
         yaxis=dict(
-            domain=[0, 0.62], showgrid=True, gridcolor=C_CHART_GRID, gridwidth=1,
+            domain=[0, 0.60], showgrid=True, gridcolor=C_CHART_GRID, gridwidth=1,
             range=[0, max_bar * 1.25], showticklabels=False, showline=False, zeroline=False,
+            automargin=True
         ),
         yaxis2=dict(
-            domain=[0.68, 1.0], range=[min_line * 1.2 if min_line < 0 else 0, max_line * 1.45],
+            domain=[0.65, 1.0], range=[min_line * 1.2 if min_line < 0 else 0, max_line * 1.45],
             showgrid=False, showticklabels=False, showline=False, zeroline=False,
+            automargin=True
         ),
         plot_bgcolor='white', paper_bgcolor='white',
-        font=dict(size=12, family='sans-serif'),
+        font=dict(size=11, family='sans-serif'),
     )
     return fig
 
@@ -211,32 +221,36 @@ def _build_환율추이_chart(x_labels, rates):
         fig.add_trace(go.Scatter(
             name=currency, x=x_labels, y=vals,
             mode='lines+markers+text',
-            marker=dict(color=color_map[currency], size=8),
+            marker=dict(color=color_map[currency], size=7),
             line=dict(color=color_map[currency], width=2.5),
             text=text_labels, textposition='top center',
-            textfont=dict(color='#1E293B', size=11), connectgaps=True
+            textfont=dict(color='#1E293B', size=10), connectgaps=True
         ))
 
     all_vals = [v for curr in rates for v in rates[curr] if v > 0]
     max_val = max(all_vals) if all_vals else 1500
     min_val = min(all_vals) if all_vals else 0
 
+    # 💡 [Fix] 그래프 잘림 방지 최적화
     fig.update_layout(
-        height=480, margin=dict(l=20, r=20, t=50, b=60),
+        height=400, margin=dict(l=40, r=40, t=40, b=40),
+        autosize=True,
         legend=dict(
-            orientation='h', y=-0.20, x=0.5, xanchor='center',
-            font=dict(size=12, color='#334155'), bgcolor='rgba(0,0,0,0)',
+            orientation='h', y=-0.15, x=0.5, xanchor='center',
+            font=dict(size=11, color='#334155'), bgcolor='rgba(0,0,0,0)',
         ),
         xaxis=dict(
-            tickfont=dict(size=11, color='#64748B'),
+            tickfont=dict(size=10, color='#64748B'),
             showgrid=False, linecolor='#CBD5E1', linewidth=1, showline=True,
+            automargin=True
         ),
         yaxis=dict(
             showgrid=False, range=[min_val * 0.8, max_val * 1.15],
             showticklabels=False, showline=False, zeroline=False,
+            automargin=True
         ),
         plot_bgcolor='white', paper_bgcolor='white',
-        font=dict(size=12, family='sans-serif'),
+        font=dict(size=11, family='sans-serif'),
     )
     return fig
 
@@ -482,57 +496,47 @@ def _손익계산서_to_html_table(df):
     return _html_table(f'<tr>{headers_html}</tr>', rows_html)
 
 
-# ── 4) 유형별 손익분석 6개 데이터 모듈 ───────────────────────────────────
+# ── 4) 유형별 손익분석 데이터 및 HTML 렌더러 모듈 ─────────────────────
 
-def build_f96(df_src: pd.DataFrame, year: int, month: int) -> pd.DataFrame:
+def _build_산업군별_영업이익_table(year: int, month: int) -> pd.DataFrame:
+    df_src = load_sheet(Sheets.산업군별영업이익_DB) 
     df = df_src.copy()
-    if '값' in df.columns and '실적' not in df.columns:
-        df = df.rename(columns={'값': '실적'})
-    df["실적"] = df["실적"].apply(_to_number)
-    df["연도"] = df["연도"].astype(int)
-    df["월"] = df["월"].astype(int)
+    
+    for c in ["구분1", "구분2", "구분3", "구분4"]:
+        if c in df.columns:
+            df[c] = df[c].fillna('').astype(str).str.strip()
+            
+    val_col = '실적' if '실적' in df.columns else '값'
+    df[val_col] = df[val_col].apply(_to_number)
+    df["연도"] = pd.to_numeric(df["연도"], errors='coerce').fillna(0).astype(int)
+    df["월"] = pd.to_numeric(df["월"], errors='coerce').fillna(0).astype(int)
 
     mask = (df["연도"] == int(year)) & (df["월"] == int(month))
     df = df.loc[mask].copy()
 
     products = ["CHQ", "CD", "STS", "BTB", "PB"]
-    df = df[df["구분1"].isin(products)]
 
-    tmp = (
-        df.pivot_table(
-            index=["구분2", "구분3", "구분1"],
-            columns="구분4",
-            values="실적",
-            aggfunc="sum",
-            fill_value=0.0,
-        )
-        .reset_index()
-    )
+    tmp = df.pivot_table(
+        index=["구분2", "구분3", "구분1"], columns="구분4", values=val_col, aggfunc="sum", fill_value=0.0
+    ).reset_index()
 
     for col in ["매출중량", "매출금액", "영업이익"]:
-        if col not in tmp.columns:
-            tmp[col] = 0.0
+        if col not in tmp.columns: tmp[col] = 0.0
 
-    tmp["판매중량"] = tmp["매출중량"]
-    tmp["판매금액"] = tmp["매출금액"]
-    tmp["영업이익금액"] = tmp["영업이익"]
+    tmp["판매중량"], tmp["판매금액"], tmp["영업이익금액"] = tmp["매출중량"], tmp["매출금액"], tmp["영업이익"]
     metrics_cols = ["판매중량", "판매금액", "영업이익금액"]
 
     def make_row(sub: pd.DataFrame, label: str) -> dict:
         row = {"구분": label}
         prod_sums = {}
-
         for p in products:
             d = sub[sub["구분1"] == p]
             vals = d[metrics_cols].sum() if not d.empty else pd.Series([0.0, 0.0, 0.0], index=metrics_cols)
-
             qty, amt, op = vals["판매중량"], vals["판매금액"], vals["영업이익금액"]
-
             row[f"{p}_판매중량"] = qty
-            row[f"{p}_영업이익_단가"] = op / qty if qty != 0 else 0.0
-            row[f"{p}_영업이익_금액"] = op
-            row[f"{p}_영업이익_%"] = (op / amt * 100.0) if amt != 0 else 0.0
-
+            row[f"{p}_단가"] = op / qty if qty != 0 else 0.0
+            row[f"{p}_영업이익"] = op
+            row[f"{p}_%"] = (op / amt * 100.0) if amt != 0 else 0.0
             prod_sums[p] = (qty, amt, op)
 
         total_qty = sum(q for q, _, _ in prod_sums.values())
@@ -540,58 +544,161 @@ def build_f96(df_src: pd.DataFrame, year: int, month: int) -> pd.DataFrame:
         total_op = sum(o for _, _, o in prod_sums.values())
 
         row["총계_판매중량"] = total_qty
-        row["총계_영업이익_단가"] = total_op / total_qty if total_qty != 0 else 0.0
-        row["총계_영업이익_금액"] = total_op
-        row["총계_영업이익_%"] = (total_op / total_amt * 100.0) if total_amt != 0 else 0.0
-
+        row["총계_단가"] = total_op / total_qty if total_qty != 0 else 0.0
+        row["총계_영업이익"] = total_op
+        row["총계_%"] = (total_op / total_amt * 100.0) if total_amt != 0 else 0.0
         return row
 
     industry_order = ["자동차", "산업기계", "건설", "전자", "기타", "조선", "항공"]
     rows = []
-
+    
     base_내수 = tmp[tmp["구분2"] == "내수"]
-    rows.append(make_row(base_내수, "내수"))
+    r_내수 = make_row(base_내수, "내수")
+    r_내수["_depth"] = 0
+    rows.append(r_내수)
     for ind in industry_order:
-        sub = base_내수[base_내수["구분3"] == ind]
-        rows.append(make_row(sub, ind))
+        r_ind = make_row(base_내수[base_내수["구분3"] == ind], ind)
+        r_ind["_depth"] = 1
+        rows.append(r_ind)
 
     base_수출 = tmp[tmp["구분2"] == "수출"]
-    rows.append(make_row(base_수출, "수출"))
+    r_수출 = make_row(base_수출, "수출")
+    r_수출["_depth"] = 0
+    rows.append(r_수출)
     for ind in industry_order:
-        sub = base_수출[base_수출["구분3"] == ind]
-        rows.append(make_row(sub, ind))
+        r_ind = make_row(base_수출[base_수출["구분3"] == ind], ind)
+        r_ind["_depth"] = 1
+        rows.append(r_ind)
 
-    rows.append(make_row(tmp, "총계"))
+    r_tot = make_row(tmp, "총계")
+    r_tot["_depth"] = 0
+    rows.append(r_tot)
     for ind in industry_order:
-        sub = tmp[tmp["구분3"] == ind]
-        rows.append(make_row(sub, ind))
+        r_ind = make_row(tmp[tmp["구분3"] == ind], ind)
+        r_ind["_depth"] = 1
+        rows.append(r_ind)
 
     df_out = pd.DataFrame(rows)
-
-    cols = ["구분"]
-    def block(prod):
-        return [f"{prod}_판매중량", f"{prod}_영업이익_단가", f"{prod}_영업이익_금액", f"{prod}_영업이익_%"]
-
-    cols += block("총계")
-    for p in products:
-        cols += block(p)
-
+    cols = ["구분", "_depth"] + [f"{prod}_{m}" for prod in ["총계"] + products for m in ["판매중량", "단가", "영업이익", "%"]]
     cols = [c for c in cols if c in df_out.columns]
     df_out = df_out[cols]
 
-    weight_cols = [c for c in df_out.columns if "판매중량" in c]
-    op_cols = [c for c in df_out.columns if "영업이익_금액" in c]
-
-    for c in weight_cols:
+    for c in [c for c in df_out.columns if "판매중량" in c]:
         df_out[c] = df_out[c].apply(lambda x: int(round(float(x) / 1000.0, 0)) if pd.notna(x) else x)
-    for c in op_cols:
+    for c in [c for c in df_out.columns if "영업이익" in c and "%" not in c]:
         df_out[c] = df_out[c].apply(lambda x: int(round(float(x) / 1_000_000.0, 0)) if pd.notna(x) else x)
 
     return df_out
 
 
-def build_f97(df_src: pd.DataFrame, year: int, month: int) -> pd.DataFrame:
+def _build_개별_그룹_dfs(df_out: pd.DataFrame, target_items: list, base_col_name: str = "구분") -> dict:
+    item_dfs = {}
+    
+    for item in target_items:
+        item_cols = [c for c in df_out.columns if c.startswith(f"{item}_")]
+        sub_df = pd.DataFrame()
+        sub_df[base_col_name] = df_out[base_col_name]
+        if "_depth" in df_out.columns:
+            sub_df["_depth"] = df_out["_depth"]
+            
+        for c in item_cols:
+            clean_col = c.replace(f"{item}_", "")
+            sub_df[clean_col] = df_out[c]
+            
+        item_dfs[item] = sub_df
+        
+    return item_dfs
+
+
+def _유형별_영업이익_to_html_table(df: pd.DataFrame) -> str:
+    depths = df['_depth'].tolist() if '_depth' in df.columns else [1] * len(df)
+    render_df = df.drop(columns=['_depth'], errors='ignore')
+
+    _pad = {0: '8px', 1: '20px', 2: '36px'}
+    _prefix = {0: '', 1: '&nbsp;&nbsp;&nbsp;', 2: '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'}
+
+    rows_html = ''
+    for (_, row), depth in zip(render_df.iterrows(), depths):
+        d = int(depth) if str(depth).lstrip('-').isdigit() else 1
+        label = str(row.iloc[0])
+        is_sub = (d == 0) or label in ["내수", "수출", "총계", "합계", "실수요", "유통", "계", "포항공장", "충주공장", "충주2공장", "총합계", "정상", "매입매출"]
+        pad = _pad.get(d, '20px')
+        prefix = _prefix.get(d, '&nbsp;&nbsp;&nbsp;')
+
+        cells = ''
+        for i, val in enumerate(row):
+            if i == 0:
+                s = str(val)
+                if is_sub:
+                    lbl_st = (f'padding:5px 8px;padding-left:{pad};text-align:left;'
+                              f'background:{_C_LT_GRAY};font-weight:600;'
+                              f'border-bottom:1px solid #e2e8f0')
+                else:
+                    lbl_st = (f'padding:5px 8px;padding-left:{pad};text-align:left;'
+                              f'border-bottom:1px solid #e2e8f0;')
+                cells += f'<td style="{lbl_st}">{prefix}{s}</td>'
+            else:
+                col_name = render_df.columns[i]
+                is_pct = "%" in col_name or "비중" in col_name or "율" in col_name
+                if pd.isna(val) or val == '':
+                    s = ''
+                else:
+                    try:
+                        v_num = float(val)
+                        s = f"{v_num:,.1f}%" if is_pct else _fmt(v_num)
+                    except:
+                        s = str(val)
+                        
+                if s.startswith('-'):
+                    cells += f'<td style="{_TD_SUB_RED if is_sub else _TD_RED}">{s}</td>'
+                else:
+                    cells += f'<td style="{_TD_SUB_NUM if is_sub else _TD_NUM}">{s}</td>'
+                    
+        rows_html += f'<tr style="vertical-align:middle">{cells}</tr>'
+
+    headers = ''.join(f'<th style="{_TH}">{c}</th>' for c in render_df.columns)
+    return _html_table(f'<tr>{headers}</tr>', rows_html)
+
+
+def _라디오_선택_section(title, per_item_dfs, item_labels, prefix="type_op", memo='', unit='[단위: 톤, 백만원, %]'):
+    safe = [c.replace(' ', '_') for c in item_labels]
+
+    hide_sel = ', '.join(f'#fp_{prefix}_{s}' for s in safe)
+    css = f'{hide_sel}{{display:none}}'
+    for s in safe:
+        css += (f'#ft_{prefix}_{s}:checked~#fp_{prefix}_{s}{{display:block!important}}'
+                f'#ft_{prefix}_{s}:checked~.ftbar>#fl_{prefix}_{s}'
+                f'{{background:{_C_NAVY}!important;color:white!important;border-color:{_C_NAVY}!important}}')
+
+    inputs = ''.join(
+        f'<input type="radio" id="ft_{prefix}_{s}" name="ftab_{prefix}" {"checked" if i == 0 else ""} '
+        f'style="position:absolute;opacity:0;pointer-events:none">'
+        for i, s in enumerate(safe)
+    )
+
+    tab_bar = f'<div class="ftbar" style="display:flex;margin-bottom:6px;border-bottom:2px solid {_C_NAVY}">'
+    tab_bar += ''.join(
+        f'<label id="fl_{prefix}_{s}" for="ft_{prefix}_{s}" style="padding:5px 16px;cursor:pointer;'
+        f'border:1px solid #DEE2E6;border-bottom:none;margin-right:2px;'
+        f'font-size:0.9em;font-weight:500;border-radius:4px 4px 0 0;'
+        f'background:white;color:#555">{item}</label>'
+        for item, s in zip(item_labels, safe)
+    )
+    tab_bar += '</div>'
+
+    panels = ''.join(
+        f'<div id="fp_{prefix}_{s}">{_유형별_영업이익_to_html_table(per_item_dfs[item])}</div>'
+        for item, s in zip(item_labels, safe)
+    )
+
+    tab_html = f'<style>{css}</style>' + inputs + tab_bar + panels
+    return _layout64(title, tab_html, memo, unit)
+
+
+def _build_부서_메이커별_영업이익_table(year: int, month: int) -> pd.DataFrame:
+    df_src = load_sheet(Sheets.부서메이커별영업이익_DB)
     df = df_src.copy()
+    
     if '값' in df.columns and '실적' not in df.columns:
         df = df.rename(columns={'값': '실적'})
     df["실적"] = df["실적"].apply(_to_number)
@@ -601,194 +708,71 @@ def build_f97(df_src: pd.DataFrame, year: int, month: int) -> pd.DataFrame:
     mask = (df["연도"] == int(year)) & (df["월"] == int(month))
     df = df.loc[mask].copy()
 
-    products = ["CHQ", "CD", "STS", "BTB", "PB"]
-    df = df[df["구분1"].isin(products)]
-
-    tmp = df.pivot_table(
-        index=["구분2", "구분3", "구분1"],
-        columns="구분4",
-        values="실적",
-        aggfunc="sum",
-        fill_value=0.0
-    ).reset_index()
-
-    for col in ["매출중량", "매출금액", "영업이익"]:
-        if col not in tmp.columns:
-            tmp[col] = 0.0
-
-    tmp["판매중량"] = tmp["매출중량"]
-    tmp["판매금액"] = tmp["매출금액"]
-    tmp["영업이익금액"] = tmp["영업이익"]
-    metrics_cols = ["판매중량", "판매금액", "영업이익금액"]
-
-    def make_row(sub: pd.DataFrame, label2: str) -> dict:
-        row = {"구분2": label2}
-        prod_sums = {}
-
-        for p in products:
-            d = sub[sub["구분1"] == p]
-            vals = d[metrics_cols].sum() if not d.empty else pd.Series([0.0, 0.0, 0.0], index=metrics_cols)
-
-            qty, amt, op = vals["판매중량"], vals["판매금액"], vals["영업이익금액"]
-
-            row[f"{p}_판매중량"] = qty
-            row[f"{p}_단가"] = op / qty if qty != 0 else 0.0
-            row[f"{p}_영업이익"] = op
-            row[f"{p}_%"] = (op / amt * 100.0) if amt != 0 else 0.0
-
-            prod_sums[p] = (qty, amt, op)
-
-        total_qty = sum(q for q, _, _ in prod_sums.values())
-        total_amt = sum(a for _, a, _ in prod_sums.values())
-        total_op = sum(o for _, _, o in prod_sums.values())
-
-        row["총계_판매중량"] = total_qty
-        row["총계_단가"] = total_op / total_qty if total_qty != 0 else 0.0
-        row["총계_영업이익"] = total_op
-        row["총계_%"] = (total_op / total_amt * 100.0) if total_amt != 0 else 0.0
-
-        return row
-
-    rows = []
-    channels = ["실수요", "유통", "계"]
-    for ch in channels:
-        sub = tmp[tmp["구분2"] == ch] if ch != "계" else tmp
-        rows.append(make_row(sub, ch))
-
-    df_out = pd.DataFrame(rows)
-
-    tot_q = df_out.loc[df_out["구분2"] == "계", "총계_판매중량"].values[0] if not df_out.empty else 0
-    df_out["비중"] = df_out["총계_판매중량"].apply(lambda q: (q / tot_q * 100.0) if tot_q != 0 else 0.0)
-
-    cols = ["구분2", "비중"]
-    def block(prod):
-        return [f"{prod}_판매중량", f"{prod}_단가", f"{prod}_영업이익", f"{prod}_%"]
-
-    cols += block("총계")
-    for p in products:
-        cols += block(p)
-
-    cols = [c for c in cols if c in df_out.columns]
-    df_out = df_out[cols]
-
-    for c in [col for col in df_out.columns if "판매중량" in col]:
-        df_out[c] = df_out[c].apply(lambda x: int(round(float(x) / 1000.0, 0)) if pd.notna(x) else x)
-    for c in [col for col in df_out.columns if "영업이익" in col and "%" not in col]:
-        df_out[c] = df_out[c].apply(lambda x: int(round(float(x) / 1_000_000.0, 0)) if pd.notna(x) else x)
-
-    return df_out
-
-
-def build_f98(df_src: pd.DataFrame, year: int, month: int) -> pd.DataFrame:
-    return build_f99(df_src, year, month)
-
-
-def build_f99(df_src: pd.DataFrame, year: int, month: int) -> pd.DataFrame:
-    df = df_src.copy()
-    if '값' in df.columns and '실적' not in df.columns:
-        df = df.rename(columns={'값': '실적'})
-    df["실적"] = df["실적"].apply(_to_number)
-    df["연도"] = df["연도"].astype(int)
-    df["월"] = df["월"].astype(int)
-
-    mask = (df["연도"] == int(year)) & (df["월"] == int(month))
-    df = df.loc[mask].copy()
-
-    products = ["선재영업팀", "봉강영업팀", "부산영업소", "대구영업소", "글로벌영업팀"]
+    teams = ["선재영업팀", "봉강영업팀", "부산영업소", "대구영업소", "글로벌영업팀"]
     if "구분1" in df.columns:
-        df = df[df["구분1"].isin(products)]
+        df = df[df["구분1"].isin(teams)]
 
     col_cat = "분류" if "분류" in df.columns else "구분3" if "구분3" in df.columns else "구분4"
     tmp = df.pivot_table(
-        index=["구분2", "구분1"],
-        columns=col_cat,
-        values="실적",
-        aggfunc="sum",
-        fill_value=0.0
+        index=["구분2", "구분1"], columns=col_cat, values="실적", aggfunc="sum", fill_value=0.0
     ).reset_index()
 
     for col in ["매출중량", "매출금액", "영업이익"]:
-        if col not in tmp.columns:
-            tmp[col] = 0.0
+        if col not in tmp.columns: tmp[col] = 0.0
 
-    tmp["판매중량"] = tmp["매출중량"]
-    tmp["판매금액"] = tmp["매출금액"]
-    tmp["영업이익금액"] = tmp["영업이익"]
+    tmp["판매중량"], tmp["판매금액"], tmp["영업이익금액"] = tmp["매출중량"], tmp["매출금액"], tmp["영업이익"]
     metrics_cols = ["판매중량", "판매금액", "영업이익금액"]
 
-    def make_row(sub: pd.DataFrame, industry_label: str) -> dict:
-        row = {"구분1": industry_label}
-        prod_sums = {}
-
-        for p in products:
-            d = sub[sub["구분1"] == p]
+    def make_row(sub: pd.DataFrame, maker_label: str) -> dict:
+        row = {"구분": maker_label}
+        team_sums = {}
+        for t in teams:
+            d = sub[sub["구분1"] == t]
             vals = d[metrics_cols].sum() if not d.empty else pd.Series([0.0, 0.0, 0.0], index=metrics_cols)
-
             qty, amt, op = vals["판매중량"], vals["판매금액"], vals["영업이익금액"]
+            row[f"{t}_판매중량"] = qty
+            row[f"{t}_단가"] = op / qty if qty != 0 else 0.0
+            row[f"{t}_영업이익"] = op
+            row[f"{t}_%"] = (op / amt * 100.0) if amt != 0 else 0.0
+            team_sums[t] = (qty, amt, op)
 
-            row[f"{p}_판매중량"] = qty
-            row[f"{p}_판매금액"] = amt
-            row[f"{p}_영업이익"] = op
-            row[f"{p}_단가"] = op / qty if qty != 0 else 0.0
-            row[f"{p}_%"] = (op / amt * 100.0) if amt != 0 else 0.0
-
-            prod_sums[p] = (qty, amt, op)
-
-        total_qty = sum(q for q, _, _ in prod_sums.values())
-        total_amt = sum(a for _, a, _ in prod_sums.values())
-        total_op = sum(o for _, _, o in prod_sums.values())
+        total_qty = sum(q for q, _, _ in team_sums.values())
+        total_amt = sum(a for _, a, _ in team_sums.values())
+        total_op = sum(o for _, _, o in team_sums.values())
 
         row["총계_판매중량"] = total_qty
-        row["총계_판매금액"] = total_amt
-        row["총계_영업이익"] = total_op
         row["총계_단가"] = total_op / total_qty if total_qty != 0 else 0.0
+        row["총계_영업이익"] = total_op
         row["총계_%"] = (total_op / total_amt * 100.0) if total_amt != 0 else 0.0
-
         return row
 
     industry_order = ["포스코", "JFE STEEL(S)", "세아창원특수강", "현대제철", "세아베스틸", "기타"]
-
     rows = []
     for ind in industry_order:
         sub = tmp[tmp["구분2"] == ind]
-        rows.append(make_row(sub, ind))
+        r = make_row(sub, ind)
+        r["_depth"] = 1
+        rows.append(r)
 
     total_row = make_row(tmp, "합계")
+    total_row["_depth"] = 0
     rows.append(total_row)
 
     df_out = pd.DataFrame(rows)
-    df_out["비중"] = 0.0
-
-    denom = total_row["총계_판매중량"]
-    if denom != 0:
-        mask_industry = df_out.index < (len(df_out) - 1)
-        df_out.loc[mask_industry, "비중"] = (df_out.loc[mask_industry, "총계_판매중량"] / denom * 100.0)
-
-    df_out.loc[df_out.index == (len(df_out) - 1), "비중"] = ""
-
-    cols = ["구분1", "비중"]
-    def block(prod):
-        return [f"{prod}_판매중량", f"{prod}_단가", f"{prod}_영업이익", f"{prod}_%"]
-
-    cols += block("총계")
-    for p in products:
-        cols += block(p)
-
+    cols = ["구분", "_depth"] + [f"{grp}_{m}" for grp in ["총계"] + teams for m in ["판매중량", "단가", "영업이익", "%"]]
     cols = [c for c in cols if c in df_out.columns]
     df_out = df_out[cols]
 
-    weight_and_sales_cols = [c for c in df_out.columns if ("판매중량" in c) or ("판매금액" in c)]
-    op_profit_amount_cols = [c for c in df_out.columns if ("영업이익" in c and "%" not in c)]
-
-    for c in weight_and_sales_cols:
-        df_out[c] = df_out[c].apply(lambda x: int(round(float(x) / 1000.0, 0)) if pd.notna(x) and x != "" else x)
-    for c in op_profit_amount_cols:
-        df_out[c] = df_out[c].apply(lambda x: int(round(float(x) / 1_000_000.0, 0)) if pd.notna(x) and x != "" else x)
+    for c in [c for c in df_out.columns if "판매중량" in c]:
+        df_out[c] = df_out[c].apply(lambda x: int(round(float(x) / 1000.0, 0)) if pd.notna(x) else x)
+    for c in [c for c in df_out.columns if "영업이익" in c and "%" not in c]:
+        df_out[c] = df_out[c].apply(lambda x: int(round(float(x) / 1_000_000.0, 0)) if pd.notna(x) else x)
 
     return df_out
 
 
-def build_f100(df_src: pd.DataFrame, year: int, month: int) -> pd.DataFrame:
+def _build_부서_사업장_메이커별_영업이익_table(year: int, month: int) -> pd.DataFrame:
+    df_src = load_sheet(Sheets.부서사업장메이커별영업이익_DB)
     df = df_src.copy()
     if '값' in df.columns and '실적' not in df.columns:
         df = df.rename(columns={'값': '실적'})
@@ -799,54 +783,40 @@ def build_f100(df_src: pd.DataFrame, year: int, month: int) -> pd.DataFrame:
     mask = (df["연도"] == int(year)) & (df["월"] == int(month))
     df = df.loc[mask].copy()
 
-    products = ["선재영업팀", "봉강영업팀", "부산영업소", "대구영업소", "글로벌영업팀"]
-    df = df[df["구분1"].isin(products)]
+    teams = ["선재영업팀", "봉강영업팀", "부산영업소", "대구영업소", "글로벌영업팀"]
+    df = df[df["구분1"].isin(teams)]
 
     tmp = df.pivot_table(
-        index=["구분2", "구분3", "구분1"],
-        columns="구분4",
-        values="실적",
-        aggfunc="sum",
-        fill_value=0.0
+        index=["구분2", "구분3", "구분1"], columns="구분4", values="실적", aggfunc="sum", fill_value=0.0
     ).reset_index()
 
     for col in ["매출중량", "매출금액", "영업이익"]:
-        if col not in tmp.columns:
-            tmp[col] = 0.0
+        if col not in tmp.columns: tmp[col] = 0.0
 
-    tmp["판매중량"] = tmp["매출중량"]
-    tmp["판매금액"] = tmp["매출금액"]
-    tmp["영업이익금액"] = tmp["영업이익"]
+    tmp["판매중량"], tmp["판매금액"], tmp["영업이익금액"] = tmp["매출중량"], tmp["매출금액"], tmp["영업이익"]
     metrics_cols = ["판매중량", "판매금액", "영업이익금액"]
 
-    def make_row(sub: pd.DataFrame, label1: str, label2: str, ch_tag: str) -> dict:
-        row = {"구분1": label1, "구분2": label2, "채널": ch_tag}
-        prod_sums = {}
-
-        for p in products:
-            d = sub[sub["구분1"] == p]
+    def make_row(sub: pd.DataFrame, label: str) -> dict:
+        row = {"구분": label}
+        team_sums = {}
+        for t in teams:
+            d = sub[sub["구분1"] == t]
             vals = d[metrics_cols].sum() if not d.empty else pd.Series([0.0, 0.0, 0.0], index=metrics_cols)
-
             qty, amt, op = vals["판매중량"], vals["판매금액"], vals["영업이익금액"]
+            row[f"{t}_판매중량"] = qty
+            row[f"{t}_단가"] = op / qty if qty != 0 else 0.0
+            row[f"{t}_영업이익"] = op
+            row[f"{t}_%"] = (op / amt * 100.0) if amt != 0 else 0.0
+            team_sums[t] = (qty, amt, op)
 
-            row[f"{p}_판매중량"] = qty
-            row[f"{p}_판매금액"] = amt
-            row[f"{p}_영업이익"] = op
-            row[f"{p}_단가"] = op / qty if qty != 0 else 0.0
-            row[f"{p}_%"] = (op / amt * 100.0) if amt != 0 else 0.0
-
-            prod_sums[p] = (qty, amt, op)
-
-        total_qty = sum(q for q, _, _ in prod_sums.values())
-        total_amt = sum(a for _, a, _ in prod_sums.values())
-        total_op = sum(o for _, _, o in prod_sums.values())
+        total_qty = sum(q for q, _, _ in team_sums.values())
+        total_amt = sum(a for _, a, _ in team_sums.values())
+        total_op = sum(o for _, _, o in team_sums.values())
 
         row["총계_판매중량"] = total_qty
-        row["총계_판매금액"] = total_amt
-        row["총계_영업이익"] = total_op
         row["총계_단가"] = total_op / total_qty if total_qty != 0 else 0.0
+        row["총계_영업이익"] = total_op
         row["총계_%"] = (total_op / total_amt * 100.0) if total_amt != 0 else 0.0
-
         return row
 
     industry_order_default = ["포스코", "JFE STEEL(S)", "세아창원특수강", "현대제철", "세아베스틸", "기타"]
@@ -855,55 +825,36 @@ def build_f100(df_src: pd.DataFrame, year: int, month: int) -> pd.DataFrame:
     rows = []
     for ch in ["포항공장", "충주공장", "충주2공장"]:
         base_ch = tmp[tmp["구분2"] == ch]
-        rows.append(make_row(base_ch, ch, "", ch))
-
+        r_ch = make_row(base_ch, ch)
+        r_ch["_depth"] = 0
+        rows.append(r_ch)
+        
         order = industry_order_충주2 if ch == "충주2공장" else industry_order_default
         for ind in order:
             sub = base_ch[base_ch["구분3"] == ind]
-            rows.append(make_row(sub, "", ind, ch))
+            r_ind = make_row(sub, ind)
+            r_ind["_depth"] = 1
+            rows.append(r_ind)
 
-    total_row = make_row(tmp, "총합계", "", "총합계")
-    rows.append(total_row)
+    r_tot = make_row(tmp, "총합계")
+    r_tot["_depth"] = 0
+    rows.append(r_tot)
 
     df_out = pd.DataFrame(rows)
-    df_out["비중"] = ""
-
-    for ch in ["포항공장", "충주공장", "충주2공장"]:
-        mask_ch = df_out["채널"] == ch
-        if not mask_ch.any(): continue
-
-        total_qty_series = df_out.loc[mask_ch & (df_out["구분1"] == ch), "총계_판매중량"]
-        if total_qty_series.empty: continue
-
-        denom = total_qty_series.iloc[0]
-        if denom == 0: continue
-
-        numer_mask = mask_ch & df_out["구분2"].isin(["포스코", "JFE STEEL(S)", "세아창원특수강", "현대제철", "세아베스틸", "기타"])
-        df_out.loc[numer_mask, "비중"] = (df_out.loc[numer_mask, "총계_판매중량"] / denom * 100.0)
-
-    cols = ["구분1", "구분2", "비중"]
-    def block(prod):
-        return [f"{prod}_판매중량", f"{prod}_단가", f"{prod}_영업이익", f"{prod}_%"]
-
-    cols += block("총계")
-    for p in products:
-        cols += block(p)
-
+    cols = ["구분", "_depth"] + [f"{grp}_{m}" for grp in ["총계"] + teams for m in ["판매중량", "단가", "영업이익", "%"]]
     cols = [c for c in cols if c in df_out.columns]
     df_out = df_out[cols]
 
-    weight_and_sales_cols = [c for c in df_out.columns if ("판매중량" in c) or ("판매금액" in c)]
-    op_profit_amount_cols = [c for c in df_out.columns if ("영업이익" in c and "%" not in c)]
-
-    for c in weight_and_sales_cols:
-        df_out[c] = df_out[c].apply(lambda x: int(round(float(x) / 1000.0, 0)) if pd.notna(x) and x != "" else x)
-    for c in op_profit_amount_cols:
-        df_out[c] = df_out[c].apply(lambda x: int(round(float(x) / 1_000_000.0, 0)) if pd.notna(x) and x != "" else x)
+    for c in [c for c in df_out.columns if "판매중량" in c]:
+        df_out[c] = df_out[c].apply(lambda x: int(round(float(x) / 1000.0, 0)) if pd.notna(x) else x)
+    for c in [c for c in df_out.columns if "영업이익" in c and "%" not in c]:
+        df_out[c] = df_out[c].apply(lambda x: int(round(float(x) / 1_000_000.0, 0)) if pd.notna(x) else x)
 
     return df_out
 
 
-def build_f101(df_src: pd.DataFrame, year: int, month: int) -> pd.DataFrame:
+def _build_부서별_인당_영업이익_table(year: int, month: int) -> pd.DataFrame:
+    df_src = load_sheet(Sheets.부서별인당영업이익_DB)
     df = df_src.copy()
     if '값' in df.columns and '실적' not in df.columns:
         df = df.rename(columns={'값': '실적'})
@@ -912,23 +863,17 @@ def build_f101(df_src: pd.DataFrame, year: int, month: int) -> pd.DataFrame:
     df["월"] = df["월"].astype(int)
 
     pivot = df.pivot_table(
-        index=["연도", "월", "구분1", "구분2"],
-        columns="구분3",
-        values="실적",
-        aggfunc="sum",
-        fill_value=0.0
+        index=["연도", "월", "구분1", "구분2"], columns="구분3", values="실적", aggfunc="sum", fill_value=0.0
     ).reset_index()
 
     for col in ["매출중량", "매출금액", "영업이익", "인원"]:
-        if col not in pivot.columns:
-            pivot[col] = 0.0
+        if col not in pivot.columns: pivot[col] = 0.0
 
     mask_ytd = (pivot["연도"] == year) & (pivot["월"] <= month)
     sub_ytd = pivot.loc[mask_ytd].copy()
     n_months_ytd = sub_ytd[["연도", "월"]].drop_duplicates()["월"].nunique()
 
     prev_year, prev_month = (year - 1, 12) if month == 1 else (year, month - 1)
-
     sub_prev = pivot.loc[(pivot["연도"] == prev_year) & (pivot["월"] == prev_month)].copy()
     sub_cur = pivot.loc[(pivot["연도"] == year) & (pivot["월"] == month)].copy()
 
@@ -941,11 +886,9 @@ def build_f101(df_src: pd.DataFrame, year: int, month: int) -> pd.DataFrame:
         )
 
         if avg_monthly:
-            if n_months is None or n_months <= 0:
-                n_months = sub[["연도", "월"]].drop_duplicates()["월"].nunique()
+            if n_months is None or n_months <= 0: n_months = sub[["연도", "월"]].drop_duplicates()["월"].nunique()
             if n_months > 0:
-                for col in ["매출중량", "매출금액", "영업이익"]:
-                    sales_df[col] = sales_df[col] / n_months
+                for col in ["매출중량", "매출금액", "영업이익"]: sales_df[col] = sales_df[col] / n_months
 
         staff_map = sub[(sub["구분1"] == "정상") & (sub["인원"] > 0)].groupby("구분2")["인원"].mean().to_dict()
         return sales_df, staff_map
@@ -956,7 +899,6 @@ def build_f101(df_src: pd.DataFrame, year: int, month: int) -> pd.DataFrame:
 
     def _metrics_for_period(sales_df: pd.DataFrame, staff_map: dict, section: str, team: str | None) -> dict:
         if section == "중계": section = "총계"
-
         if sales_df.empty:
             qty = amt = op = 0.0
         else:
@@ -974,7 +916,6 @@ def build_f101(df_src: pd.DataFrame, year: int, month: int) -> pd.DataFrame:
             op = d["영업이익"].sum()
 
         staff = sum(staff_map.values()) if team is None else staff_map.get(team, 0.0)
-
         unit_price = amt / qty if qty != 0 else 0.0
         op_margin = (op / amt * 100.0) if amt != 0 else 0.0
         percap_qty = qty / staff if staff != 0 else 0.0
@@ -985,210 +926,75 @@ def build_f101(df_src: pd.DataFrame, year: int, month: int) -> pd.DataFrame:
             "인원": staff, "인당중량": percap_qty, "인당영업이익": percap_profit,
         }
 
-    def make_row(section: str, team: str | None, label1: str, label2: str) -> dict:
-        row = {"구분1": label1, "구분2": label2}
+    def make_row(section: str, team: str | None, label: str) -> dict:
+        row = {"구분": label}
         for prefix, s_df, s_staff in [("누적_", sales_ytd, staff_ytd), ("전월_", sales_prev, staff_prev), ("당월_", sales_cur, staff_cur)]:
             m = _metrics_for_period(s_df, s_staff, section, team)
-            for k, v in m.items():
-                row[f"{prefix}{k}"] = v
+            for k, v in m.items(): row[f"{prefix}{k}"] = v
         return row
 
     teams = ["선재영업팀", "봉강영업팀", "부산영업소", "대구영업소", "글로벌영업팀"]
     rows = []
 
-    rows.append(make_row("정상", None, "정상", ""))
-    for t in teams: rows.append(make_row("정상", t, "", t))
+    r_norm = make_row("정상", None, "정상")
+    r_norm["_depth"] = 0
+    rows.append(r_norm)
+    for t in teams: 
+        r_t = make_row("정상", t, t)
+        r_t["_depth"] = 1
+        rows.append(r_t)
 
-    rows.append(make_row("매입매출", None, "매입매출", ""))
-    for t in teams: rows.append(make_row("매입매출", t, "", t))
+    r_buy = make_row("매입매출", None, "매입매출")
+    r_buy["_depth"] = 0
+    rows.append(r_buy)
+    for t in teams: 
+        r_t = make_row("매입매출", t, t)
+        r_t["_depth"] = 1
+        rows.append(r_t)
 
-    rows.append(make_row("중계", None, "총계", ""))
-    for t in teams: rows.append(make_row("총계", t, "", t))
+    r_tot = make_row("중계", None, "총계")
+    r_tot["_depth"] = 0
+    rows.append(r_tot)
+    for t in teams: 
+        r_t = make_row("총계", t, t)
+        r_t["_depth"] = 1
+        rows.append(r_t)
 
-    rows.append(make_row("총계", None, "총합계", ""))
+    r_all = make_row("총계", None, "총합계")
+    r_all["_depth"] = 0
+    rows.append(r_all)
 
     df_out = pd.DataFrame(rows)
-
     metrics_order = ["판매중량", "판매단가", "영업이익", "영업이익율", "인원", "인당중량", "인당영업이익"]
-    cols_order = ["구분1", "구분2"] + [f"{p}{m}" for p in ["누적_", "전월_", "당월_"] for m in metrics_order]
+    cols_order = ["구분", "_depth"] + [f"{p}{m}" for p in ["누적_", "전월_", "당월_"] for m in metrics_order]
     cols_order = [c for c in cols_order if c in df_out.columns]
     df_out = df_out[cols_order]
 
     for c in [c for c in df_out.columns if ("판매중량" in c) or ("인당중량" in c)]:
         df_out[c] = df_out[c].apply(lambda x: int(round(float(x) / 1000.0, 0)) if pd.notna(x) else x)
-
     for c in [c for c in df_out.columns if ("영업이익" in c and "율" not in c)]:
         df_out[c] = df_out[c].apply(lambda x: int(round(float(x) / 1_000_000.0, 0)) if pd.notna(x) else x)
 
     return df_out
 
 
-# ── 5) 유형별 손익분석 렌더링 HTML 생성 함수 ─────────────────────────────
+def _build_인당_영업이익_period_dfs(df_out: pd.DataFrame) -> dict:
+    # 💡 [Fix] 요청사항 반영: '총계' 탭 제외 후 ['누적', '전월', '당월'] 만 생성
+    periods = ["누적", "전월", "당월"]
+    period_dfs = {}
 
-def _render_type_analysis_html(df: pd.DataFrame, table_type: int = 1) -> str:
-    body = df.copy()
-    
-    # 1. 포맷터 정의
-    def fmt_num(v):
-        try: v = float(str(v).replace(",", "").replace("%", ""))
-        except: return ""
-        if v < 0: return f'<span style="color:#d32f2f;">-{abs(v):,.0f}</span>'
-        return f"{v:,.0f}"
+    metrics = ["판매중량", "판매단가", "영업이익", "영업이익율", "인원", "인당중량", "인당영업이익"]
+    for p in periods:
+        sub_df = pd.DataFrame()
+        sub_df["구분"] = df_out["구분"]
+        sub_df["_depth"] = df_out["_depth"]
+        for m in metrics:
+            col_key = f"{p}_{m}"
+            if col_key in df_out.columns:
+                sub_df[m] = df_out[col_key]
+        period_dfs[p] = sub_df
 
-    def fmt_diff(v):
-        try: v = float(str(v).replace(",", "").replace("%", ""))
-        except: return ""
-        if v < 0: return f'<span style="color:#d32f2f;">({abs(v):,.0f})</span>'
-        return f"{v:,.0f}"
-
-    def fmt_pct(v):
-        s = str(v)
-        if s.strip() == "": return ""
-        try: v = float(s.replace(",", "").replace("%", ""))
-        except: return s
-        if v < 0: return f'<span style="color:#d32f2f;">-{abs(v):,.1f}%</span>'
-        return f"{v:,.1f}%"
-
-    th_style = "border:1px solid #aaa; background:white; padding:8px 12px; text-align:center; font-weight:700; font-size:13px; white-space:nowrap;"
-    td_style = "border:1px solid #aaa; padding:6px 12px; text-align:right; font-weight:400; font-size:13px;"
-    td_left_style = "border:1px solid #aaa; padding:6px 12px; text-align:left; font-weight:400; font-size:13px; white-space:nowrap;"
-
-    # 표 1, 4, 5
-    if table_type in (1, 4, 5):
-        if table_type == 5:
-            body["구분"] = body.apply(
-                lambda r: str(r["구분1"]) if str(r["구분1"]).strip() not in ["", "nan"]
-                else str(r["구분2"]) if str(r["구분2"]).strip() not in ["", "nan"] else "", axis=1
-            )
-            body = body.drop(columns=[c for c in ["구분1", "구분2"] if c in body.columns])
-            cols = ["구분"] + [c for c in body.columns if c != "구분"]
-            body = body[cols]
-        elif "구분1" in body.columns and "구분" not in body.columns:
-            body = body.rename(columns={"구분1": "구분"})
-
-        num_cols = [c for c in body.columns if any(k in c for k in ["판매중량", "단가", "금액"]) and "%" not in c]
-        pct_cols = [c for c in body.columns if "_%" in c or c == "비중"]
-
-        for c in num_cols: body[c] = body[c].map(fmt_num)
-        for c in pct_cols: body[c] = body[c].map(fmt_pct)
-
-        col_names = list(body.columns)
-        th_cells = "".join(f'<th style="{th_style}">{c}</th>' for c in col_names)
-
-        tr_html = ""
-        for _, row in body.iterrows():
-            tds = ""
-            row_label = str(row[col_names[0]]).strip()
-            for ci, c in enumerate(col_names):
-                val = "" if str(row[c]) == "nan" else str(row[c])
-                style = td_left_style if ci == 0 else td_style
-                if ci == 0:
-                    tds += f'<td style="{style}">{val}</td>'
-                else:
-                    tds += f'<td style="{style}" title="{row_label}, {c}">{val}</td>'
-            tr_html += f'<tr>{tds}</tr>\n'
-
-        return f"""<div style="overflow-x:auto; width:100%;">
-            <table style="border-collapse:collapse; width:100%; font-family:\'Noto Sans KR\', sans-serif;">
-            <thead><tr>{th_cells}</tr></thead>
-            <tbody>{tr_html}</tbody>
-            </table></div>"""
-
-    # 표 2, 3
-    elif table_type in (2, 3):
-        hdr1, hdr2, hdr3 = {c: "" for c in body.columns}, {c: "" for c in body.columns}, {c: "" for c in body.columns}
-        if "구분2" in hdr1: hdr1["구분2"] = "구분"
-        elif "구분1" in hdr1: hdr1["구분1"] = "구분"
-
-        products = ["총계", "CHQ", "CD", "STS", "BTB", "PB"]
-        metrics = ["판매중량", "단가", "영업이익", "%"]
-
-        for prod in products:
-            for m in metrics:
-                col = f"{prod}_{m}"
-                if col not in body.columns: continue
-                hdr1[col] = prod
-                hdr2[col] = "판매" if m == "판매중량" else "영업이익"
-                hdr3[col] = "중량" if m == "판매중량" else "단가" if m == "단가" else "금액" if m == "영업이익" else "%"
-
-        if "비중" in hdr1:
-            hdr1["비중"], hdr2["비중"], hdr3["비중"] = "", "비중", ""
-
-        hdr_df = pd.DataFrame([hdr1, hdr2, hdr3])
-        body_merged = pd.concat([hdr_df, body], ignore_index=True)
-
-        data_rows = body_merged.index >= 3
-        diff_cols = [c for c in body_merged.columns if ("단가" in c or "판매금액" in c or "영업이익" in c) and not c.endswith("_%")]
-        pct_cols = [c for c in body_merged.columns if c.endswith("_%")]
-        ratio_cols = [c for c in body_merged.columns if c == "비중"]
-
-        body_merged.loc[data_rows, diff_cols] = body_merged.loc[data_rows, diff_cols].map(fmt_diff)
-        body_merged.loc[data_rows, pct_cols] = body_merged.loc[data_rows, pct_cols].map(fmt_pct)
-        body_merged.loc[data_rows, ratio_cols] = body_merged.loc[data_rows, ratio_cols].map(fmt_pct)
-
-        tr_html = ""
-        col_names = list(body_merged.columns)
-        for r_idx, row in body_merged.iterrows():
-            tds = ""
-            for c_idx, c in enumerate(col_names):
-                val = "" if str(row[c]) == "nan" else str(row[c])
-                if r_idx < 3:
-                    style = f"{th_style} background-color:white;"
-                    tds += f'<td style="{style}">{val}</td>'
-                else:
-                    style = td_left_style if c_idx in (0, 1) else td_style
-                    lbl1 = str(row.iloc[0]).strip() if str(row.iloc[0]).strip() not in ["", "nan"] else ""
-                    lbl2 = str(row.iloc[1]).strip() if len(row) > 1 and str(row.iloc[1]).strip() not in ["", "nan"] else ""
-                    row_lbl = f"{lbl1} {lbl2}".strip()
-                    col_lbl = f"{hdr1[c]} {hdr2[c]} {hdr3[c]}".strip()
-                    tds += f'<td style="{style}" title="{row_lbl}, {col_lbl}">{val}</td>'
-            tr_html += f'<tr>{tds}</tr>\n'
-
-        return f"""<div style="overflow-x:auto; width:100%;">
-            <table style="border-collapse:collapse; width:100%; font-family:\'Noto Sans KR\', sans-serif;">
-            <tbody>{tr_html}</tbody>
-            </table></div>"""
-
-    # 표 6
-    elif table_type == 6:
-        if "구분1" in body.columns or "구분2" in body.columns:
-            body["구분"] = body.apply(
-                lambda r: str(r["구분1"]) if str(r["구분1"]).strip() not in ["", "nan"]
-                else str(r["구분2"]) if str(r["구분2"]).strip() not in ["", "nan"] else "", axis=1
-            )
-            body = body.drop(columns=[c for c in ["구분1", "구분2"] if c in body.columns])
-            cols = ["구분"] + [c for c in body.columns if c != "구분"]
-            body = body[cols]
-
-        num_cols = [c for c in body.columns if any(k in c for k in ["판매중량", "단가", "금액", "인원", "인당"]) and "%" not in c and "율" not in c]
-        pct_cols = [c for c in body.columns if "영업이익율" in c or c.endswith("_%")]
-
-        for c in num_cols: body[c] = body[c].map(fmt_num)
-        for c in pct_cols: body[c] = body[c].map(fmt_pct)
-
-        col_names = list(body.columns)
-        th_cells = "".join(f'<th style="{th_style}">{c}</th>' for c in col_names)
-
-        tr_html = ""
-        for _, row in body.iterrows():
-            tds = ""
-            row_label = str(row[col_names[0]]).strip()
-            for ci, c in enumerate(col_names):
-                val = "" if str(row[c]) == "nan" else str(row[c])
-                style = td_left_style if ci == 0 else td_style
-                if ci == 0:
-                    tds += f'<td style="{style}">{val}</td>'
-                else:
-                    tds += f'<td style="{style}" title="{row_label}, {c}">{val}</td>'
-            tr_html += f'<tr>{tds}</tr>\n'
-
-        return f"""<div style="overflow-x:auto; width:100%;">
-            <table style="border-collapse:collapse; width:100%; font-family:\'Noto Sans KR\', sans-serif;">
-            <thead><tr>{th_cells}</tr></thead>
-            <tbody>{tr_html}</tbody>
-            </table></div>"""
-
-    return ""
+    return period_dfs
 
 
 # ── render_page ───────────────────────────────────────────────────────────
@@ -1197,7 +1003,7 @@ def render_page(app, year_state, month_state):
 
     def _render_title():
         app.markdown(
-            f'<h1 style="color:#2D3748;font-size:2em;font-weight:700;">{int(year_state.value)}년 {int(month_state.value)}월 별첨</h1>',
+            f'<h1 style="color:#404448">{int(year_state.value)}년 {int(month_state.value)}월 별첨</h1>',
             unsafe_allow_html=True,
         )
     app.If(lambda: True, _render_title)
@@ -1227,7 +1033,7 @@ def render_page(app, year_state, month_state):
                 )
                 
                 app.markdown(
-                    f'<h3 style="margin:30px 0 10px 0;font-size:1.25em;font-weight:700;color:#1E293B">{title_text}</h3>',
+                    f'<h3 style="margin:20px 0 10px 0;font-size:1.1em;font-weight:600;color:#404448">{title_text}</h3>',
                     unsafe_allow_html=True
                 )
                 
@@ -1247,7 +1053,7 @@ def render_page(app, year_state, month_state):
             x_labels, rates = _build_환율추이_data(year, month)
 
             app.markdown(
-                '<h3 style="margin:20px 0 10px 0;font-size:1.25em;font-weight:700;color:#1E293B">1) 환율 추이 (USD, CNH, THB)</h3>',
+                '<h3 style="margin:20px 0 10px 0;font-size:1.1em;font-weight:600;color:#404448">1) 환율 추이 (USD, CNH, THB)</h3>',
                 unsafe_allow_html=True
             )
 
@@ -1268,77 +1074,54 @@ def render_page(app, year_state, month_state):
             
             memo = _get_memo(Sheets.손익계산서_메모, year, month) if hasattr(Sheets, '손익계산서_메모') else ''
             
-            app.markdown(_layout100("1) 손익계산서 수정정상원가", html, memo=memo, unit="[단위: 톤, 백만원]"), unsafe_allow_html=True)
+            app.markdown(_layout64("1) 손익계산서 수정정상원가", html, memo=memo, unit="(단위: 톤, 백만원)"), unsafe_allow_html=True)
 
         app.If(lambda: True, _render_손익계산서_탭)
 
-    # 4. 유형별 손익분석 탭 (6개 표 렌더링)
+    # 4. 유형별 손익분석 탭
     with tabs[3]:
         def _render_유형별손익분석_탭():
             year, month = int(year_state.value), int(month_state.value)
+            teams_labels = ["총계", "선재영업팀", "봉강영업팀", "부산영업소", "대구영업소", "글로벌영업팀"]
 
-            # 1) 산업군별 영업이익 (f_96)
+            # 1) 산업군별 영업이익
             try:
-                df_src96 = load_sheet(Sheets.f_96) if hasattr(Sheets, 'f_96') else load_sheet('f_96')
-                disp96 = build_f96(df_src96, year, month)
-                html96 = _render_type_analysis_html(disp96, table_type=1)
-                memo96 = _get_memo(Sheets.f_96_메모, year, month) if hasattr(Sheets, 'f_96_메모') else ''
-                app.markdown(_layout100("1) 산업군별 영업이익 (- B급 제외)", html96, memo=memo96, unit="[단위: 톤, 백만원]"), unsafe_allow_html=True)
+                df1 = _build_산업군별_영업이익_table(year, month)
+                per_item_dfs1 = _build_개별_그룹_dfs(df1, ["총계", "CHQ", "CD", "STS", "BTB", "PB"])
+                item_labels1 = ["총계", "CHQ", "CD", "STS", "BTB", "PB"]
+                memo1 = ''
+                app.markdown(_라디오_선택_section("1) 산업군별 영업이익 (B급 제외)", per_item_dfs1, item_labels1, prefix="ind_op", memo=memo1, unit="(단위: 톤, 백만원, %)"), unsafe_allow_html=True)
                 app.markdown("<br>", unsafe_allow_html=True)
             except Exception as e:
                 app.markdown(f"<p style='color:#d32f2f;'>1) 산업군별 영업이익 생성 오류: {e}</p>", unsafe_allow_html=True)
 
-            # 2) 실수요/유통 영업이익 (f_97)
+            # 4) 부서/메이커별 영업이익
             try:
-                df_src97 = load_sheet(Sheets.f_97) if hasattr(Sheets, 'f_97') else load_sheet('f_97')
-                disp97 = build_f97(df_src97, year, month)
-                html97 = _render_type_analysis_html(disp97, table_type=2)
-                memo97 = _get_memo(Sheets.f_97_메모, year, month) if hasattr(Sheets, 'f_97_메모') else ''
-                app.markdown(_layout100("2) 실수요/유통 영업이익 (- B급 제외)", html97, memo=memo97, unit="[단위: 톤, 백만원]"), unsafe_allow_html=True)
-                app.markdown("<br>", unsafe_allow_html=True)
-            except Exception as e:
-                app.markdown(f"<p style='color:#d32f2f;'>2) 실수요/유통 영업이익 생성 오류: {e}</p>", unsafe_allow_html=True)
-
-            # 3) 메이커별 영업이익 (f_98)
-            try:
-                df_src98 = load_sheet(Sheets.f_98) if hasattr(Sheets, 'f_98') else load_sheet('f_98')
-                disp98 = build_f98(df_src98, year, month)
-                html98 = _render_type_analysis_html(disp98, table_type=3)
-                memo98 = _get_memo(Sheets.f_98_메모, year, month) if hasattr(Sheets, 'f_98_메모') else ''
-                app.markdown(_layout100("3) 메이커별 영업이익 (- B급 및 매입매출 제외)", html98, memo=memo98, unit="[단위: 톤, 백만원]"), unsafe_allow_html=True)
-                app.markdown("<br>", unsafe_allow_html=True)
-            except Exception as e:
-                app.markdown(f"<p style='color:#d32f2f;'>3) 메이커별 영업이익 생성 오류: {e}</p>", unsafe_allow_html=True)
-
-            # 4) 부서/메이커별 영업이익 (f_99)
-            try:
-                df_src99 = load_sheet(Sheets.f_99) if hasattr(Sheets, 'f_99') else load_sheet('f_99')
-                disp99 = build_f99(df_src99, year, month)
-                html99 = _render_type_analysis_html(disp99, table_type=4)
-                memo99 = _get_memo(Sheets.f_99_메모, year, month) if hasattr(Sheets, 'f_99_메모') else ''
-                app.markdown(_layout100("4) 부서/메이커별 영업이익 (- B급 및 매입매출 제외)", html99, memo=memo99, unit="[단위: 톤, 백만원]"), unsafe_allow_html=True)
+                df4 = _build_부서_메이커별_영업이익_table(year, month)
+                per_team_dfs4 = _build_개별_그룹_dfs(df4, teams_labels)
+                memo4 = ''
+                app.markdown(_라디오_선택_section("4) 부서/메이커별 영업이익 (B급 및 매입매출 제외)", per_team_dfs4, teams_labels, prefix="dept_maker_op", memo=memo4, unit="(단위: 톤, 백만원, %)"), unsafe_allow_html=True)
                 app.markdown("<br>", unsafe_allow_html=True)
             except Exception as e:
                 app.markdown(f"<p style='color:#d32f2f;'>4) 부서/메이커별 영업이익 생성 오류: {e}</p>", unsafe_allow_html=True)
 
-            # 5) 부서/사업장/메이커별 영업이익 (f_100)
+            # 5) 부서/사업장/메이커별 영업이익
             try:
-                df_src100 = load_sheet(Sheets.f_100) if hasattr(Sheets, 'f_100') else load_sheet('f_100')
-                disp100 = build_f100(df_src100, year, month)
-                html100 = _render_type_analysis_html(disp100, table_type=5)
-                memo100 = _get_memo(Sheets.f_100_메모, year, month) if hasattr(Sheets, 'f_100_메모') else ''
-                app.markdown(_layout100("5) 부서/사업장/메이커별 영업이익 (- B급 및 매입매출 제외)", html100, memo=memo100, unit="[단위: 톤, 백만원]"), unsafe_allow_html=True)
+                df5 = _build_부서_사업장_메이커별_영업이익_table(year, month)
+                per_team_dfs5 = _build_개별_그룹_dfs(df5, teams_labels)
+                memo5 = ''
+                app.markdown(_라디오_선택_section("5) 부서/사업장/메이커별 영업이익 (B급 및 매입매출 제외)", per_team_dfs5, teams_labels, prefix="dept_site_maker_op", memo=memo5, unit="(단위: 톤, 백만원, %)"), unsafe_allow_html=True)
                 app.markdown("<br>", unsafe_allow_html=True)
             except Exception as e:
                 app.markdown(f"<p style='color:#d32f2f;'>5) 부서/사업장/메이커별 영업이익 생성 오류: {e}</p>", unsafe_allow_html=True)
 
-            # 6) 부서별/인당 영업이익 (f_101)
+            # 6) 부서별/인당 영업이익 (총계 탭 제외, 누적/전월/당월 탭 적용)
             try:
-                df_src101 = load_sheet(Sheets.f_101) if hasattr(Sheets, 'f_101') else load_sheet('f_101')
-                disp101 = build_f101(df_src101, year, month)
-                html101 = _render_type_analysis_html(disp101, table_type=6)
-                memo101 = _get_memo(Sheets.f_101_메모, year, month) if hasattr(Sheets, 'f_101_메모') else ''
-                app.markdown(_layout100("6) 부서별/인당 영업이익 (- B급 제외)", html101, memo=memo101, unit="[단위: 톤, 백만원]"), unsafe_allow_html=True)
+                df6 = _build_부서별_인당_영업이익_table(year, month)
+                per_period_dfs6 = _build_인당_영업이익_period_dfs(df6)
+                period_labels6 = ["누적", "전월", "당월"]
+                memo6 = ''
+                app.markdown(_라디오_선택_section("6) 부서별/인당 영업이익 (B급 제외)", per_period_dfs6, period_labels6, prefix="per_capita_op", memo=memo6, unit="(단위: 톤, 백만원, %)"), unsafe_allow_html=True)
             except Exception as e:
                 app.markdown(f"<p style='color:#d32f2f;'>6) 부서별/인당 영업이익 생성 오류: {e}</p>", unsafe_allow_html=True)
 
