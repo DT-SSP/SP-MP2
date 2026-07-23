@@ -40,7 +40,9 @@ class SheetID:
     해외연령별재고 = "1zb0kILJsKu9iiN5jKU5VClRoUs7GFpo038mL_tYy7JI"
     해외채권 = "18imG7hmw68PfVQQpGrs--1DglQcaB7qWhBsUX4QFMKg"
     해외인원 = "1zv2xxJaM7BfVDhqgj4tuI-vh97tfHEO-YwdLVbTVBUE"
-
+    별첨 = "1B2jxlRAau6yXjLe7Zs6J12Pz9aHdVn1iqf-n_JcC-Yw"
+    손익계산서수정 = "1FhJMtgXIBPd0C9QXg2UI3Ems3xhUi6B1tHjlR6IYfUc"
+    유형별손익 = "1PHoRSoY6vjge7JabpimzCiD5csgCHHowIRnGYhZMDWE"
 
 class Sheets:
 
@@ -245,6 +247,13 @@ class Sheets:
     해외인원_DB = (SheetID.해외인원, "(해외)인원 현황")
     해외인원_메모 = (SheetID.해외인원, "(해외)인원 현황_메모")
     해외인원_생산량_메모 = (SheetID.해외인원, "(해외)인당 월평균 생산량_메모")
+
+    전체실적요약_DB = (SheetID.별첨, "89~92. 전체 실적요약_DB")
+    환율_DB = (SheetID.별첨, "94. 환율추이_DB")
+    손익계산서_DB = (SheetID.손익계산서수정, "95. 손익계산서_수정정상원가_DB")
+    산업군별영업이익_DB = (SheetID.유형별손익, "96. 산업군별 영업이익_DB")
+    실수요유통영업이익_DB = (SheetID.유형별손익, "97. 실수요유통 영업이익_DB")
+    메이커별영업이익_DB = (SheetID.유형별손익, "98. 메이커별 영업이익_DB")
 
 선재_국내_사업장 = '본사'
 
