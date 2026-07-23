@@ -1366,7 +1366,7 @@ def _build_판매계획및실적_html(year, month):
 # ── 페이지 렌더 ───────────────────────────────────────────────
 
 def render_page(app, year_state, month_state):
-
+    
     def _render_title():
         app.markdown(
             f'<h1 style="color:#404448">{int(year_state.value)}년 {int(month_state.value)}월 실적요약</h1>',
