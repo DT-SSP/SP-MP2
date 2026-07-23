@@ -171,7 +171,7 @@ def _build_부적합_포항(year, month):
     col_hdrs = [f"'{prev_yr_str}년 월평균", f"'{curr_yr_str}년 목표"]
     for y, m in recent:
         col_hdrs.append(f"'{str(y)[-2:]}년 {m}월")
-    col_hdrs.extend(["합계", "월평균"])
+    col_hdrs.extend(["누적 합계", "월평균"])
 
     rows = []
     num_cols = 2 + len(recent) + 2
@@ -186,10 +186,17 @@ def _build_부적합_포항(year, month):
         
         for g3 in ['공정성', '소재성']:
             p_avg = prev_yr_avg('포항', g2, g3, prev_year)
-            target = 0.0  # 목표값 0으로 고정 (필요시 DB 연동)
+            # 1) 목표: 전년도 각 분류별 월평균의 50% 반영
+            target = p_avg * 0.5
+            
             recents = [raw('포항', g2, g3, y, m) for y, m in recent]
-            sum_r = sum(recents)
-            avg_r = sum_r / len(recents) if recents else 0.0
+            
+            # 2) 합계: 선택한 연도(year)의 1월부터 선택월(month)까지의 누적 합계
+            ytd_vals = [raw('포항', g2, g3, year, m) for m in range(1, month + 1)]
+            sum_r = sum(ytd_vals)
+            
+            # 3) 월평균: 누적 합계를 누적월(month)로 나눈 값
+            avg_r = sum_r / month if month > 0 else 0.0
             
             row_data = [p_avg, target] + recents + [sum_r, avg_r]
             rows.append(('item', g3, row_data))
@@ -238,7 +245,7 @@ def _build_부적합_충주(year, month):
     col_hdrs = [f"'{prev_yr_str}년 월평균", f"'{curr_yr_str}년 목표"]
     for y, m in recent:
         col_hdrs.append(f"'{str(y)[-2:]}년 {m}월")
-    col_hdrs.extend(["합계", "월평균"])
+    col_hdrs.extend(["누적 합계", "월평균"])
 
     rows = []
     num_cols = 2 + len(recent) + 2
@@ -257,11 +264,12 @@ def _build_부적합_충주(year, month):
         subtotal = [0.0] * num_cols
         
         for g3 in ['공정성', '소재성']:
+            # 목표, 당해연도 1월~선택월 누적 합계 및 누적 월평균
             p_avg = prev_yr_avg(g1, g2, g3, prev_year)
-            target = 0.0
+            target = p_avg * 0.5
             recents = [raw(g1, g2, g3, y, m) for y, m in recent]
-            sum_r = sum(recents)
-            avg_r = sum_r / len(recents) if recents else 0.0
+            sum_r = sum([raw(g1, g2, g3, year, m) for m in range(1, month + 1)])
+            avg_r = sum_r / month if month > 0 else 0.0
             
             row_data = [p_avg, target] + recents + [sum_r, avg_r]
             rows.append(('item', g3, row_data))
@@ -302,7 +310,7 @@ def _build_부적합_충주2(year, month):
     col_hdrs = [f"'{prev_yr_str}년 월평균", f"'{curr_yr_str}년 목표"]
     for y, m in recent:
         col_hdrs.append(f"'{str(y)[-2:]}년 {m}월")
-    col_hdrs.extend(["합계", "월평균"])
+    col_hdrs.extend(["누적 합계", "월평균"])
 
     rows = []
     num_cols = 2 + len(recent) + 2
@@ -321,11 +329,12 @@ def _build_부적합_충주2(year, month):
         subtotal = [0.0] * num_cols
         
         for g3 in ['공정성', '소재성']:
+            # 목표, 당해연도 1월~선택월 누적 합계 및 누적 월평균
             p_avg = prev_yr_avg(g1, g2, g3, prev_year)
-            target = 0.0
+            target = p_avg * 0.5
             recents = [raw(g1, g2, g3, y, m) for y, m in recent]
-            sum_r = sum(recents)
-            avg_r = sum_r / len(recents) if recents else 0.0
+            sum_r = sum([raw(g1, g2, g3, year, m) for m in range(1, month + 1)])
+            avg_r = sum_r / month if month > 0 else 0.0
             
             row_data = [p_avg, target] + recents + [sum_r, avg_r]
             rows.append(('item', g3, row_data))
@@ -404,7 +413,7 @@ def render_page(app, year_state, month_state):
             memo1 = _get_memo(Sheets.부적합발생추이_충주_충주2_메모, year, month)
             
             app.markdown(
-                _layout64('1) 부적합 발생내역 (충주 1공장)',
+                _layout64('1) 부적합 발생내역 (충주 공장)',
                           _부적합_표_to_html(rows1, col_hdrs1),
                           memo1,
                           unit='(단위 : 톤, %)'),

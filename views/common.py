@@ -180,15 +180,24 @@ def layout64(title, content_html, memo, unit='[단위: 만개, 백만원]'):
     )
 
 def layout100(title, content_html, memo='', unit=''):
-    title_html = f'<div style="font-size:16px;font-weight:700;color:{C_NAVY};margin-bottom:8px;">{title}</div>'
-    unit_html = f'<div style="text-align:right; font-size:13px; color:#666; margin-bottom:4px;">{unit}</div>' if unit else ''
+    """_layout64와 소제목 스타일(폰트크기, 굵기, 색상, 배치)을 동일하게 맞춘 100% 레이아웃."""
     
-    memo_html = ''
-    if memo:
-        memo_html = f'''
-        <div class="t3-special-memo" style="margin-top:10px; padding:10px; background:#f8f9fa; border-radius:4px; font-size:13px; color:#444;">
-            {memo}
-        </div>
-        '''
+    # _layout64와 동일한 스타일 적용 (font-size: 1.1em, font-weight: 700, color: C_NAVY)
+    title_section = (
+        '<div style="display:flex; justify-content:space-between; align-items:baseline; '
+        'margin:0 0 8px 0; border-bottom:1px solid #dee2e6; padding-bottom:4px">'
+        f'<h3 style="margin:0; font-size:1.1em; font-weight:700; color:{C_NAVY}">{title}</h3>'
+        f'<span style="font-size:0.8em; color:gray">{unit}</span>'
+        '</div>'
+    )
+    
+    memo_content = memo_html(memo)
+    memo_section = f'<div style="margin-top:10px">{memo_content}</div>' if memo_content else ''
 
-    return f'<div style="width:100%; margin-bottom:20px;">{title_html}{unit_html}{content_html}{memo_html}</div>'
+    return (
+        '<div style="margin:0 0 20px 0; width:100%">'
+        f'{title_section}'
+        f'<div style="width:100%">{content_html}</div>'
+        f'{memo_section}'
+        '</div>'
+    )

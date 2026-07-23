@@ -9,13 +9,14 @@ from views.common import (
     parse as _parse, fmt as _fmt,
     prev_month as _prev, drop_empty as _drop_empty, sort_by_order as _sort,
     TH as _TH, TD_NUM as _TD_NUM, TD_RED as _TD_RED, C_RED as _C_RED,
-    ROW_SEC, ROW_GRP, ROW_HDR_LBL, ROW_HDR_NUM, ROW_HDR_RED,
+    ROW_SEC, ROW_GRP, ROW_HDR_LBL, ROW_HDR_NUM, ROW_HDR_RED, C_NAVY as _C_NAVY,
     ROW_CAL_LBL, ROW_CAL_NUM, ROW_CAL_RED, ROW_ITEM,
     html_table as _html_table, layout64 as _layout64, layout100 as _layout100,
 )
 import numpy as np
 
 # ── 공통 로더 ─────────────────────────────────────────────────────────────
+
 
 def _get_연도_목록():
     df = load_sheet(Sheets.손익요약_DB)
@@ -144,9 +145,9 @@ def _build_손익요약표_table(year: int, month: int) -> pd.DataFrame:
     col_23 = f"'{str(y_2)[-2:]}년"
     col_24 = f"'{str(y_1)[-2:]}년"
     col_pm = f"'{str(prev_year)[-2:]}년 {pm}월"
-    col_m = f"'{str(year)[-2:]}년 {m}월①"
+    col_m = f"'{str(year)[-2:]}년 {m}월"
     col_pm_pln = f"'{str(prev_year)[-2:]}년 {pm}월계획"
-    col_m_pln = f"'{str(year)[-2:]}년 {m}월계획②"
+    col_m_pln = f"'{str(year)[-2:]}년 {m}월계획"
     cols_num = [col_23, col_24, col_pm, col_m, "전월대비", col_pm_pln, col_m_pln, "계획대비", "당월누적"]
 
     # 6. 테이블 데이터 구축
@@ -473,7 +474,7 @@ def _build_QD실적차이_table(year: int, month: int):
         row_data.update({
             f"{prev_label} 중량": prev_qty, f"{prev_label} 단가": prev_price, f"{prev_label} 금액": prev_amt,
             f"{curr_label} 중량": curr_qty, f"{curr_label} 단가": curr_price, f"{curr_label} 금액": curr_amt,
-            "단가차이 중량": curr_qty - prev_qty, "단가차이 단가": curr_price - prev_price, "단가차이 금액": curr_amt - prev_amt
+            "단가차이 중량": (curr_qty - prev_qty)/1000, "단가차이 단가": curr_price - prev_price, "단가차이 금액": curr_amt - prev_amt
         })
         result_rows.append(row_data)
 
@@ -581,13 +582,14 @@ def _build_포스코_JFE_입고가격_table(year: int, month: int):
 
     frames_dict = {}
     col_order = []
-    monthly_years = [year - 4, year - 3, year - 2, year - 1]
+    # 3년 전, 2년 전, 1년 전 연도 목록으로 수정
+    monthly_years = [year - 3, year - 2, year - 1]
     
     d_base = d[d["구분3"] == "월평균"]
     for y in monthly_years:
         # 월평균 데이터는 연도로만 필터링
         dd = d_base[d_base["연도"] == y]
-        cname = f"'{str(y)[-2:]}년 12월" if y == year - 1 else f"'{str(y)[-2:]}년 월평균"
+        cname = f"'{str(y)[-2:]}년 월평균"
         
         if cname not in col_order:
             col_order.append(cname)
@@ -917,6 +919,38 @@ def _build_메이커별_입고추이_table(year: int, month: int):
                      f"'{str(prev2_y)[-2:]}년 {prev2_m}월": diff_p2.get(mk), f"'{str(prev2_y)[-2:]}년 {prev2_m}월 매입비중": np.nan,
                      f"'{str(prev_y)[-2:]}년 {prev_m}월": diff_p1.get(mk), f"'{str(prev_y)[-2:]}년 {prev_m}월 매입비중": np.nan,
                      f"'{str(year)[-2:]}년 월평균": np.nan, f"'{str(year)[-2:]}년 매입비중": np.nan})
+
+    # ── 총계 계산 ──────────────────────────────────────────────────────────
+    tot_bw, tot_ba = bw.sum(), ba.sum()
+    tot_p2w, tot_p2a = p2w.sum(), p2a.sum()
+    tot_pw, tot_pa = pw.sum(), pa.sum()
+    tot_sw, tot_sa = sw.sum(), sa.sum()
+
+    tot_price_b = (tot_ba / tot_bw * 1000.0) if tot_bw > 0 else np.nan
+    tot_price_p2 = (tot_p2a / tot_p2w * 1000.0) if tot_p2w > 0 else np.nan
+    tot_price_p = (tot_pa / tot_pw * 1000.0) if tot_pw > 0 else np.nan
+    tot_price_s = (tot_sa / tot_sw * 1000.0) if tot_sw > 0 else np.nan
+
+    tot_p3w, tot_p3a = get_val(w, prev3_y, prev3_m).reindex(makers).sum(), get_val(a, prev3_y, prev3_m).reindex(makers).sum()
+    tot_price_p3 = (tot_p3a / tot_p3w * 1000.0) if tot_p3w > 0 else np.nan
+
+    tot_diff_p2 = tot_price_p2 - tot_price_p3 if pd.notna(tot_price_p2) and pd.notna(tot_price_p3) else np.nan
+    tot_diff_p1 = tot_price_p - tot_price_p2 if pd.notna(tot_price_p) and pd.notna(tot_price_p2) else np.nan
+
+    rows.append({"구분": "총계_중량", 
+                 f"'{str(base_year)[-2:]}년 월평균": tot_bw, f"'{str(base_year)[-2:]}년 매입비중": 100.0 if tot_bw > 0 else np.nan,
+                 f"'{str(prev2_y)[-2:]}년 {prev2_m}월": tot_p2w, f"'{str(prev2_y)[-2:]}년 {prev2_m}월 매입비중": 100.0 if tot_p2w > 0 else np.nan,
+                 f"'{str(prev_y)[-2:]}년 {prev_m}월": tot_pw, f"'{str(prev_y)[-2:]}년 {prev_m}월 매입비중": 100.0 if tot_pw > 0 else np.nan,
+                 f"'{str(year)[-2:]}년 월평균": tot_sw, f"'{str(year)[-2:]}년 매입비중": 100.0 if tot_sw > 0 else np.nan})
+    rows.append({"구분": "총계_단가", 
+                 f"'{str(base_year)[-2:]}년 월평균": tot_price_b, f"'{str(base_year)[-2:]}년 매입비중": np.nan,
+                 f"'{str(prev2_y)[-2:]}년 {prev2_m}월": tot_price_p2, f"'{str(prev2_y)[-2:]}년 {prev2_m}월 매입비중": np.nan,
+                 f"'{str(prev_y)[-2:]}년 {prev_m}월": tot_price_p, f"'{str(prev_y)[-2:]}년 {prev_m}월 매입비중": np.nan,
+                 f"'{str(year)[-2:]}년 월평균": tot_price_s, f"'{str(year)[-2:]}년 매입비중": np.nan})
+    rows.append({"구분": "총계_증감", 
+                 f"'{str(base_year)[-2:]}년 월평균": np.nan, f"'{str(base_year)[-2:]}년 매입비중": np.nan,
+                 f"'{str(prev2_y)[-2:]}년 {prev2_m}월": tot_diff_p2, f"'{str(prev2_y)[-2:]}년 {prev2_m}월 매입비중": np.nan,
+                 f"'{str(prev_y)[-2:]}년 {prev_m}월": tot_diff_p1, f"'{str(prev_y)[-2:]}년 {prev_m}월 매입비중": np.nan})
         
     return pd.DataFrame(rows)
 
@@ -1031,7 +1065,10 @@ def _build_제조가공비_table(year: int, month: int):
         weight = d[d["항목"].astype(str).str.replace(" ", "") == "원재투입중량"][["포항", "충주", "충주2", "계"]].sum()
         if weight.empty: weight = pd.Series([np.nan]*4, index=["포항", "충주", "충주2", "계"])
 
-        unit = total * 1000.0 / weight.replace({0: np.nan})
+        weight_ton = weight.apply(lambda v: v / 1000.0 if v > 100000 else v)
+
+        # 백만원 / 톤 (원단위)
+        unit = (total / 1000000.0) / weight_ton.replace({0: np.nan}) * 1000
 
         rows = {}
         for name in ORDER:
@@ -1109,21 +1146,34 @@ def _제조가공비_to_html(df) -> str:
                 else:
                     try:
                         v = float(val)
-                        # '원단위'도 함께 백만으로 나누지 않도록(스케일 유지) 항목에 포함합니다.
-                        is_special = any(k in label for k in ['원재투입중량', '원단위'])
-                        if not is_special:
-                            v = v / 1000000.0
 
-                        if "잡급" in label:
-                            if v == 0: text = "0"
-                            elif v < 0: text = f'<span style="color:#d32f2f;">-{abs(v):,.1f}</span>'
-                            else: text = f"{v:,.1f}"
+                        is_weight = "원재투입중량" in label
+                        is_unit = "원단위" in label
+
+                        if is_weight:
+                            # 중량이 kg 단위로 들어온 경우 톤으로 환산해서 표시
+                            v_ton = v / 1000.0 if v > 100000 else v
+                            text = f"{int(round(v_ton)):,}"
+                        elif is_unit:
+                            # 원단위는 소수점 1자리로 표시
+                            text = f"{v:,.1f}" if abs(v) < 100 else f"{int(round(v)):,}"
+                            if v < 0:
+                                text = f'<span style="color:#d32f2f;">{text}</span>'
                         else:
-                            v_round = int(round(v))
-                            if v_round < 0:
-                                text = f'<span style="color:#d32f2f;">-{abs(v_round):,}</span>'
+                            # 일반 금액 항목 (백만원 단위로 환산)
+                            v_div = v / 1000000.0
+                            
+                            if "잡급" in label:
+                                if v_div == 0: text = "0"
+                                elif v_div < 0: text = f'<span style="color:#d32f2f;">-{abs(v_div):,.1f}</span>'
+                                else: text = f"{v_div:,.1f}"
                             else:
-                                text = f"{v_round:,}"
+                                v_round = int(round(v_div))
+                                if v_round < 0:
+                                    text = f'<span style="color:#d32f2f;">-{abs(v_round):,}</span>'
+                                else:
+                                    text = f"{v_round:,}"
+
                     except:
                         text = str(val)
                         
@@ -1321,6 +1371,150 @@ def _판관비_to_html(df) -> str:
 
     return _html_table(th_html, body_html)
 
+def _build_성과급_table(year, month):
+    df = load_sheet(Sheets.성과급및격려금_DB)
+    df['값'] = df['값'].apply(_parse)
+    df = _drop_empty(df, '연도', '월')
+
+    # '계획/실적'이 %서식 셀(100%)인 경우 UNFORMATTED_VALUE로 숫자 1(=100%)이 들어오므로 문자열로 정규화
+    def _norm_mode(v):
+        if isinstance(v, str):
+            return v.strip()
+        try:
+            return '100%' if float(v) == 1.0 else str(v)
+        except (TypeError, ValueError):
+            return str(v)
+    df['계획/실적'] = df['계획/실적'].apply(_norm_mode)
+
+    # '구분3'가 아직 캐시에 반영되지 않은 경우를 대비해 계획/실적 값으로 추정
+    if '구분3' not in df.columns:
+        df['구분3'] = df['계획/실적'].map({'실적': '당월', '100%': '연간'}).fillna('')
+
+    for c in ['구분1', '구분2', '구분3']:
+        df[c] = df[c].fillna('').astype(str).str.strip()
+
+    val_map = df.groupby(['구분1', '구분2', '계획/실적', '구분3', '연도', '월'])['값'].sum().to_dict()
+
+    def get_val(g1, g2, mode, g3, yr, mo):
+        return val_map.get((g1, g2, mode, g3, yr, mo), 0.0)
+
+    def 당월_v(g1, g2):
+        return get_val(g1, g2, '실적', '당월', year, month)
+
+    def 전년_v(g1, g2):
+        return sum(get_val(g1, g2, '실적', '당월', year - 1, m) for m in range(1, 13))
+
+    def 누적_v(g1, g2):
+        return sum(get_val(g1, g2, '실적', '당월', year, m) for m in range(1, month + 1))
+
+    def 연간_v(g1, g2):
+        return get_val(g1, g2, '100%', '연간', year, 12)
+
+    def metrics(items):
+        연간 = sum(연간_v(g1, g2) for g1, g2 in items)
+        return {
+            '전년': sum(전년_v(g1, g2) for g1, g2 in items),
+            '당월': sum(당월_v(g1, g2) for g1, g2 in items),
+            '누적': sum(누적_v(g1, g2) for g1, g2 in items),
+            '연간': 연간,
+            '월':   연간 / 12,
+        }
+
+    격려_제조 = [('제조', '제조_격려')]
+    성과_제조 = [('제조', '제조_성과')]
+    제조_합   = 격려_제조 + 성과_제조
+
+    임원_판관 = [('판관', '판관_임원')]
+    격려_직원 = [('판관_직원', '판관_직원_격려')]
+    성과_직원 = [('판관_직원', '판관_직원_성과')]
+    직원_합   = 격려_직원 + 성과_직원
+    판관_합   = 임원_판관 + 직원_합
+
+    외주_항목 = [('외주', '외주')]
+
+    총_항목 = 제조_합 + 판관_합 + 외주_항목
+
+    # (라벨, depth, bold, 합산대상, 최상단 구분선 여부)
+    rows_info = [
+        ('제조', 0, True,  제조_합, False),
+        ('격려', 1, False, 격려_제조, False),
+        ('성과', 1, False, 성과_제조, False),
+        (None,   0, False, None,     False),
+        ('판관', 0, True,  판관_합, False),
+        ('임원', 1, False, 임원_판관, False),
+        ('직원', 1, True,  직원_합, False),
+        ('격려', 2, False, 격려_직원, False),
+        ('성과', 2, False, 성과_직원, False),
+        (None,   0, False, None,     False),
+        ('외주', 0, True,  외주_항목, False),
+        (None,   0, False, None,     False),
+        ('총',   0, True,  총_항목,  True),
+    ]
+
+    rows = []
+    for label, depth, bold, items, top_border in rows_info:
+        if label is None:
+            rows.append({'_spacer': True})
+            continue
+        m = metrics(items)
+        rows.append({
+            '_spacer':    False,
+            '_depth':     depth,
+            '_bold':      bold,
+            '_top_border': top_border,
+            '구분':       label,
+            '전년':       _fmt(m['전년'], decimal=0),
+            '당월':       _fmt(m['당월'], decimal=0),
+            '누적':       _fmt(m['누적'], decimal=0),
+            '연간':       _fmt(m['연간'], decimal=0),
+            '월':         _fmt(m['월'],   decimal=0),
+        })
+
+    return rows
+
+
+def _성과급_to_html(rows) -> str:
+    col_keys = ['전년', '당월', '누적', '연간', '월']
+
+    th_html = f'''
+    <tr>
+        <th rowspan="2" style="{_TH}">구분</th>
+        <th colspan="3" style="{_TH}">실적</th>
+        <th colspan="2" style="{_TH}">성과급 100% (자사)</th>
+    </tr>
+    <tr>
+        <th style="{_TH}">전년</th><th style="{_TH}">당월</th><th style="{_TH}">누적</th>
+        <th style="{_TH}">연간</th><th style="{_TH}">월</th>
+    </tr>
+    '''
+
+    body_html = ''
+    n_cols = 1 + len(col_keys)
+    for row in rows:
+        if row.get('_spacer'):
+            body_html += f'<tr><td colspan="{n_cols}" style="height:10px;border:none;background:#ffffff"></td></tr>'
+            continue
+
+        is_bold = row['_bold']
+        style_label = ROW_HDR_LBL if is_bold else ROW_ITEM
+        style_num   = ROW_HDR_NUM if is_bold else _TD_NUM
+        style_red   = ROW_HDR_RED if is_bold else _TD_RED
+        if row.get('_top_border'):
+            border = f'border-top:2px solid {_C_NAVY};'
+            style_label += f';{border}'
+            style_num   += f';{border}'
+            style_red   += f';{border}'
+
+        padding = row['_depth'] * 16
+        cells = f'<td style="{style_label};padding-left:{10 + padding}px">{row["구분"]}</td>'
+        for c in col_keys:
+            s = str(row[c])
+            cells += f'<td style="{style_red if s.startswith("-") else style_num}">{s}</td>'
+        body_html += f'<tr>{cells}</tr>'
+
+    return _html_table(th_html, body_html)
+
+
 # ── render_page ───────────────────────────────────────────────────────────
 
 def render_page(app, year_state, month_state):
@@ -1332,7 +1526,7 @@ def render_page(app, year_state, month_state):
         )
     app.If(lambda: True, _render_title)
 
-    tabs = app.tabs(["손익요약", "전월∙계획 대비 손익차이", "원재료", "제조가공비", "판매비와 관리비"])
+    tabs = app.tabs(["손익요약", "전월∙계획 대비 손익차이", "원재료", "제조가공비", "판매비와 관리비", "성과급 및 격려금"])
 
     with tabs[0]:
         def _render_손익요약():
@@ -1347,7 +1541,7 @@ def render_page(app, year_state, month_state):
             memo = _get_memo(Sheets.손익요약표_메모, year, month)
             
             # 3. 레이아웃에 memo 인자 추가하여 렌더링
-            app.markdown(_layout100("손익요약표", html, memo=memo, unit="[단위: 백만원]"), unsafe_allow_html=True)
+            app.markdown(_layout100("1) 손익요약표", html, memo=memo, unit="[단위: 백만원]"), unsafe_allow_html=True)
 
         app.If(lambda: True, _render_손익요약)
 
@@ -1357,8 +1551,15 @@ def render_page(app, year_state, month_state):
             year, month = int(year_state.value), int(month_state.value)
             
             # 1) 전월대비 손익차이
-            app.markdown("<h4>1) 전월대비 손익차이 </h4>", unsafe_allow_html=True)
-            app.markdown("<div style='text-align:right; font-size:13px; color:#666;'>[단위: 백만원]</div><hr/>", unsafe_allow_html=True)
+            app.markdown(
+                f'<div style="display:flex; justify-content:space-between; align-items:baseline; '
+                f'margin:0 0 8px 0; border-bottom:1px solid #dee2e6; padding-bottom:4px">'
+                f'<h3 style="margin:0; font-size:1.1em; font-weight:700; color:{_C_NAVY}">1) 전월대비 손익차이</h3>'
+                f'<span style="font-size:0.8em; color:gray"></span>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
 
             # 2) 수출 환율 차이
             try:
@@ -1459,6 +1660,24 @@ def render_page(app, year_state, month_state):
                 )
             except Exception as e:
                 app.markdown(f"<p style='color:#d32f2f;'>판매비와 관리비 생성 중 오류: {e}</p>", unsafe_allow_html=True)
-                
+
         app.If(lambda: True, _render_판관비)
+
+    with tabs[5]:
+        def _render_성과급():
+            year, month = int(year_state.value), int(month_state.value)
+
+            try:
+                df_bonus = _build_성과급_table(year, month)
+                html_bonus = _성과급_to_html(df_bonus)
+                memo_bonus = _get_memo(Sheets.성과급및격려금_메모, year, month)
+
+                app.markdown(
+                    _layout64("1) 성과급 및 격려금", html_bonus, memo=memo_bonus, unit="[단위: 백만원]"),
+                    unsafe_allow_html=True,
+                )
+            except Exception as e:
+                app.markdown(f"<p style='color:#d32f2f;'>성과급 및 격려금 생성 중 오류: {e}</p>", unsafe_allow_html=True)
+
+        app.If(lambda: True, _render_성과급)
 

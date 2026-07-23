@@ -534,9 +534,9 @@ def _build_산업군별_영업이익_table(year: int, month: int) -> pd.DataFram
             vals = d[metrics_cols].sum() if not d.empty else pd.Series([0.0, 0.0, 0.0], index=metrics_cols)
             qty, amt, op = vals["판매중량"], vals["판매금액"], vals["영업이익금액"]
             row[f"{p}_판매중량"] = qty
-            row[f"{p}_단가"] = op / qty if qty != 0 else 0.0
-            row[f"{p}_영업이익"] = op
-            row[f"{p}_%"] = (op / amt * 100.0) if amt != 0 else 0.0
+            row[f"{p}_영업이익_단가"] = op / qty if qty != 0 else 0.0
+            row[f"{p}_영업이익_금액"] = op
+            row[f"{p}_영업이익_%"] = (op / amt * 100.0) if amt != 0 else 0.0
             prod_sums[p] = (qty, amt, op)
 
         total_qty = sum(q for q, _, _ in prod_sums.values())
@@ -544,9 +544,9 @@ def _build_산업군별_영업이익_table(year: int, month: int) -> pd.DataFram
         total_op = sum(o for _, _, o in prod_sums.values())
 
         row["총계_판매중량"] = total_qty
-        row["총계_단가"] = total_op / total_qty if total_qty != 0 else 0.0
-        row["총계_영업이익"] = total_op
-        row["총계_%"] = (total_op / total_amt * 100.0) if total_amt != 0 else 0.0
+        row["총계_영업이익_단가"] = total_op / total_qty if total_qty != 0 else 0.0
+        row["총계_영업이익_금액"] = total_op
+        row["총계_영업이익_%"] = (total_op / total_amt * 100.0) if total_amt != 0 else 0.0
         return row
 
     industry_order = ["자동차", "산업기계", "건설", "전자", "기타", "조선", "항공"]
@@ -579,13 +579,13 @@ def _build_산업군별_영업이익_table(year: int, month: int) -> pd.DataFram
         rows.append(r_ind)
 
     df_out = pd.DataFrame(rows)
-    cols = ["구분", "_depth"] + [f"{prod}_{m}" for prod in ["총계"] + products for m in ["판매중량", "단가", "영업이익", "%"]]
+    cols = ["구분", "_depth"] + [f"{prod}_{m}" for prod in ["총계"] + products for m in ["판매중량", "영업이익_단가", "영업이익_금액", "영업이익_%"]]
     cols = [c for c in cols if c in df_out.columns]
     df_out = df_out[cols]
 
     for c in [c for c in df_out.columns if "판매중량" in c]:
         df_out[c] = df_out[c].apply(lambda x: int(round(float(x) / 1000.0, 0)) if pd.notna(x) else x)
-    for c in [c for c in df_out.columns if "영업이익" in c and "%" not in c]:
+    for c in [c for c in df_out.columns if "영업이익_금액" in c and "%" not in c]:
         df_out[c] = df_out[c].apply(lambda x: int(round(float(x) / 1_000_000.0, 0)) if pd.notna(x) else x)
 
     return df_out
@@ -692,7 +692,7 @@ def _라디오_선택_section(title, per_item_dfs, item_labels, prefix="type_op"
     )
 
     tab_html = f'<style>{css}</style>' + inputs + tab_bar + panels
-    return _layout64(title, tab_html, memo, unit)
+    return _layout100(title, tab_html, memo, unit)
 
 
 def _build_부서_메이커별_영업이익_table(year: int, month: int) -> pd.DataFrame:
@@ -731,9 +731,9 @@ def _build_부서_메이커별_영업이익_table(year: int, month: int) -> pd.D
             vals = d[metrics_cols].sum() if not d.empty else pd.Series([0.0, 0.0, 0.0], index=metrics_cols)
             qty, amt, op = vals["판매중량"], vals["판매금액"], vals["영업이익금액"]
             row[f"{t}_판매중량"] = qty
-            row[f"{t}_단가"] = op / qty if qty != 0 else 0.0
-            row[f"{t}_영업이익"] = op
-            row[f"{t}_%"] = (op / amt * 100.0) if amt != 0 else 0.0
+            row[f"{t}_영업이익_단가"] = op / qty if qty != 0 else 0.0
+            row[f"{t}_영업이익_금액"] = op
+            row[f"{t}_영업이익_%"] = (op / amt * 100.0) if amt != 0 else 0.0
             team_sums[t] = (qty, amt, op)
 
         total_qty = sum(q for q, _, _ in team_sums.values())
@@ -741,9 +741,9 @@ def _build_부서_메이커별_영업이익_table(year: int, month: int) -> pd.D
         total_op = sum(o for _, _, o in team_sums.values())
 
         row["총계_판매중량"] = total_qty
-        row["총계_단가"] = total_op / total_qty if total_qty != 0 else 0.0
-        row["총계_영업이익"] = total_op
-        row["총계_%"] = (total_op / total_amt * 100.0) if total_amt != 0 else 0.0
+        row["총계_영업이익_단가"] = total_op / total_qty if total_qty != 0 else 0.0
+        row["총계_영업이익_금액"] = total_op
+        row["총계_영업이익_%"] = (total_op / total_amt * 100.0) if total_amt != 0 else 0.0
         return row
 
     industry_order = ["포스코", "JFE STEEL(S)", "세아창원특수강", "현대제철", "세아베스틸", "기타"]
@@ -759,13 +759,13 @@ def _build_부서_메이커별_영업이익_table(year: int, month: int) -> pd.D
     rows.append(total_row)
 
     df_out = pd.DataFrame(rows)
-    cols = ["구분", "_depth"] + [f"{grp}_{m}" for grp in ["총계"] + teams for m in ["판매중량", "단가", "영업이익", "%"]]
+    cols = ["구분", "_depth"] + [f"{grp}_{m}" for grp in ["총계"] + teams for m in ["판매중량", "영업이익_단가", "영업이익_금액", "영업이익_%"]]
     cols = [c for c in cols if c in df_out.columns]
     df_out = df_out[cols]
 
     for c in [c for c in df_out.columns if "판매중량" in c]:
         df_out[c] = df_out[c].apply(lambda x: int(round(float(x) / 1000.0, 0)) if pd.notna(x) else x)
-    for c in [c for c in df_out.columns if "영업이익" in c and "%" not in c]:
+    for c in [c for c in df_out.columns if "영업이익_금액" in c and "%" not in c]:
         df_out[c] = df_out[c].apply(lambda x: int(round(float(x) / 1_000_000.0, 0)) if pd.notna(x) else x)
 
     return df_out
@@ -804,9 +804,9 @@ def _build_부서_사업장_메이커별_영업이익_table(year: int, month: in
             vals = d[metrics_cols].sum() if not d.empty else pd.Series([0.0, 0.0, 0.0], index=metrics_cols)
             qty, amt, op = vals["판매중량"], vals["판매금액"], vals["영업이익금액"]
             row[f"{t}_판매중량"] = qty
-            row[f"{t}_단가"] = op / qty if qty != 0 else 0.0
-            row[f"{t}_영업이익"] = op
-            row[f"{t}_%"] = (op / amt * 100.0) if amt != 0 else 0.0
+            row[f"{t}_영업이익_단가"] = op / qty if qty != 0 else 0.0
+            row[f"{t}_영업이익_금액"] = op
+            row[f"{t}_영업이익_%"] = (op / amt * 100.0) if amt != 0 else 0.0
             team_sums[t] = (qty, amt, op)
 
         total_qty = sum(q for q, _, _ in team_sums.values())
@@ -814,9 +814,9 @@ def _build_부서_사업장_메이커별_영업이익_table(year: int, month: in
         total_op = sum(o for _, _, o in team_sums.values())
 
         row["총계_판매중량"] = total_qty
-        row["총계_단가"] = total_op / total_qty if total_qty != 0 else 0.0
-        row["총계_영업이익"] = total_op
-        row["총계_%"] = (total_op / total_amt * 100.0) if total_amt != 0 else 0.0
+        row["총계_영업이익_단가"] = total_op / total_qty if total_qty != 0 else 0.0
+        row["총계_영업이익_금액"] = total_op
+        row["총계_영업이익_%"] = (total_op / total_amt * 100.0) if total_amt != 0 else 0.0
         return row
 
     industry_order_default = ["포스코", "JFE STEEL(S)", "세아창원특수강", "현대제철", "세아베스틸", "기타"]
@@ -841,13 +841,13 @@ def _build_부서_사업장_메이커별_영업이익_table(year: int, month: in
     rows.append(r_tot)
 
     df_out = pd.DataFrame(rows)
-    cols = ["구분", "_depth"] + [f"{grp}_{m}" for grp in ["총계"] + teams for m in ["판매중량", "단가", "영업이익", "%"]]
+    cols = ["구분", "_depth"] + [f"{grp}_{m}" for grp in ["총계"] + teams for m in ["판매중량", "영업이익_단가", "영업이익_금액", "영업이익_%"]]
     cols = [c for c in cols if c in df_out.columns]
     df_out = df_out[cols]
 
     for c in [c for c in df_out.columns if "판매중량" in c]:
         df_out[c] = df_out[c].apply(lambda x: int(round(float(x) / 1000.0, 0)) if pd.notna(x) else x)
-    for c in [c for c in df_out.columns if "영업이익" in c and "%" not in c]:
+    for c in [c for c in df_out.columns if "영업이익_금액" in c and "%" not in c]:
         df_out[c] = df_out[c].apply(lambda x: int(round(float(x) / 1_000_000.0, 0)) if pd.notna(x) else x)
 
     return df_out
@@ -1074,7 +1074,7 @@ def render_page(app, year_state, month_state):
             
             memo = _get_memo(Sheets.손익계산서_메모, year, month) if hasattr(Sheets, '손익계산서_메모') else ''
             
-            app.markdown(_layout64("1) 손익계산서 수정정상원가", html, memo=memo, unit="(단위: 톤, 백만원)"), unsafe_allow_html=True)
+            app.markdown(_layout100("1) 손익계산서 수정정상원가", html, memo=memo, unit="(단위: 톤, 백만원)"), unsafe_allow_html=True)
 
         app.If(lambda: True, _render_손익계산서_탭)
 

@@ -266,12 +266,9 @@ def _build_판매현황_등급별(year, month):
         return vm.get((g1, g2, yr, int(mo)), 0.0)
 
     def yr_avg(g1, g2, yr):
-        # 1순위: 분리해둔 월평균 딕셔너리에서 직접 조회
         val_avg = avg_vm.get((g1, g2, yr), 0.0)
         if val_avg != 0.0:
             return val_avg
-        
-        # 2순위: 당해 1~12월 실적을 직접 합산하여 평균 계산
         vals = [v for m in range(1, 13) if (v := raw(g1, g2, yr, m)) != 0]
         return sum(vals) / len(vals) if vals else 0.0
 
@@ -286,21 +283,43 @@ def _build_판매현황_등급별(year, month):
         col_hdrs.append(f"'{str(yr_c)[2:]}.{mo_c}월" if yr_c != last_yr else f"{mo_c}월")
         last_yr = yr_c
 
-    categories = [
+    # 마지막 컬럼으로 '전월대비' 추가
+    col_hdrs.append('전월대비')
+
+    # 정상입고품 항목 데이터 로드
+    cats = [
         ('정상입고품', '산업재 혹은 중국재', '정상입고품(산업재/중국재)'),
         ('정상입고품', '정상', '정상입고품(정상)'),
-        ('B급', '', 'B급')
     ]
 
-    rows = []
-    for g1, g2, label in categories:
+    normal_rows = []
+    for g1, g2, label in cats:
         vals = [yr_avg(g1, g2, yr_1), yr_avg(g1, g2, yr_curr)]
         for yr_c, mo_c in recent_6:
             vals.append(raw(g1, g2, yr_c, mo_c))
-        rows.append(('sub', label, vals))
+        # 전월 대비 차이 (당월 - 전월)
+        diff = vals[-1] - vals[-2] if len(vals) >= 2 else 0.0
+        vals.append(diff)
+        normal_rows.append(('sub', label, vals))
 
-    계_vals = [sum(r[2][i] for r in rows) for i in range(len(col_hdrs))]
-    rows.append(('total', '합계', 계_vals))
+    # 1) 정상입고품 항목 2개 추가
+    rows = list(normal_rows)
+
+    # 2) 정품 합계 행 계산 및 추가 (두 정상입고품의 합)
+    jeongpum_vals = [sum(r[2][i] for r in normal_rows) for i in range(len(col_hdrs))]
+    rows.append(('sub_total', '정품 합계', jeongpum_vals))
+
+    # 3) B급 행 추가
+    b_vals = [yr_avg('B급', '', yr_1), yr_avg('B급', '', yr_curr)]
+    for yr_c, mo_c in recent_6:
+        b_vals.append(raw('B급', '', yr_c, mo_c))
+    b_diff = b_vals[-1] - b_vals[-2] if len(b_vals) >= 2 else 0.0
+    b_vals.append(b_diff)
+    rows.append(('sub', 'B급', b_vals))
+
+    # 4) 총합계 행 계산 (정품 합계 + B급) ─── [수정된 부분]
+    total_vals = [jeongpum_vals[i] + b_vals[i] for i in range(len(col_hdrs))]
+    rows.append(('total', '합계', total_vals))
 
     return rows, col_hdrs
 
@@ -317,10 +336,25 @@ def _판매현황_등급별_to_html(rows, col_hdrs):
             bg = ';background:#f9f9fb' if sub_idx % 2 else ';background:white'
             sub_idx += 1
             cells = f'<td style="{ROW_ITEM + bg}">{label}</td>'
-            cells += ''.join(f'<td style="{_TD_NUM + bg}">{_fmt(v)}</td>' for v in vals)
+            for idx, v in enumerate(vals):
+                # 마지막 열(전월대비)이 음수일 경우 붉은색 처리
+                is_last_col = (idx == len(vals) - 1)
+                td_style = (_TD_RED if is_last_col and v < 0 else _TD_NUM) + bg
+                cells += f'<td style="{td_style}">{_fmt(v)}</td>'
+        elif kind == 'sub_total':
+            # 정품 합계 스타일 (볼드 강조)
+            cells = f'<td style="{ROW_HDR_LBL}; background:#edf2f7;">{label}</td>'
+            for idx, v in enumerate(vals):
+                is_last_col = (idx == len(vals) - 1)
+                td_style = (ROW_HDR_RED if is_last_col and v < 0 else ROW_HDR_NUM) + '; background:#edf2f7;'
+                cells += f'<td style="{td_style}">{_fmt(v)}</td>'
         elif kind == 'total':
+            # 전체 합계 스타일
             cells = f'<td style="{ROW_HDR_LBL}">{label}</td>'
-            cells += ''.join(f'<td style="{ROW_HDR_NUM}">{_fmt(v)}</td>' for v in vals)
+            for idx, v in enumerate(vals):
+                is_last_col = (idx == len(vals) - 1)
+                td_style = ROW_HDR_RED if is_last_col and v < 0 else ROW_HDR_NUM
+                cells += f'<td style="{td_style}">{_fmt(v)}</td>'
             
         body += f'<tr>{cells}</tr>'
         
@@ -1151,7 +1185,7 @@ def _build_PSI_data(sheet_info, year, month, n_months=12):
     
     rows = []
     for yr_c, mo_c in recent_months:
-        lbl = f"{str(yr_c)[2:]}.{mo_c}" # 예: '25.8'
+        lbl = f"{str(yr_c)[2:]}년 {mo_c}월" # 예: '25.8'
         
         # 구분2 명칭에 맞춰 값 추출
         in_val = raw('원재료입고①', yr_c, mo_c) 
@@ -1179,12 +1213,12 @@ def _build_PSI_html_table(rows):
     """
     # 테이블 헤더
     th_html = (
-        f'<tr><th style="{_TH}; width: 10%;"></th>'
-        f'<th style="{_TH}; width: 18%;">원재료 입고①</th>'
-        f'<th style="{_TH}; width: 18%;">매출②</th>'
-        f'<th style="{_TH}; width: 18%;">총재고③</th>'
-        f'<th style="{_TH}; width: 18%;">출고율(②/①)</th>'
-        f'<th style="{_TH}; width: 18%;">재고율(③/②)</th></tr>'
+        f'<tr><th style="{_TH}; width: 20%;"></th>'
+        f'<th style="{_TH}; width: 16%;">원재료 입고①</th>'
+        f'<th style="{_TH}; width: 16%;">매출②</th>'
+        f'<th style="{_TH}; width: 16%;">총재고③</th>'
+        f'<th style="{_TH}; width: 16%;">출고율(②/①)</th>'
+        f'<th style="{_TH}; width: 16%;">재고율(③/②)</th></tr>'
     )
     
     body_html = ''
@@ -1282,7 +1316,7 @@ def render_page(app, year_state, month_state):
 
                 # 2) CHQ 제품 판매현황 (수정)
                 app.markdown(
-                    _sec_title('2) CHQ 제품 판매현황', '[월별 CHQ 판매 추이 (산업/중국材 포함, B급 제외)]'),
+                    _sec_title('2-1) CHQ 제품 판매현황 [월별 CHQ 판매 추이 (산업/중국材 포함, B급 제외)]', '[단위 : 톤]'),
                     unsafe_allow_html=True,
                 )
                 app.plotly_chart(
@@ -1292,7 +1326,7 @@ def render_page(app, year_state, month_state):
 
                 # 3)산업/중국재 제품 판매현황 (수정 - 좌측 제목을 비움)
                 app.markdown(
-                    _sec_title('', '[월별 산업/중국材 판매 추이(B급 제외)]'),
+                    _sec_title('2-2) CHQ 제품 판매현황 [월별 산업/중국材 판매 추이(B급 제외)]', '[단위 : 톤]'),
                     unsafe_allow_html=True,
                 )
                 app.plotly_chart(
@@ -1302,7 +1336,7 @@ def render_page(app, year_state, month_state):
                 
                 # 4) CD 강종류별 판매현황 (B급 제외) (추가)
                 app.markdown(
-                    _sec_title('3) CD 강종류별 판매현황', '[월별 CD 판매 추이 (산업/중국材 포함, B급 제외)]'),
+                    _sec_title('3-1) CD 강종류별 판매현황 [월별 CD 판매 추이 (산업/중국材 포함, B급 제외)]', '[단위 : 톤]'),
                     unsafe_allow_html=True,
                 )
                 app.plotly_chart(
@@ -1312,7 +1346,7 @@ def render_page(app, year_state, month_state):
 
                 # 5) CD 산업/중국재 판매현황 (추가 - 좌측 제목을 비움)
                 app.markdown(
-                    _sec_title('', '[월별 산업/중국材 CD 판매 추이(B급 제외)]'),
+                    _sec_title('3-1) CD 강종류별 판매현황 [월별 산업/중국材 CD 판매 추이(B급 제외)]', '[단위 : 톤]'),
                     unsafe_allow_html=True,
                 )
                 app.plotly_chart(
@@ -1321,7 +1355,7 @@ def render_page(app, year_state, month_state):
                 )
 
                 app.markdown(
-                    _sec_title('4) 비가공품 판매현황', '[월별/품목별 비가공품 판매 추이]'),
+                    _sec_title('4) 비가공품 판매현황 [월별/품목별 비가공품 판매 추이]', '[단위 : 톤]'),
                     unsafe_allow_html=True,
                 )
                 app.plotly_chart(
@@ -1330,7 +1364,7 @@ def render_page(app, year_state, month_state):
                 )
 
                 app.markdown(
-                    _sec_title('동일거래 매입매출 현황', '[월별 동일거래 매입/매출 추이]'),
+                    _sec_title('5) 동일거래 매입매출 현황 [월별 동일거래 매입/매출 추이]', '[단위 : 톤]'),
                     unsafe_allow_html=True,
                 )
                 app.plotly_chart(

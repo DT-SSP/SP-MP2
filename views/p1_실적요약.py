@@ -23,11 +23,25 @@ _기호 = ['①', '②', '③', '④', '⑤', '⑥']
 
 
 def _월헤더(year, month):
-    return f"'{str(year)[2:]}년 {month}월"
+    return f"'{str(year)[2:]}.{month}월"
 
 
 def _당월헤더(year, month, n):
     return f"'{str(year)[2:]}.{month}월 {''.join(_기호[:n])}"
+
+
+def _fmt_pct_diff(v):
+    v = round(v, 1)
+    if v > 0:
+        return f"↑{v:.1f}%p"
+    if v < 0:
+        return f"↓{abs(v):.1f}%p"
+    return f"{v:.1f}%p"
+
+
+def _fmt_pct_val(v):
+    v = round(v, 1)
+    return f"-{abs(v):.1f}%" if v < 0 else f"{v:.1f}%"
 
 
 def _to_html_table(df):
@@ -234,7 +248,7 @@ def _build_회전일_table(year, month):
     sub_labels = [
         f"'{str(year - 1)[2:]}년",
         f"'{str(yr_전월)[2:]}.{mo_전월}월",
-        f"{month}월",
+        f"'{str(year)[2:]}.{month}월",
         '전월비',
     ]
 
@@ -253,10 +267,10 @@ def _build_회전일_table(year, month):
                 '사업장':       corp_disp,
                 '_first':       i == 0,
                 '구분':         항목,
-                sub_labels[0]:  _fmt(전기_v),
-                sub_labels[1]:  _fmt(전월_v),
-                sub_labels[2]:  _fmt(당월_v),
-                sub_labels[3]:  _fmt(당월_v - 전월_v),
+                sub_labels[0]:  _fmt(전기_v,           decimal=1),
+                sub_labels[1]:  _fmt(전월_v,           decimal=1),
+                sub_labels[2]:  _fmt(당월_v,           decimal=1),
+                sub_labels[3]:  _fmt(당월_v - 전월_v,  decimal=1),
             })
 
     return rows, sub_labels
@@ -382,13 +396,13 @@ def _build_포함_table(get, 사업장_list, year, month):
             당월_p   = _pct(당월_v,   매출액['당월'])
             rows.append({
                 '구분':     '%',
-                전전월_col: _fmt(전전월_p,        is_pct=True),
-                전월_col:   _fmt(전월_p,          is_pct=True),
-                '계획':     _fmt(계획_p,          is_pct=True),
-                당월_col:   _fmt(당월_p,          is_pct=True),
-                '전월대비': _fmt(당월_p - 전월_p,  is_pct=True),
-                '계획대비': _fmt(당월_p - 계획_p,  is_pct=True),
-                **{장_cols[i]: _fmt(_pct(장별[장], 매출액.get(장, 0)), is_pct=True)
+                전전월_col: _fmt_pct_val(전전월_p),
+                전월_col:   _fmt_pct_val(전월_p),
+                '계획':     _fmt_pct_val(계획_p),
+                당월_col:   _fmt_pct_val(당월_p),
+                '전월대비': _fmt_pct_diff(당월_p - 전월_p),
+                '계획대비': _fmt_pct_diff(당월_p - 계획_p),
+                **{장_cols[i]: _fmt_pct_val(_pct(장별[장], 매출액.get(장, 0)))
                    for i, 장 in enumerate(사업장_list)},
             })
 
@@ -438,14 +452,14 @@ def _build_국내_table(get, year, month, 사업장=선재_국내_사업장):
             누적실적_p  = _pct(누적실적, 매출액['누적실적'])
             rows.append({
                 '구분':          '%',
-                전월_col:        _fmt(전월_p,                   is_pct=True),
-                '당월_계획':     _fmt(당월계획_p,               is_pct=True),
-                '당월_실적':     _fmt(당월실적_p,               is_pct=True),
-                '당월_계획대비': _fmt(당월실적_p - 당월계획_p,  is_pct=True),
-                '당월_전월대비': _fmt(당월실적_p - 전월_p,      is_pct=True),
-                '누적_계획':     _fmt(누적계획_p,               is_pct=True),
-                '누적_실적':     _fmt(누적실적_p,               is_pct=True),
-                '누적_계획대비': _fmt(누적실적_p - 누적계획_p,  is_pct=True),
+                전월_col:        _fmt_pct_val(전월_p),
+                '당월_계획':     _fmt_pct_val(당월계획_p),
+                '당월_실적':     _fmt_pct_val(당월실적_p),
+                '당월_계획대비': _fmt_pct_val(당월실적_p - 당월계획_p),
+                '당월_전월대비': _fmt_pct_val(당월실적_p - 전월_p),
+                '누적_계획':     _fmt_pct_val(누적계획_p),
+                '누적_실적':     _fmt_pct_val(누적실적_p),
+                '누적_계획대비': _fmt_pct_val(누적실적_p - 누적계획_p),
             })
 
     return pd.DataFrame({col: [r.get(col, '') for r in rows] for col in columns})
@@ -457,33 +471,36 @@ def _build_현금흐름표_연결_table(year, month):
     df = _drop_empty(df, '연도', '월')
     df['구분2'] = df['구분2'].fillna('').astype(str).str.strip()
     df['구분3'] = df['구분3'].fillna('').astype(str).str.strip()
+    df['구분4'] = df['구분4'].fillna('').astype(str).str.strip()
 
     # 전체, 천진 사업장 제외
     df = df[df['사업장'] != '전체']
     df = df[df['사업장'] != '천진']
-
-    yr_전기, mo_전기 = year - 1, 12
-    yr_전월, mo_전월 = _prev(year, month, 1)
 
     db_corps    = _sort_corps(df['사업장'].unique().tolist(), 현금_CORP_ORDER)
     corp_labels = [현금_사업장_표시명.get(c, c) for c in db_corps]
 
     sub_labels = [
         f"'{str(year - 1)[2:]}년",
-        f"'{str(yr_전월)[2:]}.{mo_전월}월",
-        f"{month}월",
-        '전월비',
+        '전월누적',
+        f"'{str(year)[2:]}.{month}월",
+        f"'{str(year)[2:]}년누적",
     ]
 
     # 특정 사업장이 아닌, 해당 월의 전체 데이터 기준으로 표의 뼈대(행 순서) 생성
     target = df[(df['연도'] == year) & (df['월'] == month)]
     행_순서 = list(dict.fromkeys(zip(target['구분1'], target['구분2'], target['구분3'])))
 
-    # 구분4를 무시하고 동일한 기준의 값들을 모두 합산(sum)하여 딕셔너리로 변환
-    val_map = df.groupby(['연도', '월', '구분1', '구분2', '구분3', '사업장'])['값'].sum().to_dict()
+    # 구분4(당월/누적) 기준으로 값을 조회, 24년 이전은 DB에 저장된 '누적' 값을 그대로 사용
+    val_map = df.groupby(['연도', '월', '구분4', '구분1', '구분2', '구분3', '사업장'])['값'].sum().to_dict()
 
-    def 값(yr, mo, g1, g2, g3, 장):
-        return val_map.get((yr, mo, g1, g2, g3, 장), 0.0)
+    def get_val(yr, mo, g4, g1, g2, g3, 장):
+        return val_map.get((yr, mo, g4, g1, g2, g3, 장), 0.0)
+
+    def get_accumulated(yr, target_mo, g1, g2, g3, 장):
+        if yr < 2025:
+            return get_val(yr, 12, '누적', g1, g2, g3, 장)
+        return sum(get_val(yr, m, '당월', g1, g2, g3, 장) for m in range(1, target_mo + 1))
 
     columns = ['구분', '_depth'] + sub_labels
     소계행  = 현금_소계행
@@ -507,19 +524,20 @@ def _build_현금흐름표_연결_table(year, month):
             if label in 소계행:
                 depth = 0
 
-            전기_v = 값(yr_전기, mo_전기, g1, g2, g3, db_corp)
-            전월_v = 값(yr_전월, mo_전월, g1, g2, g3, db_corp)
-            당월_v = 값(year,    month,   g1, g2, g3, db_corp)
+            전년누적_v = get_accumulated(year - 1, 12,          g1, g2, g3, db_corp)
+            전월누적_v = get_accumulated(year,     month - 1,   g1, g2, g3, db_corp)
+            당월_v     = get_val(year, month, '당월',           g1, g2, g3, db_corp)
+            당월누적_v = get_accumulated(year,     month,       g1, g2, g3, db_corp)
 
             rows.append({
                 '구분':        label,
                 '_depth':      depth,
-                sub_labels[0]: _fmt(전기_v),
-                sub_labels[1]: _fmt(전월_v),
+                sub_labels[0]: _fmt(전년누적_v),
+                sub_labels[1]: _fmt(전월누적_v),
                 sub_labels[2]: _fmt(당월_v),
-                sub_labels[3]: _fmt(당월_v - 전월_v),
+                sub_labels[3]: _fmt(당월누적_v),
             })
-            
+
         per_corp_dfs[corp_disp] = pd.DataFrame(
             {col: [r.get(col, '') for r in rows] for col in columns}
         )
@@ -543,7 +561,7 @@ def _build_재무상태표_table(year, month):
     sub_labels = [
         f"'{str(year - 1)[2:]}년",
         f"'{str(yr_전월)[2:]}.{mo_전월}월",
-        f"{month}월",
+        f"'{str(year)[2:]}.{month}월",
         '전월비',
     ]
 
@@ -555,6 +573,13 @@ def _build_재무상태표_table(year, month):
 
     def 값(yr, mo, g1, g2, 장):
         return val_map.get((yr, mo, g1, g2, 장), 0.0)
+
+    # 자본총계의 '기타'는 DB 원본 값 대신 자본총계 - 자본금 - 이익잉여금으로 계산
+    def 자본총계_기타(yr, mo, 장):
+        총계     = 값(yr, mo, '자본총계', '자본총계', 장)
+        자본금   = 값(yr, mo, '자본총계', '자본금',   장)
+        이익잉여금 = 값(yr, mo, '자본총계', '이익잉여금', 장)
+        return 총계 - 자본금 - 이익잉여금
 
     columns = ['구분', '_depth'] + sub_labels
     소계행  = 재무_소계행
@@ -591,9 +616,14 @@ def _build_재무상태표_table(year, month):
             else:
                 depth = 1
                 
-            전기_v = 값(yr_전기, mo_전기, g1, g2, db_corp)
-            전월_v = 값(yr_전월, mo_전월, g1, g2, db_corp)
-            당월_v = 값(year,    month,   g1, g2, db_corp)
+            if g1 == '자본총계' and g2 == '기타':
+                전기_v = 자본총계_기타(yr_전기, mo_전기, db_corp)
+                전월_v = 자본총계_기타(yr_전월, mo_전월, db_corp)
+                당월_v = 자본총계_기타(year,    month,   db_corp)
+            else:
+                전기_v = 값(yr_전기, mo_전기, g1, g2, db_corp)
+                전월_v = 값(yr_전월, mo_전월, g1, g2, db_corp)
+                당월_v = 값(year,    month,   g1, g2, db_corp)
 
             rows.append({
                 '구분':        label,
@@ -642,7 +672,12 @@ def _build_품목손익_별도_table(year, month):
                 row[p] = ''
             else:
                 row[p] = _fmt(v / div, decimal=0)
-        
+
+        # 상품 등 = 합계 - (CHQ+CD+STS+BTB+PB)
+        상품등_raw = 합_raw - sum(raw_vals.values())
+        raw_vals['상품 등'] = 상품등_raw
+        row['상품 등'] = _fmt(상품등_raw / div, decimal=0)
+
         if g1 == '매출액':
             매출액_dict = {'합계': 합_raw}
             매출액_dict.update(raw_vals)
@@ -650,12 +685,12 @@ def _build_품목손익_별도_table(year, month):
         rows.append(row)
 
         if g1 in ['영업이익', '경상이익']:
-            pct_row = {'구분': f'%({g1[:2]})'}
-            
+            pct_row = {'구분': '%'}
+
             매출_합 = 매출액_dict.get('합계', 0)
             pct_row['합계'] = _fmt(_pct(합_raw, 매출_합), is_pct=True, decimal=1) if 매출_합 else '-'
 
-            for p in 품목_cols:
+            for p in 품목_cols + ['상품 등']:
                 매출_p = 매출액_dict.get(p, 0)
                 이익_p = raw_vals.get(p, 0)
                 if 매출_p and 이익_p != 0.0:
@@ -664,12 +699,12 @@ def _build_품목손익_별도_table(year, month):
                     pct_row[p] = ''
             rows.append(pct_row)
 
-    columns = ['구분', '합계'] + 품목_cols
+    columns = ['구분', '합계'] + 품목_cols + ['상품 등']
     return pd.DataFrame({col: [r.get(col, '') for r in rows] for col in columns})
 
 def _build_수정원가기준손익_별도_table(year, month):
     df = load_sheet(Sheets.수정원가기준손익_DB)
-    df['값'] = df['값'].apply(_parse)
+    df['값'] = df['값'].astype(str).str.replace('%', '', regex=False).apply(_parse)
     df = _drop_empty(df, '연도', '월')
 
     target = df[(df['연도'] == year) & (df['월'] == month)]
@@ -678,42 +713,34 @@ def _build_수정원가기준손익_별도_table(year, month):
     def get_val(g1, g2):
         return val_map.get((g1, g2), 0.0)
 
+    def get_pct(g1, g2):
+        return val_map.get((f'%({g1})', g2), None)
+
     품목_cols = ['계', 'CHQ', 'CD', 'STS', 'BTB', 'PB', '내수', '수출']
-    구분_목록 = ['매출액', '판매량', 'X등급 및 재고평가', '영업이익', '한계이익']
-    
+    구분_목록 = ['매출액', '판매량', 'X등급및재고평가', '영업이익', '한계이익']
+    구분_표시명 = {'X등급및재고평가': 'X등급 및 재고평가'}
+
     rows = []
-    매출액_dict = {}
 
     for g1 in 구분_목록:
-        row = {'구분': g1}
-        
-        # 매출액 저장 (이익률 계산용)
-        if g1 == '매출액':
-            for p in 품목_cols:
-                매출액_dict[p] = get_val(g1, p)
-        
+        row = {'구분': 구분_표시명.get(g1, g1)}
+
         for p in 품목_cols:
             v = get_val(g1, p)
             if g1 == '판매량' and v == 0:
                 row[p] = ''
             else:
                 row[p] = _fmt(v, decimal=0)
-                
+
         rows.append(row)
 
-        # 영업이익, 한계이익 다음 행에 이익률(%) 추가
+        # 영업이익, 한계이익 다음 행에 DB의 %(영업이익)/%(한계이익) 값을 그대로 표시
         if g1 in ['영업이익', '한계이익']:
-            pct_label = f'%({g1[:2]})'
-            pct_row = {'구분': pct_label}
-            
+            pct_row = {'구분': '%'}
+
             for p in 품목_cols:
-                매출_p = 매출액_dict.get(p, 0)
-                이익_p = get_val(g1, p)
-                
-                if 매출_p and 이익_p != 0.0:
-                    pct_row[p] = _fmt(_pct(이익_p, 매출_p), is_pct=True, decimal=1)
-                else:
-                    pct_row[p] = ''
+                v = get_pct(g1, p)
+                pct_row[p] = _fmt_pct_val(v) if v is not None else ''
             rows.append(pct_row)
 
     columns = ['구분'] + 품목_cols
@@ -735,17 +762,17 @@ def _build_원재료입고기초단가차이_table(year, month):
     if '합계' in target['구분1'].values:
         makers.append('합계')
 
-    columns = ['메이커', '중량', '금액', '단가']
+    columns = ['메이커', '입고중량', '금액', '단가']
     rows = []
-    
+
     for m in makers:
         w = get_val(m, '중량') / 1000.0      # 톤 단위
         a = get_val(m, '금액') / 1000000.0   # 백만원 단위
         p = get_val(m, '단가')               # 그대로
-        
+
         rows.append({
             '메이커': m,
-            '중량': _fmt(w, decimal=0),
+            '입고중량': _fmt(w, decimal=0),
             '금액': _fmt(a, decimal=0),
             '단가': _fmt(p, decimal=0),
         })
@@ -928,7 +955,7 @@ def _build_재무상태표_별도_table(year, month):
     sub_labels = [
         f"'{str(year - 1)[2:]}년",
         f"'{str(yr_전월)[2:]}.{mo_전월}월",
-        f"{month}월",
+        f"'{str(year)[2:]}.{month}월",
         '전월비',
     ]
 
@@ -996,8 +1023,8 @@ def _build_회전일_별도_table(year, month):
 
     sub_labels = [
         f"'{str(yr_전기)[2:]}년말",
-        f"'{str(yr_전월)[2:]}년 {mo_전월}월",
-        f"'{str(year)[2:]}년 {month}월",
+        f"'{str(yr_전월)[2:]}.{mo_전월}월",
+        f"'{str(year)[2:]}.{month}월",
         '전월대비'
     ]
 
@@ -1058,8 +1085,8 @@ def _build_안정성_별도_table(year, month):
 
     sub_labels = [
         f"'{str(yr_전기)[2:]}년말",
-        f"'{str(yr_전월)[2:]}년 {mo_전월}월",
-        f"'{str(year)[2:]}년 {month}월",
+        f"'{str(yr_전월)[2:]}.{mo_전월}월",
+        f"'{str(year)[2:]}.{month}월",
         '전월대비'
     ]
 
@@ -1084,8 +1111,8 @@ def _build_안정성_별도_table(year, month):
         
     def fmt_p(v):
         if v is None: return ""
-        if v > 0: return f"+{v:.1f}p"
-        return f"{v:.1f}p"
+        if v > 0: return f"+{v:.1f}%p"
+        return f"{v:.1f}%p"
 
     for label in rows_info:
         v_end = 값(yr_전기, mo_전기, label)
@@ -1122,8 +1149,8 @@ def _build_수익성_별도_table(year, month):
 
     sub_labels = [
         f"'{str(yr_전기)[2:]}년말",
-        f"'{str(yr_전월)[2:]}년 {mo_전월}월",
-        f"'{str(year)[2:]}년 {month}월",
+        f"'{str(yr_전월)[2:]}.{mo_전월}월",
+        f"'{str(year)[2:]}.{month}월",
         '전월대비'
     ]
 
@@ -1144,19 +1171,19 @@ def _build_수익성_별도_table(year, month):
     
     def fmt_pct(v):
         if v is None: return ""
-        return f"{v:.2f}%"
-        
+        return f"{v:.1f}%"
+
     def fmt_p(v):
         if v is None: return ""
-        if v > 0: return f"+{v:.1f}p"
-        return f"{v:.1f}p"
+        if v > 0: return f"+{v:.1f}%p"
+        return f"{v:.1f}%p"
 
     for label in rows_info:
         v_end = 값(yr_전기, mo_전기, label)
         v_pre = 값(yr_전월, mo_전월, label)
         v_cur = 값(year, month, label)
         v_dif = v_cur - v_pre if (v_cur is not None and v_pre is not None) else None
-        
+
         rows.append({
             '구분': label,
             sub_labels[0]: fmt_pct(v_end),
@@ -1164,8 +1191,78 @@ def _build_수익성_별도_table(year, month):
             sub_labels[2]: fmt_pct(v_cur),
             sub_labels[3]: fmt_p(v_dif)
         })
-    
+
     return pd.DataFrame(rows)
+
+
+def _build_수익성_연결_table(year, month):
+    df = load_sheet(Sheets.수익성_DB)
+    val_col = '값' if '값' in df.columns else '실적'
+
+    df[val_col] = df[val_col].astype(str).str.replace('%', '', regex=False).apply(_parse)
+    df = _drop_empty(df, '연도', '월')
+
+    # 천진 사업장 제외
+    df = df[df['사업장'] != '천진']
+
+    yr_전기, mo_전기 = year - 1, 12
+    yr_전월, mo_전월 = _prev(year, month, 1)
+
+    수익성_CORP_ORDER    = ['계', '본사', '남통', '태국']
+    수익성_사업장_표시명  = {'계': '선재_전체', '본사': '선재_국내', '남통': '선재_남통', '태국': '선재_태국'}
+
+    db_corps    = _sort_corps(df['사업장'].unique().tolist(), 수익성_CORP_ORDER)
+    corp_labels = [수익성_사업장_표시명.get(c, c) for c in db_corps]
+
+    sub_labels = [
+        f"'{str(yr_전기)[2:]}년말",
+        f"'{str(yr_전월)[2:]}.{mo_전월}월",
+        f"'{str(year)[2:]}.{month}월",
+        '전월대비',
+    ]
+
+    item_col = '구분2' if '구분2' in df.columns and df['구분2'].str.strip().astype(bool).any() else '구분1'
+    df[item_col] = df[item_col].fillna('').astype(str).str.strip()
+
+    val_map = df.groupby(['연도', '월', '사업장', item_col])[val_col].sum().to_dict()
+
+    def 값(yr, mo, corp, 항목):
+        for k, v in val_map.items():
+            if k[0] == yr and k[1] == mo and k[2] == corp and 항목 in k[3]:
+                # 엑셀 서식 보정: 소수점으로 들어온 실제 값에 100을 곱함
+                return float(v) * 100
+        return None
+
+    def fmt_pct(v):
+        if v is None: return ""
+        return f"{v:.1f}%"
+
+    def fmt_p(v):
+        if v is None: return ""
+        if v > 0: return f"+{v:.1f}%p"
+        return f"{v:.1f}%p"
+
+    rows_info = ["ROA", "ROE"]
+    rows = []
+    for db_corp, corp_disp in zip(db_corps, corp_labels):
+        for i, label in enumerate(rows_info):
+            v_end = 값(yr_전기, mo_전기, db_corp, label)
+            v_pre = 값(yr_전월, mo_전월, db_corp, label)
+            v_cur = 값(year,    month,   db_corp, label)
+            v_dif = v_cur - v_pre if (v_cur is not None and v_pre is not None) else None
+
+            rows.append({
+                '사업장':       corp_disp,
+                '_first':       i == 0,
+                '구분':         label,
+                sub_labels[0]:  fmt_pct(v_end),
+                sub_labels[1]:  fmt_pct(v_pre),
+                sub_labels[2]:  fmt_pct(v_cur),
+                sub_labels[3]:  fmt_p(v_dif),
+            })
+
+    return rows, sub_labels
+
 
 def _build_판매계획및실적_html(year, month):
     raw = load_sheet(Sheets.판매계획및실적_DB)
@@ -1335,7 +1432,7 @@ def _build_판매계획및실적_html(year, month):
         body_html += "</tr>"
 
     # 6. 헤더 생성
-    th_st = "padding:8px 10px; text-align:center; border:1px solid #DEE2E6; background:#F1F3F5; color:#53565A; font-weight:700; white-space:nowrap;"
+    th_st = f"padding:8px 10px; text-align:center !important; border:1px solid #DEE2E6; background:{_C_NAVY}; color:white; font-weight:700; white-space:nowrap;"
     header_html = f"""
     <tr>
         <th rowspan="2" style="{th_st}">구분</th>
@@ -1382,7 +1479,7 @@ def render_page(app, year_state, month_state):
             get, 사업장_list = _load_손익()
 
             memo1 = _get_memo(Sheets.손익_메모, year, month)
-            app.markdown(_section("1) 손익", _build_포함_table(get, 사업장_list, year, month), memo1),
+            app.markdown(_section("1) 손익 (연결)", _build_포함_table(get, 사업장_list, year, month), memo1),
                          unsafe_allow_html=True)
 
             df_현금, 소계행_현금, 헤더행_현금, 사업장_현금 = _build_현금흐름표_연결_table(year, month)
@@ -1392,7 +1489,7 @@ def render_page(app, year_state, month_state):
 
             per_corp_dfs, 소계행, 헤더행, corp_labels = _build_재무상태표_table(year, month)
             memo3 = _get_memo(Sheets.재무상태표_메모, year, month)
-            app.markdown(_재무_section("3) 재무상태표", per_corp_dfs, 소계행, 헤더행, corp_labels, memo3),
+            app.markdown(_재무_section("3) 재무상태표 (연결)", per_corp_dfs, 소계행, 헤더행, corp_labels, memo3),
                          unsafe_allow_html=True)
             
             rows_회전, sub_회전 = _build_회전일_table(year, month)
@@ -1401,7 +1498,14 @@ def render_page(app, year_state, month_state):
                                    _회전일_to_html_table(rows_회전, sub_회전),
                                    memo4, '[단위: 일]'),
                          unsafe_allow_html=True)
-            
+
+            rows_수익성, sub_수익성 = _build_수익성_연결_table(year, month)
+            memo5 = _get_memo(Sheets.수익성_메모_연결, year, month)
+            app.markdown(_layout64("5) 수익성",
+                                   _회전일_to_html_table(rows_수익성, sub_수익성),
+                                   memo5, '[단위: %]'),
+                         unsafe_allow_html=True)
+
         app.If(lambda: True, _render_포함)
 
     with tabs[1]:
@@ -1413,23 +1517,29 @@ def render_page(app, year_state, month_state):
                          unsafe_allow_html=True)
             
             
-            memo2 = _get_memo(Sheets.품목손익_메모, year, month)
-            app.markdown(_section("2) 품목손익 (별도)", _build_품목손익_별도_table(year, month), memo2),
+            memo2 = ""
+            app.markdown(_section("2) 품목손익 (별도, 재경기준 : 원재료 희석, 재고 영향 반영)", _build_품목손익_별도_table(year, month), memo2),
                          unsafe_allow_html=True)
-            
-            memo3 = ""
+
+            memo3 = _get_memo(Sheets.수정원가기준손익_메모, year, month)
             app.markdown(_section("3) 수정원가기준손익 (별도)", _build_수정원가기준손익_별도_table(year, month), memo3),
                          unsafe_allow_html=True)
             
             app.markdown(_원재료_section("4) 원재료 입고-기초 단가 차이", _build_원재료입고기초단가차이_table(year, month), "", '[단위: 톤, 백만원]'),
                          unsafe_allow_html=True)
-            
+            app.markdown('<div style="font-size:0.85em;color:gray;margin:2px 0 12px 0">※ 산출기준 : 대구분/내외자/강종류/강종/메이커</div>',
+                         unsafe_allow_html=True)
+
             app.markdown(_원재료_section("5) 원재료 입고-기초 단가 차이 거래처 기준", _build_원재료입고단가차이_거래처기준_table(year, month), "", '[단위: 톤, 백만원]'),
                          unsafe_allow_html=True)
-            
+            app.markdown('<div style="font-size:0.85em;color:gray;margin:2px 0 12px 0">※ 산출기준 : 메이커/산업재/강종</div>',
+                         unsafe_allow_html=True)
+
             app.markdown(_section("6) 제품수불표 (별도)", _build_제품수불표_table(year, month), "", '[단위: 원, 백만원]'),
                          unsafe_allow_html=True)
-            
+            app.markdown('<div style="font-size:0.85em;color:gray;margin:2px 0 12px 0">※ 산출기준 : 품목/내수/열처리/대표공정/강종종류/수불강종/표준강종</div>',
+                         unsafe_allow_html=True)
+
             memo7 = _get_memo(Sheets.현금흐름표_별도_메모, year, month)
             app.markdown(_layout64("7) 현금흐름표 (별도)", _build_현금흐름표_별도_table(year, month), memo7, '[단위: 백만원]'),
                          unsafe_allow_html=True)
@@ -1459,6 +1569,9 @@ def render_page(app, year_state, month_state):
             memo = _get_memo(Sheets.판매계획및실적_메모, year, month)
             
             app.markdown(_layout100("1) 판매계획 및 실적", html_table, memo, '[단위: 톤, 천개, 억원]'),
-                            unsafe_allow_html=True)
+                         unsafe_allow_html=True)
+            app.markdown('<div style="font-size:0.85em;color:gray;margin:2px 0 12px 0">※ 산출기준 : 메이커/산업재/강종</div>',
+                         unsafe_allow_html=True)
+
 
         app.If(lambda: True, _render_연간)

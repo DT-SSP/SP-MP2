@@ -15,7 +15,7 @@ from violit.context import layout_ctx
 
 from data.config import Sheets
 from data.loader import load_sheet, preload_all, refresh_all
-from views import p1_실적요약 ,p2_손익분석, p3_매출분석, p4_생산분석, p5_비용분석, p6_재고자산, p7_채권분석, p8_기타, p9_해외법인
+from views import p1_실적요약 ,p2_손익분석, p3_매출분석, p4_생산분석, p5_비용분석, p6_재고자산, p7_채권분석, p8_기타, p9_해외법인, p10_별첨
 import asyncio 
 import time  
 from views.common import prev_month
@@ -98,8 +98,12 @@ PAGE_SHEETS_MAP = {
         Sheets.해외연령별재고_DB, Sheets.해외연령별재고_중국_메모, Sheets.해외연령별재고_태국_메모,
         Sheets.해외채권_DB, Sheets.해외채권_중국_메모, Sheets.해외채권_태국_메모,
         Sheets.해외인원_DB, Sheets.해외인원_메모, Sheets.해외인원_생산량_메모
-    ]
-}
+    ],
+    "10. 별첨" : [
+        Sheets.전체실적요약_DB, Sheets.환율_DB, Sheets.손익계산서_DB,Sheets.산업군별영업이익_DB,
+        Sheets.메이커별영업이익_DB , Sheets.부서메이커별영업이익_DB, Sheets.부서사업장메이커별영업이익_DB , Sheets.부서별인당영업이익_DB
+        ]
+    }
 
 _REFRESH_STATES = {page: vl.State(f"refresh_status_{page}", "idle") for page in PAGE_SHEETS_MAP}
 _REFRESH_LOCK = threading.Lock()
@@ -313,6 +317,7 @@ app.navigation([
     vl.Page(_protected(p7_채권분석.render_page),     title="7. 채권분석"),
     vl.Page(_protected(p8_기타.render_page),         title="8. 기타"),
     vl.Page(_protected(p9_해외법인.render_page),     title="9. 해외법인실적"),
+    vl.Page(_protected(p10_별첨.render_page),     title="10. 별첨"),
 ])
 
 
