@@ -101,7 +101,7 @@ PAGE_SHEETS_MAP = {
     ],
     "10. 별첨" : [
         Sheets.전체실적요약_DB, Sheets.환율_DB, Sheets.손익계산서_DB,Sheets.산업군별영업이익_DB,
-        Sheets.메이커별영업이익_DB , Sheets.부서메이커별영업이익_DB, Sheets.부서사업장메이커별영업이익_DB , Sheets.부서별인당영업이익_DB
+        Sheets.메이커별영업이익_DB, Sheets.실수요유통영업이익_DB
         ]
     }
 

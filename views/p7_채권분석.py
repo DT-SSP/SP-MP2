@@ -103,12 +103,12 @@ def _외상매출받을어음_표_to_html(rows, col_hdrs):
         
         cells = f'<td style="{lbl_s}">{label}</td>'
         
-        # 실적 값 랜더링 (정수 표기)
+        # ⭕ 실적 값 랜더링 (소수점 첫째자리 표기)
         for v in vals:
-            cells += f'<td style="{num_s}">{_fmt(v, decimal=0)}</td>'
+            cells += f'<td style="{num_s}">{_fmt(v, decimal=1)}</td>'
             
-        # 구성비 랜더링 (정수%)
-        cells += f'<td style="{num_s}">{_fmt(ratio, decimal=0)}%</td>'
+        # ⭕ 구성비 랜더링 (소수점 첫째자리%)
+        cells += f'<td style="{num_s}">{_fmt(ratio, decimal=1)}%</td>'
         body += f'<tr>{cells}</tr>'
         
     return _html_table(f'<tr>{th}</tr>', body)
@@ -158,7 +158,14 @@ def _build_부서별_채권기일_현황(year, month):
         f"'{str(year)[-2:]}년 {month}월"
     ]
 
-    부서_list = ['선재', '봉강', '부산', '대구', '내수', '수출']
+    부서_list = [
+        ('선재', '선재영업팀'),
+        ('봉강', '봉강영업팀'),
+        ('부산', '부산영업소'),
+        ('대구', '대구영업소'),
+        ('내수', '내수'),
+        ('수출', '수출')
+    ]
     metrics = ['매출', '채권', '일수']
 
     # 금액(매출, 채권) 억원 단위 변환을 위한 나누기 값
@@ -166,13 +173,21 @@ def _build_부서별_채권기일_현황(year, month):
 
     rows = []
 
-    for 부서 in 부서_list:
-        rows.append(('section', 부서))
+    for db_key, display_name in 부서_list:
+        rows.append(('section', display_name))
 
         for metric in metrics:
             vals = []
             for py, pm in periods:
-                val = raw(부서, metric, py, pm)
+                # 26년 5월 이후 여부 확인
+                is_after_2605 = (py > 2026) or (py == 2026 and pm >= 5)
+                
+                # 내수 데이터 산출 로직 적용
+                if db_key == '내수' and is_after_2605:
+                    val = sum(raw(k, metric, py, pm) for k in ['선재', '봉강', '부산', '대구'])
+                else:
+                    val = raw(db_key, metric, py, pm)
+                
                 # 매출과 채권은 억원 단위로 변환, 일수는 그대로 표기
                 if metric in ['매출', '채권']:
                     val = val / UNIT
@@ -185,19 +200,31 @@ def _build_부서별_채권기일_현황(year, month):
     for metric in metrics:
         vals = []
         for py, pm in periods:
-            if metric == '일수':
-                # 시트에 있는 '합계', '일수' 값을 계산 없이 바로 가져옵니다
-                val_total = raw('전체', '일수', py, pm)
+            # 26년 5월 이후 여부 확인
+            is_after_2605 = (py > 2026) or (py == 2026 and pm >= 5)
+            
+            if is_after_2605:
+                # 26년 5월부터는 전체 = 내수(선재+봉강+부산+대구) + 수출
+                val_naesu = sum(raw(k, metric, py, pm) for k in ['선재', '봉강', '부산', '대구'])
+                val_suchul = raw('수출', metric, py, pm)
+                val_total = val_naesu + val_suchul
+                
+                if metric in ['매출', '채권']:
+                    val_total = val_total / UNIT
             else:
-                # 매출과 채권은 내수, 수출 단순 합산 후 억원 단위 변환
-                val_total = (raw('내수', metric, py, pm) + raw('수출', metric, py, pm)) / UNIT
+                # 26년 5월 이전 기존 로직
+                if metric == '일수':
+                    # 시트에 있는 '합계', '일수' 값을 계산 없이 바로 가져옵니다
+                    val_total = raw('전체', '일수', py, pm)
+                else:
+                    # 매출과 채권은 내수, 수출 단순 합산 후 억원 단위 변환
+                    val_total = (raw('내수', metric, py, pm) + raw('수출', metric, py, pm)) / UNIT
                 
             vals.append(val_total)
         
         rows.append(('total', metric, *vals))
 
     return rows, col_headers
-
 def _부서별_채권기일_to_html(rows, col_headers):
     # views.common에 ROW_SEC가 없다면 아래 주석을 해제하여 사용하세요.
     # ROW_SEC = "background:#eef1f6;font-weight:bold;text-align:center;border:1px solid #c0c0c0;padding:5px;"
@@ -299,16 +326,19 @@ def _초과채권_내수_to_html(rows, col_hdrs):
         
         if kind == 'pct':
             for v in vals:
-                cells += f'<td style="{_TD_NUM}">{_fmt(v, decimal=2)}%</td>'
-            cells += f'<td style="{_TD_NUM}">{_fmt(diff, decimal=2)}%</td>'
+                # 백분율(%) 값 소수점 첫째 자리까지 표시
+                cells += f'<td style="{_TD_NUM}">{_fmt(v, decimal=1)}%</td>'
+            cells += f'<td style="{_TD_NUM}">{_fmt(diff, decimal=1)}%</td>'
         else:
             for v in vals:
-                cells += f'<td style="{_TD_NUM}">{_fmt(v, decimal=0)}</td>'
-            cells += f'<td style="{_TD_RED if diff < 0 else _TD_NUM}">{_fmt(diff, decimal=0)}</td>'
+                # 일반 수치 데이터 소수점 첫째 자리까지 표시
+                cells += f'<td style="{_TD_NUM}">{_fmt(v, decimal=1)}</td>'
+            cells += f'<td style="{_TD_RED if diff < 0 else _TD_NUM}">{_fmt(diff, decimal=1)}</td>'
             
         body += f'<tr>{cells}</tr>'
         
     return _html_table(f'<tr>{th}</tr>', body)
+
 
 
 def _build_부서별_초과채권(year, month):
@@ -370,9 +400,11 @@ def _부서별_초과채권_to_html(rows, col_hdrs):
         for idx, v in enumerate(vals):
             # 5번째 인덱스는 '증감' 컬럼이므로 음수일 때 빨간색 처리
             if idx == 5 and v < 0:
-                cells += f'<td style="{ROW_HDR_RED if kind == "total" else _TD_RED}">{_fmt(v, decimal=0)}</td>'
+                # 증감(음수) 값 소수점 첫째 자리까지 표시
+                cells += f'<td style="{ROW_HDR_RED if kind == "total" else _TD_RED}">{_fmt(v, decimal=1)}</td>'
             else:
-                cells += f'<td style="{num_s}">{_fmt(v, decimal=0)}</td>'
+                # 나머지 데이터 소수점 첫째 자리까지 표시
+                cells += f'<td style="{num_s}">{_fmt(v, decimal=1)}</td>'
                 
         body += f'<tr>{cells}</tr>'
         
@@ -402,7 +434,7 @@ def render_page(app, year_state, month_state):
                 _layout64('1) 외상매출금 및 받을어음 현황',
                           _외상매출받을어음_표_to_html(rows, col_hdrs),
                           memo,
-                          unit='(단위 : 억원, %)'),
+                          unit='(단위 : 억원)'),
                 unsafe_allow_html=True,
             )
         app.If(lambda: True, _render_외상매출금_현황)
@@ -421,6 +453,14 @@ def render_page(app, year_state, month_state):
                           unit='(단위 : 억원, 일)'),
                 unsafe_allow_html=True,
             )
+
+            app.markdown(
+                '<p style="margin:4px 0 0 0; font-size:0.8em; color:gray; text-align:left;">'
+                '※ 글로벌구매팀(BW), STS영업팀 채권 제외'
+                '</p>',
+                unsafe_allow_html=True,
+            )
+
         app.If(lambda: True, _render_부서별_기일)
 
     with tabs[2]:
@@ -429,13 +469,13 @@ def render_page(app, year_state, month_state):
             
             # 1) 결제조건 초과채권 현황(내수)
             rows1, col_hdrs1 = _build_초과채권_내수(year, month)
-            memo1 = _get_memo(Sheets.결제조건초과채권_메모, year, month) if hasattr(Sheets, '초과채권_내수_메모') else ""
+            memo10 = _get_memo(Sheets.결제조건초과채권_메모, year, month)
             
             app.markdown(
                 _layout64('1) 결제조건 초과채권 현황(내수)',
                           _초과채권_내수_to_html(rows1, col_hdrs1),
-                          memo1,
-                          unit='(단위 : 백만원, %)'),
+                          memo10,
+                          unit='(단위 : 백만원)'),
                 unsafe_allow_html=True,
             )
             

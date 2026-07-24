@@ -1,5 +1,6 @@
 ﻿import datetime
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots  # 이 줄을 새로 추가해 주세요.
 import pandas as pd
 from data.loader import load_sheet
 from data.config import Sheets
@@ -114,10 +115,20 @@ def _build_부재료_table_html(사업장, rows, col_hdrs):
 
 
 def _build_부재료_chart(사업장, rows, col_hdrs):
-    """부재료 사용량 Plotly 차트를 생성합니다."""
-    fig = go.Figure()
+    """부재료 사용량 Plotly 차트를 각 항목별로 가로 분리하여 생성합니다."""
+    # 항목의 개수 파악
+    num_items = len(rows)
+    if num_items == 0:
+        return go.Figure()
 
-    # 이미지에 맞춘 기본 색상 배열 (필요시 수정)
+    # 1행 N열의 서브플롯 생성 (각 차트의 제목은 항목명으로 설정)
+    fig = make_subplots(
+        rows=1, cols=num_items, 
+        subplot_titles=[item for item, _ in rows],
+        horizontal_spacing=0.05  # 차트 간 간격
+    )
+
+    # 이미지에 맞춘 기본 색상 배열
     colors = ['#1f77b4', '#aec7e8', '#d62728', '#ff9896', '#2ca02c']
 
     for idx, (item, vals) in enumerate(rows):
@@ -130,32 +141,33 @@ def _build_부재료_chart(사업장, rows, col_hdrs):
             textposition='top center',
             textfont=dict(size=10, color='#4a5568'),
             marker=dict(size=6, color=colors[idx % len(colors)]),
-            line=dict(width=2, color=colors[idx % len(colors)])
-        ))
+            line=dict(width=2, color=colors[idx % len(colors)]),
+            showlegend=False  # 개별 차트로 나뉘었으므로 통합 범례는 숨김
+        ), row=1, col=idx + 1)
 
-    # 차트 레이아웃 설정
+    # 전체 차트 레이아웃 설정
     fig.update_layout(
-        #title=dict(text=f"[{사업장}]", font=dict(size=13, color="#404448", weight='bold')),
         height=350,
-        margin=dict(l=10, r=120, t=40, b=40),
-        legend=dict(
-            orientation='v', 
-            y=0.5, x=1.02, # 범례를 우측 중앙에 배치
-            xanchor='left', yanchor='middle',
-            font=dict(size=11), bgcolor='rgba(0,0,0,0)',
-        ),
-        xaxis=dict(
-            tickfont=dict(size=10, color='#4a5568'),
-            showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
-            tickangle=45
-        ),
-        yaxis=dict(
-            showgrid=True, gridcolor='#e2e8f0', gridwidth=1,
-            showticklabels=False, showline=False, zeroline=False,
-        ),
+        margin=dict(l=10, r=10, t=60, b=40),  # 서브플롯 타이틀을 위해 위쪽 마진(t) 확보
         plot_bgcolor='white', paper_bgcolor='white',
         font=dict(size=11, family='sans-serif'),
     )
+    
+    # 생성된 모든 서브플롯의 X축, Y축 스타일 일괄 적용
+    for i in range(1, num_items + 1):
+        fig.update_xaxes(
+            tickfont=dict(size=10, color='#4a5568'),
+            showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
+            tickangle=45, row=1, col=i
+        )
+        fig.update_yaxes(
+            showgrid=True, gridcolor='#e2e8f0', gridwidth=1,
+            showticklabels=False, showline=False, zeroline=False, row=1, col=i
+        )
+
+    for annotation in fig['layout']['annotations']:
+        annotation['font'] = dict(size=11, color='#333333', weight='bold')
+
     return fig
 
 # ── 1-2) 주요 부재료 단가 추이 (4번 항목 전용) ───────────────────────────
@@ -216,7 +228,16 @@ def _build_단가추이_table_html(rows, col_hdrs):
 
 
 def _build_단가추이_chart(rows, col_hdrs):
-    fig = go.Figure()
+    num_items = len(rows)
+    if num_items == 0:
+        return go.Figure()
+
+    # 1행 N열 서브플롯 생성
+    fig = make_subplots(
+        rows=1, cols=num_items, 
+        subplot_titles=[item for item, _ in rows],
+        horizontal_spacing=0.05
+    )
 
     colors = ['#1f77b4', '#ff7f0e', '#7f7f7f', '#bcbd22', '#ffbb78', '#d62728']
 
@@ -230,30 +251,32 @@ def _build_단가추이_chart(rows, col_hdrs):
             textposition='top center',
             textfont=dict(size=10, color='#4a5568'),
             marker=dict(size=6, color=colors[idx % len(colors)]),
-            line=dict(width=2, color=colors[idx % len(colors)])
-        ))
+            line=dict(width=2, color=colors[idx % len(colors)]),
+            showlegend=False
+        ), row=1, col=idx + 1)
 
     fig.update_layout(
         height=350,
-        margin=dict(l=10, r=120, t=40, b=40),
-        legend=dict(
-            orientation='v', 
-            y=0.5, x=1.02, 
-            xanchor='left', yanchor='middle',
-            font=dict(size=11), bgcolor='rgba(0,0,0,0)',
-        ),
-        xaxis=dict(
-            tickfont=dict(size=10, color='#4a5568'),
-            showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
-            tickangle=45
-        ),
-        yaxis=dict(
-            showgrid=True, gridcolor='#e2e8f0', gridwidth=1,
-            showticklabels=False, showline=False, zeroline=False,
-        ),
+        margin=dict(l=10, r=10, t=60, b=40),
         plot_bgcolor='white', paper_bgcolor='white',
         font=dict(size=11, family='sans-serif'),
     )
+    
+    # 서브플롯 X축, Y축 스타일 적용
+    for i in range(1, num_items + 1):
+        fig.update_xaxes(
+            tickfont=dict(size=10, color='#4a5568'),
+            showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
+            tickangle=45, row=1, col=i
+        )
+        fig.update_yaxes(
+            showgrid=True, gridcolor='#e2e8f0', gridwidth=1,
+            showticklabels=False, showline=False, zeroline=False, row=1, col=i
+        )
+
+    for annotation in fig['layout']['annotations']:     #소제목 폰트 수정
+        annotation['font'] = dict(size=11, color='#333333', weight='bold')
+
     return fig
 
 # ── 클레임 현황 (월 평균 & 당월) ──────────────────────────────────────────
@@ -267,24 +290,33 @@ def _build_월평균클레임_data(year, month):
         if col not in df.columns:
             return [('item', f'오류: [{col}] 없음', [0.0] * 4)], [f"'{str(year-3)[2:]}년", f"'{str(year-2)[2:]}년", f"'{str(year-1)[2:]}년", f"'{str(year)[2:]}년"]
 
+    # 최근 4개년 대상 설정
+    years = [year - 3, year - 2, year - 1, year]
+    col_hdrs = [f"'{str(y)[2:]}년" for y in years]
+
     # 데이터 클렌징
     df['구분1'] = df['구분1'].astype(str).str.strip()
     df['연도'] = df['연도'].astype(str).str.replace('년', '', regex=False).str.replace(' ', '', regex=False)
     df['연도'] = pd.to_numeric(df['연도'], errors='coerce').fillna(0).astype(int)
+    df['월'] = pd.to_numeric(df['월'], errors='coerce').fillna(0).astype(int)
     
-    # 값 파싱 및 백만원 단위 환산
-    df = df.copy()
-    df['값'] = df['값'].apply(_parse) / 1_000_000.0
-    df['값'] = df['값'].round(0).astype(int)
-    #df['값'] = df['값'].apply(_parse)
+    # 1) 해당 4개년 데이터만 필터링
+    df = df[df['연도'].isin(years)].copy()
+    df['값'] = df['값'].apply(_parse)
 
-    # 연도별 월평균 계산
-    avg_df = df.groupby(['구분1', '연도'])['값'].mean().reset_index()
-    vm = avg_df.set_index(['구분1', '연도'])['값'].to_dict()
+    yearly_sum = df.groupby(['구분1', '연도'])['값'].sum().reset_index()
 
-    # 최근 4개년 (예: '23, '24, '25, '26)
-    years = [year - 3, year - 2, year - 1, year]
-    col_hdrs = [f"'{str(y)[2:]}년" for y in years]
+    def get_month_divider(y):
+        # 과거/당해 연도 구분 없이 해당 연도에 실제 데이터가 존재하는 월의 고유 개수를 구함
+        n_months = df[df['연도'] == y]['월'].nunique()
+        return float(n_months) if n_months > 0 else 1.0
+
+    yearly_sum['월평균'] = yearly_sum.apply(lambda r: r['값'] / get_month_divider(r['연도']), axis=1)
+
+    # 5) 백만원 단위 변환 및 반올림은 마지막에 수행 (오차 방지)
+    yearly_sum['최종값'] = (yearly_sum['월평균'] / 1_000_000.0).round(0)
+    
+    vm = yearly_sum.set_index(['구분1', '연도'])['최종값'].to_dict()
 
     items = ['선재', '봉강', '부산', '대구', '글로벌']
     rows = []
@@ -335,7 +367,7 @@ def _build_당월클레임_data(year, month):
     # 값 파싱 및 백만원 단위 환산
     df = df.copy()
     df['값'] = df['값'].apply(_parse) / 1_000_000.0
-    df['값'] = df['값'].round(0).astype(int)
+    df['값'] = df['값'].round(1)
     #df['값'] = df['값'].apply(_parse)
 
     vm = df.groupby(['구분1', '구분2', '연도', '월'])['값'].sum().to_dict()
@@ -384,13 +416,12 @@ def _build_당월클레임_data(year, month):
     return rows, col_hdrs
 
 def _build_당월클레임_table_html(rows, col_hdrs):
-    th = f'<th style="{_TH}">클레임비</th>' + ''.join(f'<th style="{_TH}">{h}</th>' for h in col_hdrs)
+    th = f'<th style="{_TH}">클레임비용</th>' + ''.join(f'<th style="{_TH}">{h}</th>' for h in col_hdrs)
     body = ''
     for kind, label, vals in rows:
-        if kind == 'total':
+        # total뿐만 아니라 item에도 합계행 스타일(ROW_HDR_LBL, ROW_HDR_NUM)을 동일하게 적용
+        if kind in ('total', 'item'):
             lbl_s, num_s = ROW_HDR_LBL, ROW_HDR_NUM
-        elif kind == 'item':
-            lbl_s, num_s = ROW_ITEM, _TD_NUM
         else:
             lbl_s, num_s = f'{ROW_ITEM}; color: #4b5563;', _TD_NUM
             label = f'&nbsp;&nbsp;&nbsp;&nbsp; {label}'
@@ -399,12 +430,13 @@ def _build_당월클레임_table_html(rows, col_hdrs):
         for i, v in enumerate(vals):
             is_diff = (i == len(vals) - 1) # 증감 컬럼 여부
             
-            # 음수일 경우 붉은색 텍스트 적용
-            s = ROW_HDR_RED if (kind == 'total' and is_diff and v < 0) else \
+            # kind가 total이거나 item일 때 증감값이 음수면 붉은색 헤더 스타일(ROW_HDR_RED) 적용
+            s = ROW_HDR_RED if (kind in ('total', 'item') and is_diff and v < 0) else \
                 _TD_RED if (is_diff and v < 0) else num_s
             
-            formatted_v = f"{v:,.0f}" if v != 0 else "0"
-            if formatted_v == "-0": formatted_v = "0"
+            formatted_v = f"{v:,.1f}"
+            if formatted_v in ("-0.0", "0.0"): 
+                formatted_v = "0.0" 
             
             cells += f'<td style="{s}">{formatted_v}</td>'
         body += f'<tr>{cells}</tr>'
@@ -439,23 +471,21 @@ def _build_영업외비용_data(year, month):
     df = df.copy()
     df['값'] = df['값'].apply(_parse) / 1_000_000.0
     df['값'] = df['값'].round(0).astype(int)
-    #df['값'] = df['값'].apply(_parse)
 
     vm = df.groupby(['구분1', '구분2', '구분3', '연도', '월'])['값'].sum().to_dict()
-    
-    # 최근 3개월 (이미지 요청사항에 따라 역순 배열: 당월 -> 전월 -> 전전월)
+
+    # 최근 3개월 (전전월[0] -> 전월[1] -> 당월[2])
     recent = []
     curr_y, curr_m = year, month
     for _ in range(3):
-        recent.append((curr_y, curr_m))
+        recent.insert(0, (curr_y, curr_m)) # 과거 순서로 정렬
         curr_y, curr_m = _prev(curr_y, curr_m)
         
-    col_hdrs = [f"'{str(y)[2:]}년 {m}월 실적" for y, m in recent] + ['증감']
+    col_hdrs = [f"'{str(y)[2:]}년 {m}월" for y, m in recent] + ['증감']
     
     rows = []
     grand_totals = [0.0] * 3
     
-    # 구분1(상위구분) 목록 추출 (순서 유지를 위해 unique 사용)
     g1_list = df[df['구분1'] != '']['구분1'].unique()
     
     for g1 in g1_list:
@@ -466,77 +496,39 @@ def _build_영업외비용_data(year, month):
             g2_totals = [0.0] * 3
             g3_list = df[(df['구분1'] == g1) & (df['구분2'] == g2)]['구분3'].unique()
             
-            # 하위 항목이 존재하는지 여부 확인
             has_sub = len([g for g in g3_list if g != '']) > 0
             sub_rows = []
             
-            # '잡손실' 항목에 대한 기타(총액 - 고철매각작업비) 계산 로직
-            if g2 == '잡손실' and '고철매각작업비' in g3_list:
-                # DB의 잡손실 총액 (구분3이 빈칸인 데이터)
-                vals_total = [vm.get((g1, g2, '', y, m), 0.0) for y, m in recent]
-                # DB의 고철매각작업비
-                vals_scrap = [vm.get((g1, g2, '고철매각작업비', y, m), 0.0) for y, m in recent]
-                # 계산: 기타 = 총액 - 고철매각작업비
-                vals_etc = [vals_total[i] - vals_scrap[i] for i in range(len(recent))]
-                
-                # 상위, 총 합계에는 '잡손실 총액'만 누적하여 중복 합산 방지
-                for i in range(len(recent)):
-                    g2_totals[i] += vals_total[i]
-                    g1_totals[i] += vals_total[i]
-                    grand_totals[i] += vals_total[i]
-                
-                # 1. 기타(계산값) 서브 행 추가
-                diff_etc = vals_etc[0] - vals_etc[2] if len(vals_etc) == 3 else 0.0
-                sub_rows.append(('sub', '기타', vals_etc + [diff_etc]))
-                
-                # 2. 고철매각작업비 서브 행 추가
-                diff_scrap = vals_scrap[0] - vals_scrap[2] if len(vals_scrap) == 3 else 0.0
-                sub_rows.append(('sub', '고철매각작업비', vals_scrap + [diff_scrap]))
-                
-                # 중위구분(잡손실) 행 추가 및 서브 행 펼치기
-                diff_g2 = g2_totals[0] - g2_totals[2] if len(g2_totals) == 3 else 0.0
-                rows.append(('item', g2, g2_totals + [diff_g2]))
-                rows.extend(sub_rows)
-                
-                # 잡손실 처리가 끝났으므로 다음 g2 항목으로 넘어감
-                continue 
-
-            # 👇 기존 로직 (잡손실이 아닌 나머지 항목들)
             for g3 in g3_list:
                 vals = [vm.get((g1, g2, g3, y, m), 0.0) for y, m in recent]
                 
-                # 하드코딩 없이 하위->중위->상위 순으로 누적 합산(Roll-up)
                 for i, v in enumerate(vals):
                     g2_totals[i] += v
                     g1_totals[i] += v
                     grand_totals[i] += v
                     
                 if has_sub:
-                    # g3 값이 비어있을 때 '기타'로 처리하고, 값이 있으면 그대로 사용
                     label = '기타' if g3 == '' else g3
-                    
-                    # 이미지의 증감 계산 로직 반영: 당월(0번 인덱스) - 전전월(2번 인덱스)
-                    diff = vals[0] - vals[2] if len(vals) == 3 else 0.0
+                    # ⭕ 증감: 당월(2번) - 전월(1번)
+                    diff = vals[2] - vals[1] if len(vals) == 3 else 0.0
                     sub_rows.append(('sub', label, vals + [diff]))
                     
-            # 중위구분 행 추가
-            diff_g2 = g2_totals[0] - g2_totals[2] if len(g2_totals) == 3 else 0.0
+            # ⭕ 중위구분(item) 증감: 당월(2번) - 전월(1번)
+            diff_g2 = g2_totals[2] - g2_totals[1] if len(g2_totals) == 3 else 0.0
             rows.append(('item', g2, g2_totals + [diff_g2]))
             
-            # 하위구분이 있으면 중위구분 아래에 펼쳐서 추가
             if has_sub:
                 rows.extend(sub_rows)
                 
-        # 상위구분 합계 행 추가 (예: 기타비용 합계)
-        diff_g1 = g1_totals[0] - g1_totals[2] if len(g1_totals) == 3 else 0.0
+        # ⭕ 상위구분(g1) 증감: 당월(2번) - 전월(1번)
+        diff_g1 = g1_totals[2] - g1_totals[1] if len(g1_totals) == 3 else 0.0
         rows.append(('total', f'{g1} 합계', g1_totals + [diff_g1]))
         
-    # 총 합계 행 추가
-    diff_grand = grand_totals[0] - grand_totals[2] if len(grand_totals) == 3 else 0.0
+    # ⭕ 총 합계 증감: 당월(2번) - 전월(1번)
+    diff_grand = grand_totals[2] - grand_totals[1] if len(grand_totals) == 3 else 0.0
     rows.append(('total', '총 합계', grand_totals + [diff_grand]))
     
     return rows, col_hdrs
-
 
 def _build_영업외비용_table_html(rows, col_hdrs):
     th = f'<th style="{_TH}">구분</th>' + ''.join(f'<th style="{_TH}">{h}</th>' for h in col_hdrs)

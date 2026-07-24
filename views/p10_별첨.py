@@ -13,8 +13,10 @@ from views.common import (
     C_NAVY as _C_NAVY, C_ORANGE, C_RED as _C_RED, C_CHART_SEC, C_CHART_GRID, C_LT_GRAY as _C_LT_GRAY,
     sort_by_order as _sort,
     TD_RED as _TD_RED, TD_SUB_NUM as _TD_SUB_NUM, TD_SUB_RED as _TD_SUB_RED,
-    ROW_SEC, ROW_HDR_RED,
+    ROW_SEC, ROW_HDR_RED, layout_title_only
 )
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots  # 추가
 
 
 # ── 공통 유틸 및 헬퍼 함수 ─────────────────────────────────────────────
@@ -146,9 +148,8 @@ def _build_실적요약_chart(x_labels, sales_list, volume_list, op_profit_list,
     max_line = max(op_profit_list) if op_profit_list else 100
     min_line = min(op_profit_list) if op_profit_list else 0
 
-    # 💡 [Fix] 그래프 잘림 방지를 위해 마진/여백/범례 위치 및 자동 크기 최적화
     fig.update_layout(
-        barmode='group', height=400,
+        barmode='group',
         margin=dict(l=40, r=40, t=40, b=40),
         autosize=True,
         legend=dict(
@@ -189,12 +190,13 @@ def _build_환율추이_data(year, month):
 
     vm = df.groupby(['구분1', '연도', '월'])['값'].sum().to_dict()
 
-    prev_yr = year - 1
-    recent_4 = _recent_months(year, month, n_months=4)
+    # 💡 [Fix] '~년말' 하드코딩 제거 및 13개월 데이터 추출로 변경
+    recent_13 = _recent_months(year, month, n_months=13)
 
-    time_slots = [(prev_yr, 12, f"'{str(prev_yr)[2:]}년말")]
+    time_slots = []
     last_yr = None
-    for yr_c, mo_c in recent_4:
+    for yr_c, mo_c in recent_13:
+        # 연도가 바뀔 때만 'YY년 M월' 형태로 표시하고, 같은 연도면 'M월'만 표시
         lbl = f"'{str(yr_c)[2:]}년 {mo_c}월" if yr_c != last_yr else f"{mo_c}월"
         time_slots.append((yr_c, mo_c, lbl))
         last_yr = yr_c
@@ -209,51 +211,68 @@ def _build_환율추이_data(year, month):
     return x_labels, rates
 
 
+# ── 2) 환율 추이 데이터 및 그래프 빌더 ───────────────────────────────────────────
+
+
 def _build_환율추이_chart(x_labels, rates):
-    fig = go.Figure()
-
+    currencies = ['USD', 'CNH', 'THB']
     color_map = {'USD': '#334155', 'CNH': '#E05638', 'THB': '#0284C7'}
+    
+    # 1행 3열 서브플롯 생성
+    fig = make_subplots(
+        rows=1, cols=3,
+        subplot_titles=[f"{c} 환율" for c in currencies],
+        horizontal_spacing=0.05
+    )
 
-    for currency in ['USD', 'CNH', 'THB']:
+    for idx, currency in enumerate(currencies):
         vals = rates.get(currency, [])
+        color = color_map.get(currency, '#334155')
         text_labels = [f"<b>{v:,.1f}</b>" if v > 0 else '' for v in vals]
-        
+
         fig.add_trace(go.Scatter(
             name=currency, x=x_labels, y=vals,
             mode='lines+markers+text',
-            marker=dict(color=color_map[currency], size=7),
-            line=dict(color=color_map[currency], width=2.5),
+            marker=dict(color=color, size=7),
+            line=dict(color=color, width=2.5),
             text=text_labels, textposition='top center',
-            textfont=dict(color='#1E293B', size=10), connectgaps=True
-        ))
+            textfont=dict(color='#1E293B', size=10), connectgaps=True,
+            showlegend=False
+        ), row=1, col=idx + 1)
 
-    all_vals = [v for curr in rates for v in rates[curr] if v > 0]
-    max_val = max(all_vals) if all_vals else 1500
-    min_val = min(all_vals) if all_vals else 0
+        # 통화별 최저/최고 수치 기준 동적 Y축 스케일링을 각 서브플롯에 개별 적용
+        valid_vals = [v for v in vals if v > 0]
+        if valid_vals:
+            min_v, max_v = min(valid_vals), max(valid_vals)
+            diff = max_v - min_v if max_v != min_v else min_v * 0.1
+            y_min = max(0, min_v - diff * 0.3)
+            y_max = max_v + diff * 0.4
+        else:
+            y_min, y_max = 0, 100
 
-    # 💡 [Fix] 그래프 잘림 방지 최적화
+        fig.update_yaxes(range=[y_min, y_max], row=1, col=idx + 1)
+
     fig.update_layout(
-        height=400, margin=dict(l=40, r=40, t=40, b=40),
+        height=320, 
+        margin=dict(l=20, r=20, t=50, b=30),  # 서브플롯 타이틀을 위해 상단(t) 여백 확보
         autosize=True,
-        legend=dict(
-            orientation='h', y=-0.15, x=0.5, xanchor='center',
-            font=dict(size=11, color='#334155'), bgcolor='rgba(0,0,0,0)',
-        ),
-        xaxis=dict(
-            tickfont=dict(size=10, color='#64748B'),
-            showgrid=False, linecolor='#CBD5E1', linewidth=1, showline=True,
-            automargin=True
-        ),
-        yaxis=dict(
-            showgrid=False, range=[min_val * 0.8, max_val * 1.15],
-            showticklabels=False, showline=False, zeroline=False,
-            automargin=True
-        ),
         plot_bgcolor='white', paper_bgcolor='white',
         font=dict(size=11, family='sans-serif'),
     )
-    return fig
 
+    # 모든 서브플롯의 축 디자인 일괄 적용
+    for i in range(1, 4):
+        fig.update_xaxes(
+            tickfont=dict(size=10, color='#64748B'),
+            showgrid=False, linecolor='#CBD5E1', linewidth=1, showline=True,
+            automargin=True, row=1, col=i
+        )
+        fig.update_yaxes(
+            showgrid=False, showticklabels=False, showline=False, zeroline=False,
+            automargin=True, row=1, col=i
+        )
+
+    return fig
 
 # ── 3) 손익계산서 (수정정상원가 기반) 빌더 ───────────────────────────────
 
@@ -1033,13 +1052,14 @@ def render_page(app, year_state, month_state):
                 )
                 
                 app.markdown(
-                    f'<h3 style="margin:20px 0 10px 0;font-size:1.1em;font-weight:600;color:#404448">{title_text}</h3>',
+                    layout_title_only(title_text, unit="(단위: 천톤, 백만원, %)"), 
                     unsafe_allow_html=True
                 )
                 
                 app.plotly_chart(
                     _build_실적요약_chart(x_labels, sales, volume, op_profit, op_margin),
-                    use_container_width=True
+                    use_container_width=True,
+                    config={'responsive': True} # 반응형 옵션 강제 활성화
                 )
                 
                 app.markdown("<br>", unsafe_allow_html=True)
@@ -1052,15 +1072,12 @@ def render_page(app, year_state, month_state):
             year, month = int(year_state.value), int(month_state.value)
             x_labels, rates = _build_환율추이_data(year, month)
 
-            app.markdown(
-                '<h3 style="margin:20px 0 10px 0;font-size:1.1em;font-weight:600;color:#404448">1) 환율 추이 (USD, CNH, THB)</h3>',
-                unsafe_allow_html=True
-            )
-
-            app.plotly_chart(
-                _build_환율추이_chart(x_labels, rates),
-                use_container_width=True
-            )
+            # 공통 소제목 하나만 출력
+            app.markdown(layout_title_only("1) 통화별 환율 추이", unit="(단위: 원)"), unsafe_allow_html=True)
+            
+            # 3개의 차트가 하나로 통합된 fig 렌더링
+            fig = _build_환율추이_chart(x_labels, rates)
+            app.plotly_chart(fig, use_container_width=True)
 
         app.If(lambda: True, _render_환율추이_탭)
 

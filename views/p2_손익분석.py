@@ -428,6 +428,102 @@ def _수출환율차이_to_html(df, prev_lab, curr_lab) -> str:
 
 
 # ────────────────────────────────────────────────────────────────────────
+# 2-1) 전월대비 손익차이 Builder & HTML Renderer (p9_해외법인.py의 로직을 그대로 이식)
+# ────────────────────────────────────────────────────────────────────────
+
+def _build_손익차이_table(year, month):
+    df = load_sheet(Sheets.전월대비손익차이_DB)
+
+    if df.empty or '연도' not in df.columns:
+        return pd.DataFrame(columns=['구분', '_depth', '소계', '영업', '생산', '구매', '기타'])
+
+    df.columns = df.columns.str.strip()
+    df['값'] = df['값'].apply(_parse)
+    df = _drop_empty(df, '연도', '월')
+
+    df = df[(df['연도'] == year) & (df['월'] == month)]
+
+    for c in ['구분1', '구분2', '구분3', '구분4']:
+        df[c] = df[c].fillna('').astype(str).str.strip()
+
+    g4_cols = ['영업', '생산', '구매', '기타']
+
+    def get_val(g1, g2, g3, g4):
+        mask = (df['구분1'] == g1) & (df['구분2'] == g2) & (df['구분3'] == g3) & (df['구분4'] == g4)
+        return df[mask]['값'].sum()
+
+    # 매출이익차이(총) — 제품수불차이(수량/판가/원가) + 기타차이로 구성
+    gross_vals   = [get_val('매출이익차이', '',        '',     g4) for g4 in g4_cols]
+    qty_vals     = [get_val('매출이익차이', '제품수불차이', '수량차이', g4) for g4 in g4_cols]
+    price_vals   = [get_val('매출이익차이', '제품수불차이', '판가차이', g4) for g4 in g4_cols]
+    cost_vals    = [get_val('매출이익차이', '제품수불차이', '원가차이', g4) for g4 in g4_cols]
+    supply_vals  = [q + p + c for q, p, c in zip(qty_vals, price_vals, cost_vals)]
+    etc_vals     = [get_val('매출이익차이', '기타차이',   '',     g4) for g4 in g4_cols]
+
+    sgna_vals = [get_val('판매비와관리비차이', '', '', g4) for g4 in g4_cols]
+    # DB에 '영업이익차이' 행이 별도로 없어 매출이익차이 + 판매비와관리비차이로 계산
+    op_diff_vals = [g + s for g, s in zip(gross_vals, sgna_vals)]
+
+    def format_row(label, depth, vals):
+        # 소계 : 각 분류별 금액의 합산임 (영업+생산+구매+기타)
+        total = sum(vals)
+        return {
+            '구분':   label,
+            '_depth': depth,
+            '소계':   _fmt(total),
+            '영업':   _fmt(vals[0]),
+            '생산':   _fmt(vals[1]),
+            '구매':   _fmt(vals[2]),
+            '기타':   _fmt(vals[3]),
+        }
+
+    rows = [
+        format_row('매출이익차이',      0, gross_vals),
+        format_row('제품수불차이',      1, supply_vals),
+        format_row('수량차이',          2, qty_vals),
+        format_row('판가차이',          2, price_vals),
+        format_row('원가차이',          2, cost_vals),
+        format_row('기타차이',          1, etc_vals),
+        format_row('판매비와관리비 차이', 0, sgna_vals),
+        format_row('영업이익 차이',      0, op_diff_vals),
+    ]
+
+    return pd.DataFrame(rows, columns=['구분', '_depth', '소계', '영업', '생산', '구매', '기타'])
+
+
+def _손익차이_to_html_table(df):
+    if df.empty:
+        return ""
+
+    depths = df['_depth'].tolist() if '_depth' in df.columns else [0] * len(df)
+    render_df = df.drop(columns=['_depth'], errors='ignore')
+
+    rows_html = ''
+    for (_, row), depth in zip(render_df.iterrows(), depths):
+        label = str(row.iloc[0])
+
+        is_highlight = label in ['매출이익차이', '영업이익 차이']
+        bg = 'background:#f8f9fa;' if is_highlight else ''
+        fw = 'font-weight:700;' if is_highlight else ''
+
+        indent = '&nbsp;&nbsp;&nbsp;&nbsp;' * depth
+
+        cells = ''
+        for i, val in enumerate(row):
+            s = str(val)
+            if i == 0:
+                cells += f'<td style="padding:6px 12px;text-align:left;border-bottom:1px solid #e2e8f0;{bg}{fw}">{indent}{s}</td>'
+            else:
+                color = f';color:{_C_RED}' if s.startswith('-') else ''
+                cells += f'<td style="padding:6px 12px;text-align:right;border-bottom:1px solid #e2e8f0;{bg}{fw}{color}">{s}</td>'
+
+        rows_html += f'<tr style="vertical-align:middle">{cells}</tr>'
+
+    headers = ''.join(f'<th style="{_TH};text-align:center">{c}</th>' for c in render_df.columns)
+    return _html_table(f'<tr>{headers}</tr>', rows_html)
+
+
+# ────────────────────────────────────────────────────────────────────────
 # 2-2) QD 실적 차이 Builder & HTML Renderer
 # ────────────────────────────────────────────────────────────────────────
 
@@ -1515,6 +1611,90 @@ def _성과급_to_html(rows) -> str:
     return _html_table(th_html, body_html)
 
 
+def _build_포스코지원금_table(year, month):
+    df = load_sheet(Sheets.포스코지원금_DB)
+    df['값'] = df['값'].apply(_parse)
+    df = _drop_empty(df, '연도', '월')
+
+    for c in ['구분1', '구분2', '구분3']:
+        df[c] = df[c].fillna('').astype(str).str.strip()
+
+    # 같은 분기(구분1) 라벨이 여러 달에 걸쳐 누적 기록되므로, 분기 라벨 기준으로 전체 합산
+    val_map = df.groupby(['구분1', '구분2', '구분3'])['값'].sum().to_dict()
+
+    def get_val(q_label, g2, g3):
+        return val_map.get((q_label, g2, g3), 0.0)
+
+    def q_label(yr, q):
+        return f"{str(yr)[2:]}.{q}Q"
+
+    def prev_q(yr, q):
+        return (yr - 1, 4) if q == 1 else (yr, q - 1)
+
+    cur_q = (month - 1) // 3 + 1
+    cur = (year, cur_q)
+    quarters = [prev_q(*cur), cur]
+    q_labels = [q_label(yr, q) for yr, q in quarters]
+
+    items = ['수출지원(ES)', '일반재', '특가지원(SP)']
+
+    def calc(lbl, target_items):
+        v_qty = sum(get_val(lbl, it, '주문량') for it in target_items)
+        v_amt = sum(get_val(lbl, it, '할인금액') for it in target_items)
+        price = (v_amt / v_qty) if v_qty else 0
+        return v_qty, price, v_amt
+
+    rows = []
+    for item in items:
+        row = {'구분': item, '_bold': False}
+        for lbl in q_labels:
+            v_qty, price, v_amt = calc(lbl, [item])
+            row[f'{lbl}_주문량']  = _fmt(v_qty, decimal=0)
+            row[f'{lbl}_단가']    = _fmt(price, decimal=0)
+            row[f'{lbl}_할인금액'] = _fmt(v_amt / 1_000_000, decimal=0)
+        rows.append(row)
+
+    # 물량 할인 = 수출지원(ES) + 일반재 + 특가지원(SP)
+    total_row = {'구분': '물량 할인', '_bold': True}
+    for lbl in q_labels:
+        v_qty, price, v_amt = calc(lbl, items)
+        total_row[f'{lbl}_주문량']  = _fmt(v_qty, decimal=0)
+        total_row[f'{lbl}_단가']    = _fmt(price, decimal=0)
+        total_row[f'{lbl}_할인금액'] = _fmt(v_amt / 1_000_000, decimal=0)
+    rows.append(total_row)
+
+    return rows, q_labels
+
+
+def _포스코지원금_to_html(rows, q_labels) -> str:
+    sub_cols = ['주문량', '단가', '할인금액']
+
+    th_html = f'<tr><th rowspan="2" style="{_TH}">구분</th>'
+    for lbl in q_labels:
+        th_html += f'<th colspan="3" style="{_TH}">{lbl}</th>'
+    th_html += '</tr><tr>'
+    for _ in q_labels:
+        for sc in sub_cols:
+            th_html += f'<th style="{_TH}">{sc}</th>'
+    th_html += '</tr>'
+
+    body_html = ''
+    for row in rows:
+        is_bold = row.get('_bold', False)
+        style_label = ROW_HDR_LBL if is_bold else ROW_ITEM
+        style_num   = ROW_HDR_NUM if is_bold else _TD_NUM
+        style_red   = ROW_HDR_RED if is_bold else _TD_RED
+
+        cells = f'<td style="{style_label}">{row["구분"]}</td>'
+        for lbl in q_labels:
+            for sc in sub_cols:
+                s = str(row[f'{lbl}_{sc}'])
+                cells += f'<td style="{style_red if s.startswith("-") else style_num}">{s}</td>'
+        body_html += f'<tr>{cells}</tr>'
+
+    return _html_table(th_html, body_html)
+
+
 # ── render_page ───────────────────────────────────────────────────────────
 
 def render_page(app, year_state, month_state):
@@ -1551,15 +1731,16 @@ def render_page(app, year_state, month_state):
             year, month = int(year_state.value), int(month_state.value)
             
             # 1) 전월대비 손익차이
-            app.markdown(
-                f'<div style="display:flex; justify-content:space-between; align-items:baseline; '
-                f'margin:0 0 8px 0; border-bottom:1px solid #dee2e6; padding-bottom:4px">'
-                f'<h3 style="margin:0; font-size:1.1em; font-weight:700; color:{_C_NAVY}">1) 전월대비 손익차이</h3>'
-                f'<span style="font-size:0.8em; color:gray"></span>'
-                f'</div>',
-                unsafe_allow_html=True
-            )
-
+            try:
+                df_diff = _build_손익차이_table(year, month)
+                html_diff = _손익차이_to_html_table(df_diff)
+                memo_diff = _get_memo(Sheets.전월대비손익차이_메모, year, month)
+                app.markdown(
+                    _layout64("1) 전월대비 손익차이", html_diff, memo=memo_diff, unit="[단위: 백만원]"),
+                    unsafe_allow_html=True
+                )
+            except Exception as e:
+                app.markdown(f"<p style='color:#d32f2f;'>전월대비 손익차이 생성 중 오류: {e}</p>", unsafe_allow_html=True)
 
             # 2) 수출 환율 차이
             try:
@@ -1578,9 +1759,10 @@ def render_page(app, year_state, month_state):
             try:
                 df_qd = _build_QD실적차이_table(year, month)
                 html_qd = _QD실적차이_to_html(df_qd)
-                
+                memo_qd = _get_memo(Sheets.QD_메모, year, month)
+
                 app.markdown(
-                    _layout100("3) QD 실적 차이", html_qd, unit="[단위: 톤, 천원, 백만원]"), 
+                    _layout100("3) QD 실적 차이", html_qd, memo=memo_qd, unit="[단위: 톤, 천원, 백만원]"), 
                     unsafe_allow_html=True
                 )
             except Exception as e:
@@ -1600,7 +1782,18 @@ def render_page(app, year_state, month_state):
                 app.markdown(_layout64("1) 포스코 對 JFE 입고가격", html1, memo=memo1, unit="[단위: 천원/톤]"), unsafe_allow_html=True)
             except Exception as e:
                 app.markdown(f"<p style='color:#d32f2f;'>포스코 對 JFE 입고가격 생성 오류: {e}</p>", unsafe_allow_html=True)
-            
+
+            app.markdown("<hr/>", unsafe_allow_html=True)
+
+            # 1-2) 포스코 분기별 지원금
+            try:
+                rows_bs, q_labels_bs = _build_포스코지원금_table(year, month)
+                html_bs = _포스코지원금_to_html(rows_bs, q_labels_bs)
+                memo_bs = _get_memo(Sheets.포스코지원금_메모, year, month)
+                app.markdown(_layout64("1-2) 포스코 분기별 지원금", html_bs, memo=memo_bs, unit="[단위: 톤, 백만원]"), unsafe_allow_html=True)
+            except Exception as e:
+                app.markdown(f"<p style='color:#d32f2f;'>포스코 분기별 지원금 생성 오류: {e}</p>", unsafe_allow_html=True)
+
             app.markdown("<hr/>", unsafe_allow_html=True)
 
             # 2) 포스코/JFE 투입비중

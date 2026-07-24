@@ -12,7 +12,9 @@ class SheetID:
     안정성 = "1ZTuNSVXQcWe3BvaIAwhWg2wJF_89qM0sGNiTdmmUNVk"
     수익성 = "1Ee5F3uhSTgGCsKWc6H9yYtaXM7sn69zUY6mwseJ4Tbs"
     판매계획및실적 = "18Tba-bVA3IcX3-8jcAqMVU3IXOz353zVLzEnxYMyrCE"
+    이익계획및실적 = "1Sg_Tn8ZGR-lwhvOJ0wMMahHqA_YTBfXoxrrpbQwcuhU"
     손익요약표 = "1sDTrth-44HIWsh7FmeSGy49UWqSCfWyozE9H34I8uig"
+    전월대비손익차이 = "1QzqN2ml3buuQULpTCemuoMKudd3vsVSExCuLDmaz6d0"
     수출환율차이 ="1G-vNV-uIHW65eMDOZ2KWYs4CxOIbqfCic3NqiVlgEcw"
     QD = "1B15xzvQW7hGz4ULv0mlGrIdp1i4O1mVRWYoXPYUcOjg"
     포스코JFE입고가격 = "1K4IeS7VbVUmVJzh61qEj613sDQUfP67U0ZfH2HmwohE"
@@ -43,8 +45,7 @@ class SheetID:
     별첨 = "1B2jxlRAau6yXjLe7Zs6J12Pz9aHdVn1iqf-n_JcC-Yw"
     손익계산서수정 = "1FhJMtgXIBPd0C9QXg2UI3Ems3xhUi6B1tHjlR6IYfUc"
     유형별손익 = "1PHoRSoY6vjge7JabpimzCiD5csgCHHowIRnGYhZMDWE"
-    유형별부서별손익 = "1GScomsP1JpIZIOTvydHgVdH_xU4gB4XZ-2BUdnfZJhQ"
-    
+    부서별유형별손익 = "1GScomsP1JpIZIOTvydHgVdH_xU4gB4XZ-2BUdnfZJhQ"
 
 class Sheets:
 
@@ -104,14 +105,21 @@ class Sheets:
     판매계획및실적_DB  = (SheetID.판매계획및실적, "17. 판매계획 및 실적_DB")
     판매계획및실적_메모 = (SheetID.판매계획및실적, "17. 판매계획 및 실적_메모")
 
+    # 18. 이익계획및실적
+    이익계획및실적_DB  = (SheetID.이익계획및실적, "18. 이익계획 및 실적_DB")
+    이익계획및실적_메모 = (SheetID.이익계획및실적, "18. 이익계획 및 실적_메모")
+
 
     ## 2. 손익분석파트 19~29
-    
 
 
     # 19. 손익요약표
     손익요약표_DB = (SheetID.손익요약표, "19. 손익요약표_별도_DB")
     손익요약표_메모 = (SheetID.손익요약표, "19. 손익요약표_별도_메모")
+
+    # 20. 전월대비손익차이
+    전월대비손익차이_DB = (SheetID.전월대비손익차이, "전월대비 손익차이")
+    전월대비손익차이_메모 = (SheetID.전월대비손익차이, "전월대비 손익 차이_메모")
 
     # 21. 수출환율차이
     수출환율차이_DB = (SheetID.수출환율차이, "수출 환율 차이")
@@ -119,10 +127,15 @@ class Sheets:
 
     # 22. QD
     QD_DB = (SheetID.QD, "22. QD 실적 차이_DB") 
+    QD_메모 = (SheetID.QD, "22. QD 실적 차이_메모")
+
     
     # 23. 포스코 對 JFE 입고가격
     포스코JFE입고가격_DB = (SheetID.포스코JFE입고가격, "23. 포스코 對 JFE 입고가격_DB")
     포스코JFE입고가격_메모 = (SheetID.포스코JFE입고가격, "23. 포스코 對 JFE 입고가격_메모")
+    포스코지원금_DB = (SheetID.포스코JFE입고가격, "23-2. 포스코 지원금_DB")
+    포스코지원금_메모 = (SheetID.포스코JFE입고가격, "23-2. 포스코 지원금_메모")
+ 
 
     # 24. 포스코 JFE 투입비중
     포스코JFE투입비중_DB = (SheetID.포스코JFE투입비중, "24. 포스코 JFE 투입비중_DB")
@@ -255,17 +268,13 @@ class Sheets:
 
     전체실적요약_DB = (SheetID.별첨, "89~92. 전체 실적요약_DB")
     환율_DB = (SheetID.별첨, "94. 환율추이_DB")
-
     손익계산서_DB = (SheetID.손익계산서수정, "95. 손익계산서_수정정상원가_DB")
-
     산업군별영업이익_DB = (SheetID.유형별손익, "96. 산업군별 영업이익_DB")
     실수요유통영업이익_DB = (SheetID.유형별손익, "97. 실수요유통 영업이익_DB")
     메이커별영업이익_DB = (SheetID.유형별손익, "98. 메이커별 영업이익_DB")
-
-    부서메이커별영업이익_DB = (SheetID.유형별부서별손익, "99. 부서메이커별 영업이익_DB")
-    부서사업장메이커별영업이익_DB = (SheetID.유형별부서별손익, "100. 부서사업장메이커별 영업이익_DB")
-    부서별인당영업이익_DB = (SheetID.유형별부서별손익, "101. 부서별 인당 영업이익_DB")
-
+    부서메이커별영업이익_DB = (SheetID.부서별유형별손익, "99. 부서메이커별 영업이익_DB")
+    부서사업장메이커별영업이익_DB = (SheetID.부서별유형별손익, "100. 부서사업장메이커별 영업이익_DB")
+    부서별인당영업이익_DB = (SheetID.부서별유형별손익, "101. 부서별 인당 영업이익_DB")
 
 선재_국내_사업장 = '본사'
 

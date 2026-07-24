@@ -90,6 +90,16 @@ def get_memo(load_sheet_fn, sheet_info, year, month):
     row = df[(df['연도'] == str(year)) & (df['월'] == str(month))]
     return str(row.iloc[0]['메모']) if not row.empty else ''
 
+def layout_title_only(title, unit=''):
+    """_layout100과 완전히 동일한 소제목(타이틀) 디자인을 렌더링합니다."""
+    return (
+        '<div style="margin:0 0 8px 0; width:100%; box-sizing:border-box">'
+        '<div style="display:flex; justify-content:space-between; align-items:baseline; '
+        'border-bottom:1px solid #dee2e6; padding-bottom:4px; width:100%">'
+        f'<h3 style="margin:0; font-size:1.1em; font-weight:700; color:{C_NAVY}">{title}</h3>'
+        f'<span style="font-size:0.8em; color:gray">{unit}</span>'
+        '</div></div>'
+    )
 
 
 # ── CSS 상수 (세아 컬러 시스템 적용) ─────────────────────────────────
@@ -180,24 +190,26 @@ def layout64(title, content_html, memo, unit='[단위: 만개, 백만원]'):
     )
 
 def layout100(title, content_html, memo='', unit=''):
-    """_layout64와 소제목 스타일(폰트크기, 굵기, 색상, 배치)을 동일하게 맞춘 100% 레이아웃."""
+    """layout64와 동일한 Flexbox 메커니즘을 적용하여 리사이징 시 비율이 유지되는 100% 레이아웃."""
     
-    # _layout64와 동일한 스타일 적용 (font-size: 1.1em, font-weight: 700, color: C_NAVY)
     title_section = (
         '<div style="display:flex; justify-content:space-between; align-items:baseline; '
-        'margin:0 0 8px 0; border-bottom:1px solid #dee2e6; padding-bottom:4px">'
+        'margin:0 0 8px 0; border-bottom:1px solid #dee2e6; padding-bottom:4px; width:100%">'
         f'<h3 style="margin:0; font-size:1.1em; font-weight:700; color:{C_NAVY}">{title}</h3>'
         f'<span style="font-size:0.8em; color:gray">{unit}</span>'
         '</div>'
     )
     
     memo_content = memo_html(memo)
-    memo_section = f'<div style="margin-top:10px">{memo_content}</div>' if memo_content else ''
+    memo_section = f'<div style="flex:1; min-width:0; width:100%; margin-top:10px">{memo_content}</div>' if memo_content else ''
 
     return (
-        '<div style="margin:0 0 20px 0; width:100%">'
+        '<div style="margin:0 0 20px 0; width:100%; box-sizing:border-box">'
         f'{title_section}'
-        f'<div style="width:100%">{content_html}</div>'
-        f'{memo_section}'
+        # layout64와 완전히 동일하게 flex 및 min-width:0 조합 적용
+        '<div style="display:flex; flex-direction:column; width:100%; min-width:0">'
+            f'<div style="flex:1; min-width:0; width:100%; max-width:100%; overflow:hidden">{content_html}</div>'
+            f'{memo_section}'
+        '</div>'
         '</div>'
     )

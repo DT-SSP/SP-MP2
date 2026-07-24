@@ -236,7 +236,7 @@ def render_page(app, year_state, month_state):
             col_l, col_r = app.columns([6, 4])
             with col_l:
                 app.markdown(
-                    _sec_title('1) 인원 변동내역', '[단위: 명]')
+                    _sec_title('1) 인원 변동내역', '(단위 : 명)')
                     + _인원변동내역_to_html(rows, col_headers),
                     unsafe_allow_html=True,
                 )
