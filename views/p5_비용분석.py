@@ -115,23 +115,28 @@ def _build_부재료_table_html(사업장, rows, col_hdrs):
 
 
 def _build_부재료_chart(사업장, rows, col_hdrs):
-    """부재료 사용량 Plotly 차트를 각 항목별로 가로 분리하여 생성합니다."""
-    # 항목의 개수 파악
+    """부재료 사용량 Plotly 차트를 생성합니다. (항목 5개 이상이면 2행, 미만이면 1행)"""
     num_items = len(rows)
     if num_items == 0:
         return go.Figure()
 
-    # 1행 N열의 서브플롯 생성 (각 차트의 제목은 항목명으로 설정)
+    # 항목이 5개 이상이면 2행, 그렇지 않으면 1행 설정
+    num_rows = 2 if num_items >= 5 else 1
+    num_cols = (num_items + num_rows - 1) // num_rows  # 열 개수 계산 (올림)
+
     fig = make_subplots(
-        rows=1, cols=num_items, 
+        rows=num_rows, cols=num_cols, 
         subplot_titles=[item for item, _ in rows],
-        horizontal_spacing=0.05  # 차트 간 간격
+        horizontal_spacing=0.05,
+        vertical_spacing=0.20 if num_rows == 2 else 0.0
     )
 
-    # 이미지에 맞춘 기본 색상 배열
     colors = ['#1f77b4', '#aec7e8', '#d62728', '#ff9896', '#2ca02c']
 
     for idx, (item, vals) in enumerate(rows):
+        r = (idx // num_cols) + 1  # 행 위치
+        c = (idx % num_cols) + 1   # 열 위치
+        
         fig.add_trace(go.Scatter(
             name=item,
             x=col_hdrs,
@@ -142,31 +147,30 @@ def _build_부재료_chart(사업장, rows, col_hdrs):
             textfont=dict(size=10, color='#4a5568'),
             marker=dict(size=6, color=colors[idx % len(colors)]),
             line=dict(width=2, color=colors[idx % len(colors)]),
-            showlegend=False  # 개별 차트로 나뉘었으므로 통합 범례는 숨김
-        ), row=1, col=idx + 1)
+            showlegend=False  # 서브플롯 분리로 범례 숨김
+        ), row=r, col=c)
 
-    # 전체 차트 레이아웃 설정
+    # 2행일 경우 높이를 500, 1행일 경우 350으로 동적 설정
     fig.update_layout(
-        height=350,
-        margin=dict(l=10, r=10, t=60, b=40),  # 서브플롯 타이틀을 위해 위쪽 마진(t) 확보
+        height=500 if num_rows == 2 else 350,
+        margin=dict(l=10, r=10, t=60, b=40),
         plot_bgcolor='white', paper_bgcolor='white',
         font=dict(size=11, family='sans-serif'),
     )
     
-    # 생성된 모든 서브플롯의 X축, Y축 스타일 일괄 적용
-    for i in range(1, num_items + 1):
-        fig.update_xaxes(
-            tickfont=dict(size=10, color='#4a5568'),
-            showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
-            tickangle=45, row=1, col=i
-        )
-        fig.update_yaxes(
-            showgrid=True, gridcolor='#e2e8f0', gridwidth=1,
-            showticklabels=False, showline=False, zeroline=False, row=1, col=i
-        )
+    fig.update_xaxes(
+        tickfont=dict(size=10, color='#4a5568'),
+        showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
+        tickangle=45
+    )
+    fig.update_yaxes(
+        showgrid=True, gridcolor='#e2e8f0', gridwidth=1,
+        showticklabels=False, showline=False, zeroline=False
+    )
 
-    for annotation in fig['layout']['annotations']:
-        annotation['font'] = dict(size=11, color='#333333', weight='bold')
+    # 서브플롯 타이틀 폰트 스타일
+    for annotation in (fig.layout.annotations or []):
+        annotation.font = dict(size=12, color='#333333', weight='bold')
 
     return fig
 
@@ -226,56 +230,71 @@ def _build_단가추이_table_html(rows, col_hdrs):
 
     return _html_table(thead, body)
 
-
-def _build_단가추이_chart(rows, col_hdrs):
+def _build_단가추이_chart(사업장, rows, col_hdrs):
+    """단가 추이 Plotly 차트를 생성합니다. (항목 5개 이상이면 2행, 미만이면 1행 분리)"""
     num_items = len(rows)
     if num_items == 0:
         return go.Figure()
 
-    # 1행 N열 서브플롯 생성
+    # 항목이 5개 이상이면 2행, 그렇지 않으면 1행 설정
+    num_rows = 2 if num_items >= 5 else 1
+    num_cols = (num_items + num_rows - 1) // num_rows
+
     fig = make_subplots(
-        rows=1, cols=num_items, 
+        rows=num_rows, cols=num_cols, 
         subplot_titles=[item for item, _ in rows],
-        horizontal_spacing=0.05
+        horizontal_spacing=0.05,
+        vertical_spacing=0.20 if num_rows == 2 else 0.0
     )
 
-    colors = ['#1f77b4', '#ff7f0e', '#7f7f7f', '#bcbd22', '#ffbb78', '#d62728']
+    # 차트 색상 배열
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
 
     for idx, (item, vals) in enumerate(rows):
+        r = (idx // num_cols) + 1
+        c = (idx % num_cols) + 1
+        
         fig.add_trace(go.Scatter(
             name=item,
             x=col_hdrs,
             y=vals,
             mode='lines+markers+text',
-            text=[f"{v:.1f}" if v else '' for v in vals],
+            # 단가이므로 천 단위 콤마(,) 포맷 적용
+            text=[f"{v:,.0f}" if v else '' for v in vals],
             textposition='top center',
             textfont=dict(size=10, color='#4a5568'),
             marker=dict(size=6, color=colors[idx % len(colors)]),
             line=dict(width=2, color=colors[idx % len(colors)]),
-            showlegend=False
-        ), row=1, col=idx + 1)
+            showlegend=False  # 개별 서브플롯이므로 범례 숨김
+        ), row=r, col=c)
 
+    # 전체 차트 레이아웃 설정
     fig.update_layout(
-        height=350,
+        title=dict(
+            text=f"<b>{사업장} 단가 추이</b>", 
+            font=dict(size=14, color='#333333')
+        ),
+        height=500 if num_rows == 2 else 350,
         margin=dict(l=10, r=10, t=60, b=40),
-        plot_bgcolor='white', paper_bgcolor='white',
+        plot_bgcolor='white', 
+        paper_bgcolor='white',
         font=dict(size=11, family='sans-serif'),
     )
     
-    # 서브플롯 X축, Y축 스타일 적용
-    for i in range(1, num_items + 1):
-        fig.update_xaxes(
-            tickfont=dict(size=10, color='#4a5568'),
-            showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
-            tickangle=45, row=1, col=i
-        )
-        fig.update_yaxes(
-            showgrid=True, gridcolor='#e2e8f0', gridwidth=1,
-            showticklabels=False, showline=False, zeroline=False, row=1, col=i
-        )
+    # X축, Y축 스타일 적용
+    fig.update_xaxes(
+        tickfont=dict(size=10, color='#4a5568'),
+        showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
+        tickangle=45
+    )
+    fig.update_yaxes(
+        showgrid=True, gridcolor='#e2e8f0', gridwidth=1,
+        showticklabels=False, showline=False, zeroline=False
+    )
 
-    for annotation in fig['layout']['annotations']:     #소제목 폰트 수정
-        annotation['font'] = dict(size=11, color='#333333', weight='bold')
+    # 서브플롯 타이틀 폰트 스타일
+    for annotation in (fig.layout.annotations or []):
+        annotation.font = dict(size=12, color='#333333', weight='bold')
 
     return fig
 
@@ -609,9 +628,10 @@ def render_page(app, year_state, month_state):
                           ""),
                 unsafe_allow_html=True,
             )
-            
-            fig_단가 = _build_단가추이_chart(rows_단가, hdrs_단가)
+
+            fig_단가 = _build_단가추이_chart('주요 부재료', rows_단가, hdrs_단가) 
             app.plotly_chart(fig_단가, use_container_width=True)
+
 
         app.If(lambda: True, _render_사용량)
 

@@ -10,7 +10,7 @@ from views.common import (
     prev_month as _prev, drop_empty as _drop_empty, sort_by_order as _sort,
     TH as _TH, TD_NUM as _TD_NUM, TD_RED as _TD_RED, C_RED as _C_RED,
     ROW_SEC, ROW_GRP, ROW_HDR_LBL, ROW_HDR_NUM, ROW_HDR_RED, C_NAVY as _C_NAVY,
-    ROW_CAL_LBL, ROW_CAL_NUM, ROW_CAL_RED, ROW_ITEM,
+    ROW_CAL_LBL, ROW_CAL_NUM, ROW_CAL_RED, ROW_ITEM, C_LT_GRAY as _C_LT_GRAY, TD_LBL as _TD_LBL,
     html_table as _html_table, layout64 as _layout64, layout100 as _layout100,
 )
 import numpy as np
@@ -503,7 +503,9 @@ def _손익차이_to_html_table(df):
         label = str(row.iloc[0])
 
         is_highlight = label in ['매출이익차이', '영업이익 차이']
-        bg = 'background:#f8f9fa;' if is_highlight else ''
+        
+        # 하이라이트 행 배경색 및 폰트 두께 설정
+        bg = f';background:{_C_LT_GRAY}' if is_highlight else ''
         fw = 'font-weight:700;' if is_highlight else ''
 
         indent = '&nbsp;&nbsp;&nbsp;&nbsp;' * depth
@@ -512,14 +514,17 @@ def _손익차이_to_html_table(df):
         for i, val in enumerate(row):
             s = str(val)
             if i == 0:
-                cells += f'<td style="padding:6px 12px;text-align:left;border-bottom:1px solid #e2e8f0;{bg}{fw}">{indent}{s}</td>'
+                # 구분 셀: _TD_LBL 스타일 적용
+                cells += f'<td style="{_TD_LBL}{bg};{fw}">{indent}{s}</td>'
             else:
-                color = f';color:{_C_RED}' if s.startswith('-') else ''
-                cells += f'<td style="padding:6px 12px;text-align:right;border-bottom:1px solid #e2e8f0;{bg}{fw}{color}">{s}</td>'
+                # 숫자 셀: 음수일 경우 _TD_RED, 일반은 _TD_NUM 스타일 적용
+                base_style = _TD_RED if s.startswith('-') else _TD_NUM
+                cells += f'<td style="{base_style}{bg};{fw}">{s}</td>'
 
         rows_html += f'<tr style="vertical-align:middle">{cells}</tr>'
 
-    headers = ''.join(f'<th style="{_TH};text-align:center">{c}</th>' for c in render_df.columns)
+    # 헤더: _TH 스타일 적용 (white-space 및 text-align 보장)
+    headers = ''.join(f'<th style="{_TH}; white-space: nowrap;">{c}</th>' for c in render_df.columns)
     return _html_table(f'<tr>{headers}</tr>', rows_html)
 
 

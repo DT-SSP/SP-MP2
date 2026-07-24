@@ -132,9 +132,9 @@ def _재무_section(title, per_corp_dfs, 소계행, 헤더행, corp_labels, memo
 
     tab_bar = f'<div class="ftbar" style="display:flex;margin-bottom:6px;border-bottom:2px solid {_C_NAVY}">'
     tab_bar += ''.join(
-        f'<label id="fl_{prefix}_{s}" for="ft_{prefix}_{s}" style="padding:5px 16px;cursor:pointer;'
+        f'<label id="fl_{prefix}_{s}" for="ft_{prefix}_{s}" style="padding:8px 16px;cursor:pointer;'
         f'border:1px solid #DEE2E6;border-bottom:none;margin-right:2px;'
-        f'font-size:0.9em;font-weight:500;border-radius:4px 4px 0 0;'
+        f'font-size:15px;font-weight:500;border-radius:4px 4px 0 0;'  # font-size: 15px 및 padding: 8px 16px 적용
         f'background:white;color:#555">{corp}</label>'
         for corp, s in zip(corp_labels, safe)
     )
@@ -152,9 +152,9 @@ def _현금흐름표_연결_to_html_table(df, 소계행, 헤더행):
     depths    = df['_depth'].tolist() if '_depth' in df.columns else [1] * len(df)
     render_df = df.drop(columns=['_depth'], errors='ignore')
 
-    _td_hdr_num = f'background:{_C_LT_GRAY};border-bottom:1px solid #DEE2E6'
-    _pad    = {0: '8px',  1: '20px', 2: '36px'}
-    _prefix = {0: '',     1: '&nbsp;&nbsp;&nbsp;', 2: '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'}
+    # depth 단계별 padding-left 설정 (기본 상하 패딩 8px, 오른쪽 패딩 16px 유지)
+    _pad_left = {0: '16px', 1: '32px', 2: '48px'}
+    _prefix   = {0: '',     1: '&nbsp;&nbsp;&nbsp;', 2: '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'}
 
     rows_html = ''
     for (_, row), depth in zip(render_df.iterrows(), depths):
@@ -163,34 +163,35 @@ def _현금흐름표_연결_to_html_table(df, 소계행, 헤더행):
         is_hdr = label in 헤더행
         is_sub = label in 소계행
         bg     = ''
-        pad    = _pad.get(d, '20px')
+        pad_l  = _pad_left.get(d, '32px')
         prefix = _prefix.get(d, '&nbsp;&nbsp;&nbsp;')
 
         cells = ''
         for i, val in enumerate(row):
             s = str(val)
             if is_hdr:
-                lbl_st = (f'padding:4px 8px;padding-left:{pad};text-align:left;'
-                          f'background:{_C_LT_GRAY};font-weight:700;color:{_C_NAVY};'
-                          f'border-bottom:1px solid #DEE2E6')
+                # 헤더행 구분의 경우
+                lbl_st = f'{_TD_SUB_LBL};padding-left:{pad_l};color:{_C_NAVY};font-weight:700'
+                hdr_num_st = f'{_TD_SUB_NUM};background:{_C_LT_GRAY}'
                 cells += (f'<td style="{lbl_st}">{prefix}{s}</td>' if i == 0
-                          else f'<td style="{_td_hdr_num}"></td>')
+                          else f'<td style="{hdr_num_st}"></td>')
             elif i == 0:
-                if is_sub:
-                    lbl_st = (f'padding:5px 8px;padding-left:{pad};text-align:left;'
-                              f'background:{_C_LT_GRAY};font-weight:600;'
-                              f'border-bottom:1px solid #e2e8f0')
-                else:
-                    lbl_st = (f'padding:5px 8px;padding-left:{pad};text-align:left;'
-                              f'border-bottom:1px solid #e2e8f0;{bg}')
+                # 구분(라벨) 컬럼
+                base_style = _TD_SUB_LBL if is_sub else _TD_LBL
+                lbl_st = f'{base_style};padding-left:{pad_l}'
                 cells += f'<td style="{lbl_st}">{prefix}{s}</td>'
             elif s.startswith('-'):
-                cells += f'<td style="{_TD_SUB_RED if is_sub else _TD_RED+";"+bg}">{s}</td>'
+                # 음수 숫자 컬럼
+                num_style = _TD_SUB_RED if is_sub else _TD_RED
+                cells += f'<td style="{num_style}">{s}</td>'
             else:
-                cells += f'<td style="{_TD_SUB_NUM if is_sub else _TD_NUM+";"+bg}">{s}</td>'
+                # 일반 숫자 컬럼
+                num_style = _TD_SUB_NUM if is_sub else _TD_NUM
+                cells += f'<td style="{num_style}">{s}</td>'
+
         rows_html += f'<tr style="vertical-align:middle">{cells}</tr>'
 
-    headers = ''.join(f'<th style="{_TH}">{c}</th>' for c in render_df.columns)
+    headers = ''.join(f'<th style="{_TH}; white-space: nowrap;">{c}</th>' for c in render_df.columns)
     return _html_table(f'<tr>{headers}</tr>', rows_html)
 
 
@@ -278,9 +279,10 @@ def _build_회전일_table(year, month):
 
 
 def _회전일_to_html_table(rows, sub_labels):
-    headers = (f'<th style="{_TH}">사업장</th>'
-               f'<th style="{_TH}">구분</th>'
-               + ''.join(f'<th style="{_TH}">{h}</th>' for h in sub_labels))
+    # 헤더: _TH 상수를 그대로 사용하여 폰트/패딩 통일
+    headers = (f'<th style="{_TH}; white-space: nowrap;">사업장</th>'
+               f'<th style="{_TH}; white-space: nowrap;">구분</th>'
+               + ''.join(f'<th style="{_TH}; white-space: nowrap;">{h}</th>' for h in sub_labels))
 
     rows_html = ''
     group_idx = -1
@@ -289,23 +291,23 @@ def _회전일_to_html_table(rows, sub_labels):
         if is_first:
             group_idx += 1
 
-        grp_bg = _C_LT_GRAY if group_idx % 2 == 1 else '#ffffff'
+        grp_bg = f';background:{_C_LT_GRAY}' if group_idx % 2 == 1 else ''
         sep    = f'border-top:2px solid {_C_NAVY};' if (is_first and group_idx > 0) else ''
-        b_bot  = 'border-bottom:1px solid #e2e8f0'
 
         corp_val = row['사업장'] if is_first else ''
         corp_fw  = 'font-weight:700;' if is_first else ''
-        cells    = (f'<td style="padding:6px 12px;text-align:center;{corp_fw}'
-                    f'background:{grp_bg};{sep}{b_bot}">{corp_val}</td>')
 
-        cells += (f'<td style="padding:5px 10px;text-align:left;'
-                  f'background:{grp_bg};{sep}{b_bot}">{row["구분"]}</td>')
+        # 1. 사업장 컬럼 (가운데 정렬 + 공통 패딩/폰트 서식)
+        cells    = (f'<td style="{_TD_LBL}{grp_bg};text-align:center;{corp_fw}{sep}">{corp_val}</td>')
 
+        # 2. 구분 컬럼 (_TD_LBL 서식 적용)
+        cells += (f'<td style="{_TD_LBL}{grp_bg};{sep}">{row["구분"]}</td>')
+
+        # 3. 숫자 컬럼들 (음수일 경우 _TD_RED, 일반은 _TD_NUM 서식 적용)
         for h in sub_labels:
-            s      = str(row[h])
-            color  = f';color:{_C_RED}' if s.startswith('-') else ''
-            cells += (f'<td style="padding:5px 10px;text-align:right;'
-                      f'background:{grp_bg};{sep}{b_bot}{color}">{s}</td>')
+            s          = str(row[h])
+            base_style = _TD_RED if s.startswith('-') else _TD_NUM
+            cells += (f'<td style="{base_style}{grp_bg};{sep}">{s}</td>')
 
         rows_html += f'<tr style="vertical-align:middle">{cells}</tr>'
 
