@@ -546,6 +546,25 @@ def _build_해외현금흐름표_base(year, month, corp):
     def get_accumulated(yr, target_mo, g1, g2, g3):
         return sum(get_val(yr, m, g1, g2, g3) for m in range(1, target_mo + 1))
 
+    # 기초현금/기말현금은 흐름의 누적이 아니라 특정 시점의 현황값이므로 월별 합산 대신
+    # 해당 시점의 값을 그대로 가져온다.
+    잔액_항목 = {'기초현금', '기말현금'}
+    yr_전월, mo_전월 = _prev(year, month, 1)
+
+    def get_잔액(label, period, g1, g2, g3):
+        if period in ('전전년', '전년'):
+            yr = year - 2 if period == '전전년' else year - 1
+            return get_val(yr, 1 if label == '기초현금' else 12, g1, g2, g3)
+        if period == '당월':
+            return get_val(year, month, g1, g2, g3)
+        if label == '기초현금':
+            # 전월누적/당월누적 모두 해당 연도 1월의 기초현금
+            return get_val(year, 1, g1, g2, g3)
+        # 기말현금: 전월누적은 전월의 기말현금, 당월누적은 당월의 기말현금
+        if period == '전월누적':
+            return get_val(yr_전월, mo_전월, g1, g2, g3)
+        return get_val(year, month, g1, g2, g3)
+
     # 6. 표 뼈대 생성 (해당 연도에 존재하는 모든 구분 항목 추출)
     target = df[df['연도'] == year].copy()
     tree = {}
@@ -574,14 +593,28 @@ def _build_해외현금흐름표_base(year, month, corp):
     
     for r in rows:
         g1, g2, g3 = r['keys']
+        label = r['label']
+        if label in 잔액_항목:
+            v0 = get_잔액(label, '전전년',   g1, g2, g3)
+            v1 = get_잔액(label, '전년',     g1, g2, g3)
+            v2 = get_잔액(label, '전월누적', g1, g2, g3)
+            v3 = get_잔액(label, '당월',     g1, g2, g3)
+            v4 = get_잔액(label, '당월누적', g1, g2, g3)
+        else:
+            v0 = get_accumulated(yr_y2, 12, g1, g2, g3)
+            v1 = get_accumulated(yr_y1, 12, g1, g2, g3)
+            v2 = get_accumulated(year, month - 1, g1, g2, g3)
+            v3 = get_val(year, month, g1, g2, g3)
+            v4 = get_accumulated(year, month, g1, g2, g3)
+
         final_rows.append({
-            '구분':        r['label'],
+            '구분':        label,
             '_depth':      r['depth'],
-            sub_labels[0]: _fmt(get_accumulated(yr_y2, 12, g1, g2, g3)),
-            sub_labels[1]: _fmt(get_accumulated(yr_y1, 12, g1, g2, g3)),
-            sub_labels[2]: _fmt(get_accumulated(year, month - 1, g1, g2, g3)),
-            sub_labels[3]: _fmt(get_val(year, month, g1, g2, g3)),
-            sub_labels[4]: _fmt(get_accumulated(year, month, g1, g2, g3)),
+            sub_labels[0]: _fmt(v0),
+            sub_labels[1]: _fmt(v1),
+            sub_labels[2]: _fmt(v2),
+            sub_labels[3]: _fmt(v3),
+            sub_labels[4]: _fmt(v4),
         })
 
     if not final_rows:  # 빈 데이터프레임 방지

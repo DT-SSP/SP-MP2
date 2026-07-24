@@ -502,6 +502,24 @@ def _build_현금흐름표_연결_table(year, month):
             return get_val(yr, 12, '누적', g1, g2, g3, 장)
         return sum(get_val(yr, m, '당월', g1, g2, g3, 장) for m in range(1, target_mo + 1))
 
+    # 기초현금/기말현금은 흐름의 누적이 아니라 특정 시점의 현황값이므로 월별 합산 대신
+    # 해당 시점의 값을 그대로 가져온다.
+    잔액_항목 = {'기초현금', '기말현금'}
+    yr_전월, mo_전월 = _prev(year, month, 1)
+
+    def get_잔액(label, period, g1, g2, g3, 장):
+        if period == '전년':
+            return get_val(year - 1, 12, '누적', g1, g2, g3, 장)
+        if period == '당월':
+            return get_val(year, month, '당월', g1, g2, g3, 장)
+        if label == '기초현금':
+            # 전월누적/당월누적 모두 해당 연도 1월의 기초현금
+            return get_val(year, 1, '당월', g1, g2, g3, 장)
+        # 기말현금: 전월누적은 전월의 기말현금, 당월누적은 당월의 기말현금
+        if period == '전월누적':
+            return get_val(yr_전월, mo_전월, '당월', g1, g2, g3, 장)
+        return get_val(year, month, '당월', g1, g2, g3, 장)
+
     columns = ['구분', '_depth'] + sub_labels
     소계행  = 현금_소계행
     헤더행  = set()
@@ -524,10 +542,16 @@ def _build_현금흐름표_연결_table(year, month):
             if label in 소계행:
                 depth = 0
 
-            전년누적_v = get_accumulated(year - 1, 12,          g1, g2, g3, db_corp)
-            전월누적_v = get_accumulated(year,     month - 1,   g1, g2, g3, db_corp)
-            당월_v     = get_val(year, month, '당월',           g1, g2, g3, db_corp)
-            당월누적_v = get_accumulated(year,     month,       g1, g2, g3, db_corp)
+            if label in 잔액_항목:
+                전년누적_v = get_잔액(label, '전년',   g1, g2, g3, db_corp)
+                전월누적_v = get_잔액(label, '전월누적', g1, g2, g3, db_corp)
+                당월_v     = get_잔액(label, '당월',   g1, g2, g3, db_corp)
+                당월누적_v = get_잔액(label, '당월누적', g1, g2, g3, db_corp)
+            else:
+                전년누적_v = get_accumulated(year - 1, 12,          g1, g2, g3, db_corp)
+                전월누적_v = get_accumulated(year,     month - 1,   g1, g2, g3, db_corp)
+                당월_v     = get_val(year, month, '당월',           g1, g2, g3, db_corp)
+                당월누적_v = get_accumulated(year,     month,       g1, g2, g3, db_corp)
 
             rows.append({
                 '구분':        label,
@@ -899,8 +923,27 @@ def _build_현금흐름표_별도_table(year, month):
         # 1) 23, 24년 등 과거는 DB에 저장된 '누적' 값을 우선 사용
         if yr < 2025:
             return get_val(yr, 12, '누적', g1, g2, g3)
-        
+
         return sum(get_val(yr, m, '당월', g1, g2, g3) for m in range(1, target_mo + 1))
+
+    # 기초현금/기말현금은 흐름의 누적이 아니라 특정 시점의 현황값이므로 월별 합산 대신
+    # 해당 시점의 값을 그대로 가져온다.
+    잔액_항목 = {'기초현금', '기말현금'}
+    yr_전월, mo_전월 = _prev(year, month, 1)
+
+    def get_잔액(label, period, g1, g2, g3):
+        if period in ('전전년', '전년'):
+            yr = year - 2 if period == '전전년' else year - 1
+            return get_val(yr, 12, '누적', g1, g2, g3)
+        if period == '당월':
+            return get_val(year, month, '당월', g1, g2, g3)
+        if label == '기초현금':
+            # 전월누적/당월누적 모두 해당 연도 1월의 기초현금
+            return get_val(year, 1, '당월', g1, g2, g3)
+        # 기말현금: 전월누적은 전월의 기말현금, 당월누적은 당월의 기말현금
+        if period == '전월누적':
+            return get_val(yr_전월, mo_전월, '당월', g1, g2, g3)
+        return get_val(year, month, '당월', g1, g2, g3)
 
     # 5. 표 뼈대 생성 (당월 데이터 기준)
     target = df[(df['연도'] == year) & (df['월'] == month)].copy()
@@ -930,14 +973,28 @@ def _build_현금흐름표_별도_table(year, month):
     
     for r in rows:
         g1, g2, g3 = r['keys']
+        label = r['label']
+        if label in 잔액_항목:
+            v0 = get_잔액(label, '전전년',   g1, g2, g3)
+            v1 = get_잔액(label, '전년',     g1, g2, g3)
+            v2 = get_잔액(label, '전월누적', g1, g2, g3)
+            v3 = get_잔액(label, '당월',     g1, g2, g3)
+            v4 = get_잔액(label, '당월누적', g1, g2, g3)
+        else:
+            v0 = get_accumulated(yr_y2, 12, g1, g2, g3)
+            v1 = get_accumulated(yr_y1, 12, g1, g2, g3)
+            v2 = get_accumulated(year, month - 1, g1, g2, g3)
+            v3 = get_val(year, month, '당월', g1, g2, g3)
+            v4 = get_accumulated(year, month, g1, g2, g3)
+
         final_rows.append({
-            '구분':        r['label'],
+            '구분':        label,
             '_depth':      r['depth'],
-            sub_labels[0]: _fmt(get_accumulated(yr_y2, 12, g1, g2, g3)),
-            sub_labels[1]: _fmt(get_accumulated(yr_y1, 12, g1, g2, g3)),
-            sub_labels[2]: _fmt(get_accumulated(year, month - 1, g1, g2, g3)),
-            sub_labels[3]: _fmt(get_val(year, month, '당월', g1, g2, g3)),
-            sub_labels[4]: _fmt(get_accumulated(year, month, g1, g2, g3)),
+            sub_labels[0]: _fmt(v0),
+            sub_labels[1]: _fmt(v1),
+            sub_labels[2]: _fmt(v2),
+            sub_labels[3]: _fmt(v3),
+            sub_labels[4]: _fmt(v4),
         })
 
     return _현금흐름표_연결_to_html_table(pd.DataFrame(final_rows), 소계행, set())
@@ -1313,10 +1370,11 @@ def _build_판매계획및실적_html(year, month):
     k_중국계 = k_포스세아 + k_기차배건
     
     k_태국계 = [('태국', '태국', '태국')]
-    
-    k_Total = k_국내계 + k_중국계 + k_태국계
+    k_멕시코계 = [('멕시코', 'SGAM', 'AT_멕시코')]
+
+    k_Total = k_국내계 + k_중국계 + k_태국계 + k_멕시코계
     k_선재계 = k_국내선재 + k_포스세아 + k_태국계
-    k_AT계 = k_국내AT + k_기차배건
+    k_AT계 = k_국내AT + k_기차배건 + k_멕시코계
 
     # 4. 표에 출력될 행 정의 (이미지 기반 예외처리 추가)
     # vol_keys: 판매량 집계 시 별도로 참조할 키 (단위가 섞이는 걸 방지)
@@ -1340,6 +1398,7 @@ def _build_판매계획및실적_html(year, month):
         {'label': '중국 계', 'keys': k_중국계, 'vol_keys': k_포스세아, 'lv': 0, 'bold': True, 'bg': '#E9ECEF', 'skip_price': True},
         
         {'label': '태국 계', 'keys': k_태국계, 'lv': 0, 'bold': True, 'bg': '#E9ECEF', 'is_AT': False},
+        {'label': '멕시코 계', 'keys': k_멕시코계, 'lv': 0, 'bold': True, 'bg': '#E9ECEF', 'is_AT': True},
         # 🟢 Total: 판매량, 단가 모두 숨김
         {'label': 'Total', 'keys': k_Total, 'lv': 0, 'bold': True, 'bg': '#53565A', 'color': 'white', 'skip_vol': True, 'skip_price': True},
         
