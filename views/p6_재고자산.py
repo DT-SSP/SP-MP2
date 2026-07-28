@@ -92,9 +92,9 @@ def _build_재고현황(year, month):
     def pct_chg(curr, prev):
         return (curr - prev) / abs(prev) * 100 if prev else 0.0
 
-    # ⭕ 2. 금액, 중량 상관없이 무조건 소수점 1자리(1)를 사용하도록 수정
+
     def decimal_for(g2):
-        return 1  # 무조건 소수점 첫째자리까지 표시
+        return 0 # 소수점 자리
 
     def make_vals(g1, g2):
         v  = [raw(g1, g2, yr, 12) for yr in past_years]
@@ -200,12 +200,14 @@ def _memo_html(memo):
     return f'<p style="margin:0;font-size:0.9em;line-height:1.6;white-space:pre-wrap">{memo}</p>'
 
 
-def _fmt_연령_pct(v, decimal=0):
+def _fmt_연령_pct(v, decimal=0, is_diff=False):
+    suffix = '%p' if is_diff else '%'
+    
     if decimal:
         v_r = round(v, decimal)
-        return f'-{abs(v_r):.{decimal}f}%' if v_r < 0 else f'{v_r:.{decimal}f}%'
+        return f'-{abs(v_r):.{decimal}f}{suffix}' if v_r < 0 else f'{v_r:.{decimal}f}{suffix}'
     v_r = round(v)
-    return f'-{abs(v_r)}%' if v_r < 0 else f'{v_r}%'
+    return f'-{abs(v_r)}{suffix}' if v_r < 0 else f'{v_r}{suffix}'
 
 
 def _load_연령별(year, month):
@@ -296,42 +298,10 @@ def _build_원재료_rows(df, col_spec):
     rows.append({'label': '원재료 합계', 'kind': 'total', 'sub_rows': [('ton', cvs(v_총계), mom(v_총계), 0, False)]})
     return rows
 
-def _원재료_to_html(rows, col_spec):
-    col_lbls = _col_labels(col_spec)
-    n_cols   = len(col_lbls) + 2  # 구분 + 날짜 컬럼들 + 전월대비
-
-    th = f'<th style="{_TH}">원재료</th>'
-    for lbl in col_lbls:
-        th += f'<th style="{_TH}">{lbl}</th>'
-    th += f'<th style="{_TH}">전월대비</th>'
-
-    body = ''
-    for row in rows:
-        kind     = row['kind']
-        sub_rows = row['sub_rows']
-        num_s    = _TD_NUM if kind == 'detail' else ROW_HDR_NUM
-        red_s    = _TD_RED if kind == 'detail' else ROW_HDR_RED
-        hdr_s    = ROW_HDR_LBL if kind == 'total' else ROW_GRP
-
-        body += f'<tr><td colspan="{n_cols}" style="{hdr_s}">{row["label"]}</td></tr>'
-
-        for unit, vals, mom_v, dec, is_pct in sub_rows:
-            cells = f'<td style="{ROW_ITEM}">{unit}</td>'
-            if is_pct:
-                for v in vals:
-                    cells += f'<td style="{num_s}">{_fmt_연령_pct(v)}</td>'
-                cells += f'<td style="{num_s}">{_fmt_연령_pct(mom_v, decimal=1)}</td>'
-            else:
-                for v in vals:
-                    cells += f'<td style="{num_s}">{_fmt(v, decimal=dec)}</td>'
-                m_s = red_s if mom_v < 0 else num_s
-                cells += f'<td style="{m_s}">{_fmt(mom_v, decimal=dec)}</td>'
-            body += f'<tr>{cells}</tr>'
-
-    return _html_table(f'<tr>{th}</tr>', body)
-
-
 # ── 재공품/제품 데이터 빌더 ────────────────────────────────────────────────
+
+# ── 단품(원재료/재공품/제품) 데이터 빌더 ────────────────────────────────────────────────
+# 원재료, 재공품, 제품 모두 이 함수를 공통으로 사용하여 동일한 순서와 포맷을 유지합니다.
 
 def _build_단품_rows(g1, df, col_spec):
     past_years  = col_spec['past_years']
@@ -343,12 +313,12 @@ def _build_단품_rows(g1, df, col_spec):
     agg = df1.groupby(['구분2', '연도', '월'])['값'].sum().to_dict()
 
     def v(g2, yr, mo): return agg.get((g2, yr, mo), 0.0)
-    def v_정상(yr, mo): return v('3개월 이하', yr, mo) + v('3개월 초과', yr, mo)
+
     def v_장기(yr, mo): return v('6개월 초과', yr, mo) + v('1년 초과', yr, mo)
-    
-    # ⭕ 매입매출 데이터 추출 및 전체 합계 산식 변경
     def v_매입(yr, mo): return sum(v(g2, yr, mo) for g2 in df1['구분2'].unique() if '매입매출' in str(g2))
-    def v_총계(yr, mo): return sum(v(g2, yr, mo) for g2 in df1['구분2'].unique())
+    def v_계(yr, mo): return v('3개월 이하', yr, mo) + v('3개월 초과', yr, mo) + v('6개월 초과', yr, mo) + v('1년 초과', yr, mo)
+    def v_정상(yr, mo): return v_계(yr, mo) - v_매입(yr, mo)
+    def v_총계(yr, mo): return v_계(yr, mo)
 
     def cvs(fn, *keys):
         return ([fn(*keys, yr, 12) for yr in past_years]
@@ -357,67 +327,24 @@ def _build_단품_rows(g1, df, col_spec):
     def mom(fn, *keys):
         return fn(*keys, curr_yr, curr_mo) - fn(*keys, prev_yr, prev_mo)
 
-    def pct_v(yr, mo):
-        t = v_총계(yr, mo)
-        return v_장기(yr, mo) / t * 100 if t else 0.0
-
-    pct_vals = [pct_v(yr, 12) for yr in past_years] + [pct_v(yr_c, mo_c) for yr_c, mo_c in recent_curr]
-    pct_mom  = pct_v(curr_yr, curr_mo) - pct_v(prev_yr, prev_mo)
-
-    dec = 1
+    dec = 0
     rows = []
     
-    # 1. 정상재고 파트
-    for g2 in ['3개월 이하', '3개월 초과']:
-        rows.append({'label': g2, 'kind': 'detail', 'vals': cvs(v, g2), 'mom': mom(v, g2), 'dec': dec})
-    rows.append({'label': '정상재고', 'kind': 'subtotal', 'vals': cvs(v_정상), 'mom': mom(v_정상), 'dec': dec})
+    # 1. 3개월 이하 ~ 1년 초과
+    rows.append({'label': '3개월 이하', 'kind': 'detail', 'vals': cvs(v, '3개월 이하'), 'mom': mom(v, '3개월 이하'), 'dec': dec})
+    rows.append({'label': '3개월 초과', 'kind': 'detail', 'vals': cvs(v, '3개월 초과'), 'mom': mom(v, '3개월 초과'), 'dec': dec})
+    rows.append({'label': '6개월 초과', 'kind': 'detail', 'vals': cvs(v, '6개월 초과'), 'mom': mom(v, '6개월 초과'), 'dec': dec})
+    rows.append({'label': '1년 초과', 'kind': 'detail', 'vals': cvs(v, '1년 초과'), 'mom': mom(v, '1년 초과'), 'dec': dec})
     
-    # ⭕ 2. 매입매출 행 추가 (정상재와 장기재고 사이)
-    rows.append({'label': '매입매출', 'kind': 'detail', 'vals': cvs(v_매입), 'mom': mom(v_매입), 'dec': dec})
+    # 2. 매입매출 및 정상재고 (요청하신 볼드 적용)
+    rows.append({'label': '<b>매입매출</b>', 'kind': 'detail', 'vals': cvs(v_매입), 'mom': mom(v_매입), 'dec': dec})
+    rows.append({'label': '<b>정상재고</b>', 'kind': 'subtotal', 'vals': cvs(v_정상), 'mom': mom(v_정상), 'dec': dec})
     
-    # 3. 장기재고 파트
-    for g2 in ['6개월 초과', '1년 초과']:
-        rows.append({'label': g2, 'kind': 'detail', 'vals': cvs(v, g2), 'mom': mom(v, g2), 'dec': dec})
-    rows.append({'label': '장기재고', 'kind': '장기소계', 'vals': cvs(v_장기), 'mom': mom(v_장기), 'dec': dec,
-                 'pct_vals': pct_vals, 'pct_mom': pct_mom})
+    # 3. [구분] 계 및 장기재고 (요청하신 볼드 적용 및 장기재고 비율 제거)
+    rows.append({'label': f'<b>{g1} 계</b>', 'kind': 'total', 'vals': cvs(v_총계), 'mom': mom(v_총계), 'dec': dec})
+    rows.append({'label': '<b>장기재고</b>', 'kind': 'total', 'vals': cvs(v_장기), 'mom': mom(v_장기), 'dec': dec})
     
-    # 4. 총계
-    rows.append({'label': f'{g1} 계', 'kind': 'total', 'vals': cvs(v_총계), 'mom': mom(v_총계), 'dec': dec})
     return rows
-
-def _단품_to_html(rows, col_spec, g1_label):
-    th = f'<th style="{_TH}">{g1_label}</th>'
-    for lbl in _col_labels(col_spec):
-        th += f'<th style="{_TH}">{lbl}</th>'
-    th += f'<th style="{_TH}">전월대비</th>'
-
-    body = ''
-    for row in rows:
-        kind  = row['kind']
-        vals  = row['vals']
-        mom_v = row['mom']
-        dec   = row['dec']
-
-        if kind == 'detail':
-            lbl_s, num_s, red_s = ROW_ITEM, _TD_NUM, _TD_RED
-        else:
-            lbl_s, num_s, red_s = ROW_HDR_LBL, ROW_HDR_NUM, ROW_HDR_RED
-
-        cells  = f'<td style="{lbl_s}">{row["label"]}</td>'
-        for v in vals:
-            cells += f'<td style="{num_s}">{_fmt(v, decimal=dec)}</td>'
-        m_s = red_s if mom_v < 0 else num_s
-        cells += f'<td style="{m_s}">{_fmt(mom_v, decimal=dec)}</td>'
-        body  += f'<tr>{cells}</tr>'
-
-        if kind == '장기소계':
-            cells = f'<td style="{ROW_ITEM}">(%)</td>'
-            for v in row['pct_vals']:
-                cells += f'<td style="{ROW_HDR_NUM}">{_fmt_연령_pct(v)}</td>'
-            cells += f'<td style="{ROW_HDR_NUM}">{_fmt_연령_pct(row["pct_mom"], decimal=1)}</td>'
-            body  += f'<tr>{cells}</tr>'
-
-    return _html_table(f'<tr>{th}</tr>', body)
 
 # ── 종합 현황 데이터 빌더 ────────────────────────────────────────────────
 
@@ -446,26 +373,45 @@ def _build_종합_rows(df, col_spec):
     def mom(fn, *keys):
         return fn(*keys, curr_yr, curr_mo) - fn(*keys, prev_yr, prev_mo)
 
-    def pct_v(yr, mo):
-        t = v_총계(yr, mo)
-        return j_총계(yr, mo) / t * 100 if t else 0.0
-
-    pct_vals = [pct_v(yr, 12) for yr in past_years] + [pct_v(yr_c, mo_c) for yr_c, mo_c in recent_curr]
-    pct_mom  = pct_v(curr_yr, curr_mo) - pct_v(prev_yr, prev_mo)
-
-    dec = 1
+    dec = 0
     rows = []
     # 원재료, 재공품, 제품의 총계만 표시
     for g1 in ['원재료', '재공품', '제품']:
         rows.append({'label': g1, 'kind': 'detail', 'vals': cvs(v, g1), 'mom': mom(v, g1), 'dec': dec})
     
-    # 장기재고 소계 (비율 포함)
-    rows.append({'label': '장기재고', 'kind': '장기소계', 'vals': cvs(j_총계), 'mom': mom(j_총계), 'dec': dec,
-                 'pct_vals': pct_vals, 'pct_mom': pct_mom})
-    
-    # 전체 총계
-    rows.append({'label': '총 재고 계', 'kind': 'total', 'vals': cvs(v_총계), 'mom': mom(v_총계), 'dec': dec})
+    # 장기재고 및 전체 총계 (비율 제거됨)
+    rows.append({'label': '<b>장기재고</b>', 'kind': 'total', 'vals': cvs(j_총계), 'mom': mom(j_총계), 'dec': dec})
+    rows.append({'label': '<b>총 재고 계</b>', 'kind': 'total', 'vals': cvs(v_총계), 'mom': mom(v_총계), 'dec': dec})
     return rows
+
+# ── 차트 함수 생략 (기존 _build_단품_chart_data, _build_종합_chart_data, _chart_단품, _chart_종합은 그대로 유지) ──
+
+def _단품_to_html(rows, col_spec, g1_label):
+    th = f'<th style="{_TH}">{g1_label}</th>'
+    for lbl in _col_labels(col_spec):
+        th += f'<th style="{_TH}">{lbl}</th>'
+    th += f'<th style="{_TH}">전월대비</th>'
+
+    body = ''
+    for row in rows:
+        kind  = row['kind']
+        vals  = row['vals']
+        mom_v = row['mom']
+        dec   = row['dec']
+
+        if kind == 'detail':
+            lbl_s, num_s, red_s = ROW_ITEM, _TD_NUM, _TD_RED
+        else:
+            lbl_s, num_s, red_s = ROW_HDR_LBL, ROW_HDR_NUM, ROW_HDR_RED
+
+        cells  = f'<td style="{lbl_s}">{row["label"]}</td>'
+        for v in vals:
+            cells += f'<td style="{num_s}">{_fmt(v, decimal=dec)}</td>'
+        m_s = red_s if mom_v < 0 else num_s
+        cells += f'<td style="{m_s}">{_fmt(mom_v, decimal=dec)}</td>'
+        body  += f'<tr>{cells}</tr>'
+
+    return _html_table(f'<tr>{th}</tr>', body)
 
 def _종합_to_html(rows, col_spec):
     th = f'<th style="{_TH}">구분</th>'
@@ -492,16 +438,7 @@ def _종합_to_html(rows, col_spec):
         cells += f'<td style="{m_s}">{_fmt(mom_v, decimal=dec)}</td>'
         body  += f'<tr>{cells}</tr>'
 
-        if kind == '장기소계':
-            cells = f'<td style="{ROW_ITEM}">(%)</td>'
-            for v in row['pct_vals']:
-                cells += f'<td style="{ROW_HDR_NUM}">{_fmt_연령_pct(v)}</td>'
-            cells += f'<td style="{ROW_HDR_NUM}">{_fmt_연령_pct(row["pct_mom"], decimal=1)}</td>'
-            body  += f'<tr>{cells}</tr>'
-
     return _html_table(f'<tr>{th}</tr>', body)
-
-# ── 차트 함수 ──────────────────────────────────────────────────────────────
 
 def _build_단품_chart_data(g1, df, col_spec):
     past_years  = col_spec['past_years']
@@ -510,30 +447,37 @@ def _build_단품_chart_data(g1, df, col_spec):
 
     df1 = df[df['구분1'] == g1]
 
-    # 1. 정상재 (연령 데이터 4종 합산)
+    # 1. '계' 계산 (연령 데이터 4종 합산)
     valid_ages = ['3개월 이하', '3개월 초과', '6개월 초과', '1년 초과']
-    agg_정상 = df1[df1['구분2'].isin(valid_ages)].groupby(['연도', '월'])['값'].sum().to_dict()
+    agg_계 = df1[df1['구분2'].isin(valid_ages)].groupby(['연도', '월'])['값'].sum().to_dict()
     
     # 2. 장기재고 (선 그래프용)
     agg_장기 = df1[df1['구분2'].isin(['6개월 초과', '1년 초과'])].groupby(['연도', '월'])['값'].sum().to_dict()
     
     # 3. 매입매출
     agg_매입 = df1[df1['구분2'].str.contains('매입매출', na=False)].groupby(['연도', '월'])['값'].sum().to_dict()
-    
-    # 4. 기타 (회색 바: 전체 - 정상재 - 매입매출)
-    agg_all  = df1.groupby(['연도', '월'])['값'].sum().to_dict()
 
-    정상_vals = [agg_정상.get(k, 0.0) for k in cols]
+    # 4. 차트 매핑 값 할당 (정상재 = 계 - 매입매출)
+    정상_vals = []
     장기_vals = [agg_장기.get(k, 0.0) for k in cols]
     매입_vals = [agg_매입.get(k, 0.0) for k in cols]
     
+    for i, k in enumerate(cols):
+        계_val = agg_계.get(k, 0.0)
+        매입_val = 매입_vals[i]
+        
+        # ⭕ 정상재 = 계 - 매입매출
+        정상_vals.append(계_val - 매입_val)
+    
+    # 5. 기타 (회색 바: 전체 데이터에서 '계'를 제외한 나머지)
+    agg_all  = df1.groupby(['연도', '월'])['값'].sum().to_dict()
     기타_vals = []
     for k in cols:
-        val = agg_all.get(k, 0.0) - agg_정상.get(k, 0.0) - agg_매입.get(k, 0.0)
+        # 정상재 + 매입매출 = 계 이므로 전체에서 계를 차감
+        val = agg_all.get(k, 0.0) - agg_계.get(k, 0.0)
         기타_vals.append(max(0, val))  # 음수 방지
 
     return 정상_vals, 매입_vals, 기타_vals, 장기_vals
-
 
 def _build_종합_chart_data(df, col_spec):
     past_years  = col_spec['past_years']
@@ -636,56 +580,97 @@ def _chart_종합(x_labels, 제품_v, 재공품_v, 원재료_v, 장기_v, pct_v)
     fig = go.Figure()
 
     fig.add_trace(go.Bar(
-        name='원재료(ea)', x=x_labels, y=원재료_v,
+        name='원재료', x=x_labels, y=원재료_v,
         marker_color=C_NAVY, marker_line_width=0,
-        text=[_fmt(v, decimal=1) for v in 원재료_v],
+        text=[_fmt(v, decimal=0) if v > 0 else '' for v in 원재료_v],
         textposition='inside', textfont=dict(color='white', size=10),
     ))
     fig.add_trace(go.Bar(
         name='재공품', x=x_labels, y=재공품_v,
         marker_color=C_CHART_SEC, marker_line_width=0,
-        text=[_fmt(v, decimal=1) for v in 재공품_v],
+        text=[_fmt(v, decimal=0) if v > 0 else '' for v in 재공품_v],
         textposition='inside', textfont=dict(color='white', size=10),
     ))
     fig.add_trace(go.Bar(
         name='제품', x=x_labels, y=제품_v,
         marker_color=C_ORANGE, marker_line_width=0,
-        text=[_fmt(v, decimal=1) for v in 제품_v],
+        text=[_fmt(v, decimal=0) if v > 0 else '' for v in 제품_v],
         textposition='inside', textfont=dict(color='white', size=10),
     ))
     
     fig.add_trace(go.Scatter(
         name='장기재고', x=x_labels, y=장기_v,
-        yaxis='y2',
         mode='lines+markers+text',
-        # 아래 line, marker, textfont의 color를 노란색 계열로 변경
         line=dict(color='#FFC000', width=2),
         marker=dict(size=8, color='white', line=dict(color='#FFC000', width=2)),
-        text=[f"{_fmt(v, decimal=1)}({p:.0f}%)" for v, p in zip(장기_v, pct_v)],
+        # ⭕ 값은 정수, 퍼센트는 소수점 1자리
+        text=[f"{_fmt(v, decimal=0)}\n({p:.1f}%)" if v > 0 else '' for v, p in zip(장기_v, pct_v)],
         textposition='top center',
         textfont=dict(size=10, color='#FFC000'),
     ))
 
     max_total = max(a + b + c for a, b, c in zip(원재료_v, 재공품_v, 제품_v)) if 원재료_v else 1
-    max_janggi = max(장기_v) if 장기_v and max(장기_v) > 0 else 1
 
     fig.update_layout(
         barmode='stack', height=280,
-        margin=dict(l=10, r=10, t=5, b=20),
+        margin=dict(l=40, r=20, t=30, b=40),
         showlegend=True,
+        # ⭕ 다른 그래프와 동일한 범례 위치 적용
         legend=dict(orientation='h', x=0.5, xanchor='center',
-                    y=0.98, yanchor='top',
-                    font=dict(size=11), bgcolor='rgba(255,255,255,0.8)',
-                    borderwidth=0),
+                    y=-0.15, yanchor='top',
+                    font=dict(size=11), bgcolor='rgba(0,0,0,0)'),
         xaxis=dict(showgrid=False, tickfont=dict(size=11, color=C_NAVY)),
-        yaxis=dict(showgrid=True, gridcolor=C_CHART_GRID,
-                   range=[0, max_total * 1.3], showticklabels=False),
-        # ⭕ 보조축 레이아웃 추가
-        yaxis2=dict(overlaying='y', side='right',
-                    range=[0, max_janggi * 1.5], showticklabels=False, showgrid=False),
-        plot_bgcolor='white', paper_bgcolor='white', bargap=0.3,
+        yaxis=dict(showgrid=True, gridcolor='#eee',
+                   range=[0, max_total * 1.15], 
+                   showticklabels=True, tickfont=dict(size=11, color='#555')),
+        plot_bgcolor='white', paper_bgcolor='white', bargap=0.4,
+        annotations=[
+            dict(
+                text='(단위 : 톤)',
+                xref='paper', yref='paper',
+                x=1.0, y=1.05,
+                showarrow=False,
+                font=dict(size=11, color='gray'),
+                xanchor='right', yanchor='bottom'
+            )
+        ]
     )
     return fig
+
+def _원재료_to_html(rows, col_spec):
+    col_lbls = _col_labels(col_spec)
+    n_cols   = len(col_lbls) + 2
+
+    th = f'<th style="{_TH}">원재료</th>'
+    for lbl in col_lbls:
+        th += f'<th style="{_TH}">{lbl}</th>'
+    th += f'<th style="{_TH}">전월대비</th>'
+
+    body = ''
+    for row in rows:
+        kind     = row['kind']
+        sub_rows = row['sub_rows']
+        num_s    = _TD_NUM if kind == 'detail' else ROW_HDR_NUM
+        red_s    = _TD_RED if kind == 'detail' else ROW_HDR_RED
+        hdr_s    = ROW_HDR_LBL if kind == 'total' else ROW_GRP
+
+        body += f'<tr><td colspan="{n_cols}" style="{hdr_s}">{row["label"]}</td></tr>'
+
+        for unit, vals, mom_v, dec, is_pct in sub_rows:
+            cells = f'<td style="{ROW_ITEM}">{unit}</td>'
+            if is_pct:
+                for v in vals:
+                    cells += f'<td style="{num_s}">{_fmt_연령_pct(v, decimal=1)}</td>' 
+                # ⭕ 전월대비 값에 is_diff=True 적용
+                cells += f'<td style="{num_s}">{_fmt_연령_pct(mom_v, decimal=1, is_diff=True)}</td>'
+            else:
+                for v in vals:
+                    cells += f'<td style="{num_s}">{_fmt(v, decimal=dec)}</td>'
+                m_s = red_s if mom_v < 0 else num_s
+                cells += f'<td style="{m_s}">{_fmt(mom_v, decimal=dec)}</td>'
+            body += f'<tr>{cells}</tr>'
+
+    return _html_table(f'<tr>{th}</tr>', body)
 
 # ══════════════════════════════════════════════════════════════════════════
 # ── 탭 3: 등급별 재고현황 ──────────────────────────────────────────────────
@@ -880,10 +865,9 @@ def render_page(app, year_state, month_state):
             x_labels = _col_labels(col_spec)
             memo = _get_memo(Sheets.연령별재고현황_메모, year, month)
 
-            # ⭕ 차트를 표 하단에 맞추기 위한 컨테이너 스타일 (높이 조절)
             chart_wrapper = '<div style="display:flex; flex-direction:column; justify-content:flex-end; height:100%; min-height:280px; padding-top:40px;">'
          
-            # 1) 원재료 현황
+            # 1) 원재료 현황 (여기부터 수정됨)
             rows_원재료 = _build_단품_rows('원재료', df, col_spec)
             정상_1, 매입_1, 기타_1, 장기_1 = _build_단품_chart_data('원재료', df, col_spec)
 
@@ -913,7 +897,8 @@ def render_page(app, year_state, month_state):
             with col_r2:
                 app.markdown(
                     chart_wrapper
-                    + _fig_to_iframe(_chart_단품(x_labels, 정상_2, 매입_2, 기타_2, 장기_2, decimal=1, g1_label='재공품'))
+                    # 재공품 차트도 decimal=0으로 변경
+                    + _fig_to_iframe(_chart_단품(x_labels, 정상_2, 매입_2, 기타_2, 장기_2, decimal=0, g1_label='재공품'))
                     + '</div>', 
                     unsafe_allow_html=True)
 
@@ -930,17 +915,19 @@ def render_page(app, year_state, month_state):
             with col_r3:
                 app.markdown(
                     chart_wrapper
-                    + _fig_to_iframe(_chart_단품(x_labels, 정상_3, 매입_3, 기타_3, 장기_3, decimal=1, g1_label='제품'))
+                    # 제품 차트도 decimal=0으로 변경
+                    + _fig_to_iframe(_chart_단품(x_labels, 정상_3, 매입_3, 기타_3, 장기_3, decimal=0, g1_label='제품'))
                     + '</div>', 
                     unsafe_allow_html=True)
-            # 4) 종합 현황 (왼쪽 6 영역에 표, 오른쪽 4 영역에 차트)
+
+            # 4) 종합 현황 
             rows_종합 = _build_종합_rows(df, col_spec)
             제품_v, 재공품_v, 원재료_v, 장기_v, pct_v = _build_종합_chart_data(df, col_spec)
 
             col_l4, col_r4 = app.columns([6, 4])
             with col_l4:
                 app.markdown(
-                    _sec_title('4) 총 재고 및 장기재고 현황', '[단위: 만개]')
+                    _sec_title('4) 총 재고 및 장기재고 현황', '[단위: 톤]')
                     + _종합_to_html(rows_종합, col_spec),
                     unsafe_allow_html=True)
             with col_r4:
@@ -949,6 +936,7 @@ def render_page(app, year_state, month_state):
                     + _fig_to_iframe(_chart_종합(x_labels, 제품_v, 재공품_v, 원재료_v, 장기_v, pct_v))
                     + '</div>',
                     unsafe_allow_html=True)
+                    
             # 5) 메모 출력
             if memo:
                 app.markdown('<br><hr style="border-top:1px solid #ddd;">', unsafe_allow_html=True)

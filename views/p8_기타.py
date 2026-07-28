@@ -232,7 +232,7 @@ def render_page(app, year_state, month_state):
         def _render_인원현황():
             year, month = int(year_state.value), int(month_state.value)
             rows, col_headers = _build_인원변동내역(year, month)
-            memo = ""
+            memo = _get_memo(Sheets.인원_메모, year, month)
             col_l, col_r = app.columns([6, 4])
             with col_l:
                 app.markdown(

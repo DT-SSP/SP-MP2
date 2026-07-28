@@ -363,21 +363,27 @@ def _판매현황_등급별_to_html(rows, col_hdrs):
 def _build_판매현황_등급별_chart(x_labels, rows):
     fig = go.Figure()
 
+    # 차트에서는 마지막 컬럼인 '전월대비'를 제외합니다.
+    chart_x_labels = x_labels[:-1]
+    
     # 1) 기본 색상 활용: 짙은회색(NAVY), 회색(SEC), 주황색(ORANGE)
     colors = [C_NAVY, C_CHART_SEC, C_ORANGE]
     color_idx = 0
     
-    totals = [0] * len(x_labels)
+    totals = [0] * len(chart_x_labels)
 
     for kind, label, vals in rows:
         if kind == 'sub':
+            # 값에서도 마지막 '전월대비' 값을 제외합니다.
+            chart_vals = vals[:-1]
+            
             fig.add_trace(go.Bar(
                 name=label,
-                x=x_labels,
-                y=vals,
+                x=chart_x_labels,
+                y=chart_vals,
                 marker_color=colors[color_idx % len(colors)],
                 marker_line_width=0,
-                text=[f"{int(v):,}" if v > 0 else '' for v in vals],
+                text=[f"{int(v):,}" if v > 0 else '' for v in chart_vals],
                 textposition='inside',
                 insidetextanchor='middle',
                 textfont=dict(color='white', size=11),
@@ -385,12 +391,12 @@ def _build_판매현황_등급별_chart(x_labels, rows):
             color_idx += 1
             
             # 합계 계산
-            for i, v in enumerate(vals):
+            for i, v in enumerate(chart_vals):
                 totals[i] += v
 
-    # 💡 [추가] 막대 최상단에 합계 표시
+    # 막대 최상단에 합계 표시
     fig.add_trace(go.Scatter(
-        x=x_labels,
+        x=chart_x_labels,
         y=[t for t in totals], 
         mode='text',
         text=[f"<b>{int(t):,}</b>" for t in totals],

@@ -25,6 +25,11 @@ def _get_연도_목록():
 def _get_memo(sheet_info, year, month):
     try:
         df = load_sheet(sheet_info)
+        
+        # '년도' 컬럼이 존재할 경우 '연도'로 이름 변경하여 일관성 유지
+        if '년도' in df.columns:
+            df.rename(columns={'년도': '연도'}, inplace=True)
+            
         # 시트가 비어있거나 '연도', '월' 컬럼이 아예 없으면 빈 문자열 반환
         if df.empty or '연도' not in df.columns or '월' not in df.columns:
             return ''
@@ -190,6 +195,15 @@ def _build_손익요약표_table(year: int, month: int) -> pd.DataFrame:
         out.loc[out['구분'] == '매출이익(%)', c] = pct(gp_val, sales_val)
         out.loc[out['구분'] == '영업이익(%)', c] = pct(op_val, sales_val)
 
+    # [추가] % 항목의 전월대비, 계획대비 차이(%p) 계산
+    for pct_label in ['매출이익(%)', '영업이익(%)']:
+        m_val = out.loc[out['구분'] == pct_label, col_m].values[0]
+        pm_val = out.loc[out['구분'] == pct_label, col_pm].values[0]
+        m_pln_val = out.loc[out['구분'] == pct_label, col_m_pln].values[0]
+        
+        out.loc[out['구분'] == pct_label, '전월대비'] = m_val - pm_val if pd.notna(m_val) and pd.notna(pm_val) else np.nan
+        out.loc[out['구분'] == pct_label, '계획대비'] = m_val - m_pln_val if pd.notna(m_val) and pd.notna(m_pln_val) else np.nan
+
     # 8. 포맷팅 및 서식 적용 (타입 에러 방지)
     def fmt_amt(x):
         if pd.isna(x): return ""
@@ -198,19 +212,32 @@ def _build_손익요약표_table(year: int, month: int) -> pd.DataFrame:
         if v < 0: return f'<span style="color:#d32f2f;">-{abs(int(round(v))):,}</span>'
         return f"{int(round(v)):,}"
 
+    # [수정] 일반 % 서식
     def fmt_pct(x):
         if pd.isna(x): return ""
         try: v = float(x)
         except: return str(x)
-        if v < 0: return f'<span style="color:#d32f2f;">-{abs(v):,.1f}</span>'
-        return f"{v:,.1f}"
+        if v < 0: return f'<span style="color:#d32f2f;">-{abs(v):,.1f}%</span>'
+        return f"{v:,.1f}%"
+        
+    # [추가] 전월대비, 계획대비용 %p 서식
+    def fmt_pct_diff(x):
+        if pd.isna(x): return ""
+        try: v = float(x)
+        except: return str(x)
+        if v < 0: return f'<span style="color:#d32f2f;">-{abs(v):,.1f}%p</span>'
+        return f"{v:,.1f}%p"
 
     out[cols_num] = out[cols_num].astype(object)
 
     pct_mask = out["구분"].astype(str).str.endswith("(%)")
     for c in cols_num:
         out.loc[~pct_mask, c] = out.loc[~pct_mask, c].apply(fmt_amt)
-        out.loc[pct_mask, c] = out.loc[pct_mask, c].apply(fmt_pct)
+        # [추가] 전월대비와 계획대비 열에는 %p 포맷 적용, 그 외는 % 적용
+        if c in ['전월대비', '계획대비']:
+            out.loc[pct_mask, c] = out.loc[pct_mask, c].apply(fmt_pct_diff)
+        else:
+            out.loc[pct_mask, c] = out.loc[pct_mask, c].apply(fmt_pct)
 
     # 9. 섹션 분리 (공백행 축소)
     def insert_empty_after(df, label):
@@ -527,7 +554,6 @@ def _손익차이_to_html_table(df):
     headers = ''.join(f'<th style="{_TH}; white-space: nowrap;">{c}</th>' for c in render_df.columns)
     return _html_table(f'<tr>{headers}</tr>', rows_html)
 
-
 # ────────────────────────────────────────────────────────────────────────
 # 2-2) QD 실적 차이 Builder & HTML Renderer
 # ────────────────────────────────────────────────────────────────────────
@@ -561,21 +587,26 @@ def _build_QD실적차이_table(year: int, month: int):
     for company in companies:
         row_data = {"구분": company}
         
-        # 전월 (구분2 == "실적" 으로 필터링 수정)
+        # 전월 (구분2 == "실적" 으로 필터링)
         prev_qty = df_prev[(df_prev["구분1"] == company) & (df_prev["구분2"] == "실적") & (df_prev["구분3"] == "중량")]["값"].sum()
         prev_amt = df_prev[(df_prev["구분1"] == company) & (df_prev["구분2"] == "실적") & (df_prev["구분3"] == "금액")]["값"].sum()
         prev_price = prev_amt / prev_qty if prev_qty != 0 else 0
         
-        # 당월 (구분2 == "실적" 으로 필터링 수정)
+        # 당월 (구분2 == "실적" 으로 필터링)
         curr_qty = df_curr[(df_curr["구분1"] == company) & (df_curr["구분2"] == "실적") & (df_curr["구분3"] == "중량")]["값"].sum()
         curr_amt = df_curr[(df_curr["구분1"] == company) & (df_curr["구분2"] == "실적") & (df_curr["구분3"] == "금액")]["값"].sum()
         curr_price = curr_amt / curr_qty if curr_qty != 0 else 0
+
+        # 단가차이 (구분2 == "단가차이" 시트 데이터 직접 조회)
+        diff_qty = df_curr[(df_curr["구분1"] == company) & (df_curr["구분2"] == "단가차이") & (df_curr["구분3"] == "중량")]["값"].sum()
+        diff_amt = df_curr[(df_curr["구분1"] == company) & (df_curr["구분2"] == "단가차이") & (df_curr["구분3"] == "금액")]["값"].sum()
+        diff_price = curr_price - prev_price
 
         # 데이터 추가
         row_data.update({
             f"{prev_label} 중량": prev_qty, f"{prev_label} 단가": prev_price, f"{prev_label} 금액": prev_amt,
             f"{curr_label} 중량": curr_qty, f"{curr_label} 단가": curr_price, f"{curr_label} 금액": curr_amt,
-            "단가차이 중량": (curr_qty - prev_qty)/1000, "단가차이 단가": curr_price - prev_price, "단가차이 금액": curr_amt - prev_amt
+            "단가차이 중량": diff_qty/1000, "단가차이 단가": diff_price, "단가차이 금액": diff_amt
         })
         result_rows.append(row_data)
 
@@ -583,6 +614,19 @@ def _build_QD실적차이_table(year: int, month: int):
     total_row = {"구분": "합계"}
     for col in result_rows[0].keys():
         if col != "구분": total_row[col] = sum(row.get(col, 0) for row in result_rows)
+        
+    # [수정] 합계 행의 단가는 단순 합산이 아닌 (금액 합계 / 중량 합계)로 재계산
+    tot_prev_qty = total_row.get(f"{prev_label} 중량", 0)
+    tot_prev_amt = total_row.get(f"{prev_label} 금액", 0)
+    total_row[f"{prev_label} 단가"] = (tot_prev_amt / tot_prev_qty) if tot_prev_qty != 0 else 0
+    
+    tot_curr_qty = total_row.get(f"{curr_label} 중량", 0)
+    tot_curr_amt = total_row.get(f"{curr_label} 금액", 0)
+    total_row[f"{curr_label} 단가"] = (tot_curr_amt / tot_curr_qty) if tot_curr_qty != 0 else 0
+    
+    # [수정] 합계 행의 단가 차이도 새로 계산된 (당월 합계 단가 - 전월 합계 단가)로 덮어쓰기
+    total_row["단가차이 단가"] = total_row[f"{curr_label} 단가"] - total_row[f"{prev_label} 단가"]
+    
     result_rows.append(total_row)
 
     body = pd.DataFrame(result_rows)
@@ -984,13 +1028,16 @@ def _build_메이커별_입고추이_table(year: int, month: int):
     sw = get_avg(w, year, month).reindex(makers)
     sa = get_avg(a, year, month).reindex(makers)
 
+    # [수정] 당월과 전월, 그리고 단가 증감 계산을 위한 전전월 정보 세팅
     prev_y, prev_m = _month_shift(year, month, -1)
     prev2_y, prev2_m = _month_shift(year, month, -2)
-    prev3_y, prev3_m = _month_shift(year, month, -3)
 
+    # 당월 (curr)
+    cw, ca = get_val(w, year, month), get_val(a, year, month)
+    # 전월 (prev)
     pw, pa = get_val(w, prev_y, prev_m), get_val(a, prev_y, prev_m)
+    # 전전월 (prev2) -> 전월 단가 증감 계산용
     p2w, p2a = get_val(w, prev2_y, prev2_m), get_val(a, prev2_y, prev2_m)
-    p3w, p3a = get_val(w, prev3_y, prev3_m), get_val(a, prev3_y, prev3_m)
 
     def calc_price(amt, wgt):
         wgt = wgt.where(wgt > 0)
@@ -1000,58 +1047,60 @@ def _build_메이커별_입고추이_table(year: int, month: int):
         tot = wgt.sum()
         return (wgt / tot * 100.0) if tot > 0 else wgt * 0
 
-    diff_p2 = calc_price(p2a, p2w) - calc_price(p3a, p3w)
-    diff_p1 = calc_price(pa, pw) - calc_price(p2a, p2w)
+    # [수정] 단가 증감: 전월(전월 - 전전월) 및 당월(당월 - 전월)
+    diff_prev = calc_price(pa, pw) - calc_price(p2a, p2w)
+    diff_curr = calc_price(ca, cw) - calc_price(pa, pw)
 
     rows = []
     for mk in makers:
         rows.append({"구분": f"{mk}_중량", 
                      f"'{str(base_year)[-2:]}년 월평균": bw.get(mk), f"'{str(base_year)[-2:]}년 매입비중": calc_share(bw).get(mk),
-                     f"'{str(prev2_y)[-2:]}년 {prev2_m}월": p2w.get(mk), f"'{str(prev2_y)[-2:]}년 {prev2_m}월 매입비중": calc_share(p2w).get(mk),
                      f"'{str(prev_y)[-2:]}년 {prev_m}월": pw.get(mk), f"'{str(prev_y)[-2:]}년 {prev_m}월 매입비중": calc_share(pw).get(mk),
+                     f"'{str(year)[-2:]}년 {month}월": cw.get(mk), f"'{str(year)[-2:]}년 {month}월 매입비중": calc_share(cw).get(mk),
                      f"'{str(year)[-2:]}년 월평균": sw.get(mk), f"'{str(year)[-2:]}년 매입비중": calc_share(sw).get(mk)})
         rows.append({"구분": f"{mk}_단가", 
                      f"'{str(base_year)[-2:]}년 월평균": calc_price(ba, bw).get(mk), f"'{str(base_year)[-2:]}년 매입비중": np.nan,
-                     f"'{str(prev2_y)[-2:]}년 {prev2_m}월": calc_price(p2a, p2w).get(mk), f"'{str(prev2_y)[-2:]}년 {prev2_m}월 매입비중": np.nan,
                      f"'{str(prev_y)[-2:]}년 {prev_m}월": calc_price(pa, pw).get(mk), f"'{str(prev_y)[-2:]}년 {prev_m}월 매입비중": np.nan,
+                     f"'{str(year)[-2:]}년 {month}월": calc_price(ca, cw).get(mk), f"'{str(year)[-2:]}년 {month}월 매입비중": np.nan,
                      f"'{str(year)[-2:]}년 월평균": calc_price(sa, sw).get(mk), f"'{str(year)[-2:]}년 매입비중": np.nan})
         rows.append({"구분": f"{mk}_증감", 
                      f"'{str(base_year)[-2:]}년 월평균": np.nan, f"'{str(base_year)[-2:]}년 매입비중": np.nan,
-                     f"'{str(prev2_y)[-2:]}년 {prev2_m}월": diff_p2.get(mk), f"'{str(prev2_y)[-2:]}년 {prev2_m}월 매입비중": np.nan,
-                     f"'{str(prev_y)[-2:]}년 {prev_m}월": diff_p1.get(mk), f"'{str(prev_y)[-2:]}년 {prev_m}월 매입비중": np.nan,
+                     f"'{str(prev_y)[-2:]}년 {prev_m}월": diff_prev.get(mk), f"'{str(prev_y)[-2:]}년 {prev_m}월 매입비중": np.nan,
+                     f"'{str(year)[-2:]}년 {month}월": diff_curr.get(mk), f"'{str(year)[-2:]}년 {month}월 매입비중": np.nan,
                      f"'{str(year)[-2:]}년 월평균": np.nan, f"'{str(year)[-2:]}년 매입비중": np.nan})
 
     # ── 총계 계산 ──────────────────────────────────────────────────────────
     tot_bw, tot_ba = bw.sum(), ba.sum()
-    tot_p2w, tot_p2a = p2w.sum(), p2a.sum()
     tot_pw, tot_pa = pw.sum(), pa.sum()
+    tot_cw, tot_ca = cw.sum(), ca.sum()
     tot_sw, tot_sa = sw.sum(), sa.sum()
+    
+    tot_p2w, tot_p2a = p2w.sum(), p2a.sum()
 
     tot_price_b = (tot_ba / tot_bw * 1000.0) if tot_bw > 0 else np.nan
-    tot_price_p2 = (tot_p2a / tot_p2w * 1000.0) if tot_p2w > 0 else np.nan
     tot_price_p = (tot_pa / tot_pw * 1000.0) if tot_pw > 0 else np.nan
+    tot_price_c = (tot_ca / tot_cw * 1000.0) if tot_cw > 0 else np.nan
     tot_price_s = (tot_sa / tot_sw * 1000.0) if tot_sw > 0 else np.nan
+    tot_price_p2 = (tot_p2a / tot_p2w * 1000.0) if tot_p2w > 0 else np.nan
 
-    tot_p3w, tot_p3a = get_val(w, prev3_y, prev3_m).reindex(makers).sum(), get_val(a, prev3_y, prev3_m).reindex(makers).sum()
-    tot_price_p3 = (tot_p3a / tot_p3w * 1000.0) if tot_p3w > 0 else np.nan
-
-    tot_diff_p2 = tot_price_p2 - tot_price_p3 if pd.notna(tot_price_p2) and pd.notna(tot_price_p3) else np.nan
-    tot_diff_p1 = tot_price_p - tot_price_p2 if pd.notna(tot_price_p) and pd.notna(tot_price_p2) else np.nan
+    tot_diff_prev = tot_price_p - tot_price_p2 if pd.notna(tot_price_p) and pd.notna(tot_price_p2) else np.nan
+    tot_diff_curr = tot_price_c - tot_price_p if pd.notna(tot_price_c) and pd.notna(tot_price_p) else np.nan
 
     rows.append({"구분": "총계_중량", 
                  f"'{str(base_year)[-2:]}년 월평균": tot_bw, f"'{str(base_year)[-2:]}년 매입비중": 100.0 if tot_bw > 0 else np.nan,
-                 f"'{str(prev2_y)[-2:]}년 {prev2_m}월": tot_p2w, f"'{str(prev2_y)[-2:]}년 {prev2_m}월 매입비중": 100.0 if tot_p2w > 0 else np.nan,
                  f"'{str(prev_y)[-2:]}년 {prev_m}월": tot_pw, f"'{str(prev_y)[-2:]}년 {prev_m}월 매입비중": 100.0 if tot_pw > 0 else np.nan,
+                 f"'{str(year)[-2:]}년 {month}월": tot_cw, f"'{str(year)[-2:]}년 {month}월 매입비중": 100.0 if tot_cw > 0 else np.nan,
                  f"'{str(year)[-2:]}년 월평균": tot_sw, f"'{str(year)[-2:]}년 매입비중": 100.0 if tot_sw > 0 else np.nan})
     rows.append({"구분": "총계_단가", 
                  f"'{str(base_year)[-2:]}년 월평균": tot_price_b, f"'{str(base_year)[-2:]}년 매입비중": np.nan,
-                 f"'{str(prev2_y)[-2:]}년 {prev2_m}월": tot_price_p2, f"'{str(prev2_y)[-2:]}년 {prev2_m}월 매입비중": np.nan,
                  f"'{str(prev_y)[-2:]}년 {prev_m}월": tot_price_p, f"'{str(prev_y)[-2:]}년 {prev_m}월 매입비중": np.nan,
+                 f"'{str(year)[-2:]}년 {month}월": tot_price_c, f"'{str(year)[-2:]}년 {month}월 매입비중": np.nan,
                  f"'{str(year)[-2:]}년 월평균": tot_price_s, f"'{str(year)[-2:]}년 매입비중": np.nan})
     rows.append({"구분": "총계_증감", 
                  f"'{str(base_year)[-2:]}년 월평균": np.nan, f"'{str(base_year)[-2:]}년 매입비중": np.nan,
-                 f"'{str(prev2_y)[-2:]}년 {prev2_m}월": tot_diff_p2, f"'{str(prev2_y)[-2:]}년 {prev2_m}월 매입비중": np.nan,
-                 f"'{str(prev_y)[-2:]}년 {prev_m}월": tot_diff_p1, f"'{str(prev_y)[-2:]}년 {prev_m}월 매입비중": np.nan})
+                 f"'{str(prev_y)[-2:]}년 {prev_m}월": tot_diff_prev, f"'{str(prev_y)[-2:]}년 {prev_m}월 매입비중": np.nan,
+                 f"'{str(year)[-2:]}년 {month}월": tot_diff_curr, f"'{str(year)[-2:]}년 {month}월 매입비중": np.nan,
+                 f"'{str(year)[-2:]}년 월평균": np.nan, f"'{str(year)[-2:]}년 매입비중": np.nan})
         
     return pd.DataFrame(rows)
 
@@ -1621,8 +1670,27 @@ def _build_포스코지원금_table(year, month):
     df['값'] = df['값'].apply(_parse)
     df = _drop_empty(df, '연도', '월')
 
+    # 1. 연도/월 숫자 변환 및 당월 누적 필터링 추가
+    df['연도'] = pd.to_numeric(df['연도'], errors='coerce')
+    df['월'] = pd.to_numeric(df['월'], errors='coerce')
+    
+    # 선택한 연/월 이전의 데이터만 집계 (미래 데이터 합산 방지)
+    mask = (df['연도'] < year) | ((df['연도'] == year) & (df['월'] <= month))
+    df = df[mask]
+
     for c in ['구분1', '구분2', '구분3']:
         df[c] = df[c].fillna('').astype(str).str.strip()
+
+    # 2. 데이터에 존재하는 실제 분기(구분1) 추출 (정렬 후 최근 2개)
+    unique_q = sorted([q for q in df['구분1'].unique() if q])
+    q_labels = unique_q[-2:] if len(unique_q) >= 2 else unique_q
+    
+    # 만약 데이터가 하나도 없다면 화면이 깨지지 않도록 기본값 세팅
+    if not q_labels:
+        cur_q = (month - 1) // 3 + 1
+        prev_q = 4 if cur_q == 1 else cur_q - 1
+        prev_y = year - 1 if cur_q == 1 else year
+        q_labels = [f"{str(prev_y)[2:]}.{prev_q}Q", f"{str(year)[2:]}.{cur_q}Q"]
 
     # 같은 분기(구분1) 라벨이 여러 달에 걸쳐 누적 기록되므로, 분기 라벨 기준으로 전체 합산
     val_map = df.groupby(['구분1', '구분2', '구분3'])['값'].sum().to_dict()
@@ -1630,23 +1698,15 @@ def _build_포스코지원금_table(year, month):
     def get_val(q_label, g2, g3):
         return val_map.get((q_label, g2, g3), 0.0)
 
-    def q_label(yr, q):
-        return f"{str(yr)[2:]}.{q}Q"
-
-    def prev_q(yr, q):
-        return (yr - 1, 4) if q == 1 else (yr, q - 1)
-
-    cur_q = (month - 1) // 3 + 1
-    cur = (year, cur_q)
-    quarters = [prev_q(*cur), cur]
-    q_labels = [q_label(yr, q) for yr, q in quarters]
-
     items = ['수출지원(ES)', '일반재', '특가지원(SP)']
 
     def calc(lbl, target_items):
         v_qty = sum(get_val(lbl, it, '주문량') for it in target_items)
         v_amt = sum(get_val(lbl, it, '할인금액') for it in target_items)
-        price = (v_amt / v_qty) if v_qty else 0
+        
+        # [수정] 단가 = 할인금액 / 주문량 * 1000
+        price = (v_amt / v_qty * 1000.0) if v_qty else 0
+        
         return v_qty, price, v_amt
 
     rows = []
@@ -1656,7 +1716,9 @@ def _build_포스코지원금_table(year, month):
             v_qty, price, v_amt = calc(lbl, [item])
             row[f'{lbl}_주문량']  = _fmt(v_qty, decimal=0)
             row[f'{lbl}_단가']    = _fmt(price, decimal=0)
-            row[f'{lbl}_할인금액'] = _fmt(v_amt / 1_000_000, decimal=0)
+            
+            # [수정] 100만 나누기 제거 (시트 데이터 그대로 활용)
+            row[f'{lbl}_할인금액'] = _fmt(v_amt, decimal=0)
         rows.append(row)
 
     # 물량 할인 = 수출지원(ES) + 일반재 + 특가지원(SP)
@@ -1665,11 +1727,12 @@ def _build_포스코지원금_table(year, month):
         v_qty, price, v_amt = calc(lbl, items)
         total_row[f'{lbl}_주문량']  = _fmt(v_qty, decimal=0)
         total_row[f'{lbl}_단가']    = _fmt(price, decimal=0)
-        total_row[f'{lbl}_할인금액'] = _fmt(v_amt / 1_000_000, decimal=0)
+        
+        # [수정] 100만 나누기 제거 (시트 데이터 그대로 활용)
+        total_row[f'{lbl}_할인금액'] = _fmt(v_amt, decimal=0)
     rows.append(total_row)
 
     return rows, q_labels
-
 
 def _포스코지원금_to_html(rows, q_labels) -> str:
     sub_cols = ['주문량', '단가', '할인금액']
@@ -1711,7 +1774,7 @@ def render_page(app, year_state, month_state):
         )
     app.If(lambda: True, _render_title)
 
-    tabs = app.tabs(["손익요약", "전월∙계획 대비 손익차이", "원재료", "제조가공비", "판매비와 관리비", "성과급 및 격려금"])
+    tabs = app.tabs(["손익요약", "전월대비 손익차이", "원재료", "제조가공비", "판매비와 관리비", "성과급 및 격려금"])
 
     with tabs[0]:
         def _render_손익요약():

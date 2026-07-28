@@ -407,9 +407,8 @@ def _build_중국_table(get, year, month, 사업장='중국'):
 
     rows, 매출액 = [], {}
 
-    # 수정됨: 중국도 overseas_SONIK_구분_순서 사용
     for g in overseas_SONIK_구분_순서:
-        div      = 1  # 수정됨: 시트 데이터가 이미 백만원/톤 단위이므로 1,000,000으로 나누지 않음
+        div      = 1
         dec      = SONIK_소수점.get(g, 0)
         전월_v   = get('실적', yr2, mo2, 장=사업장, 구분=g)
         당월계획  = get('계획', year, month, 장=사업장, 구분=g)
@@ -439,19 +438,26 @@ def _build_중국_table(get, year, month, 사업장='중국'):
             당월실적_p  = _pct(당월실적, 매출액['당월실적'])
             누적계획_p  = _pct(누적계획, 매출액['누적계획'])
             누적실적_p  = _pct(누적실적, 매출액['누적실적'])
+            
+            # _fmt가 반환하는 문자열에서 기존 '%'를 안전하게 제거한 뒤 적절한 기호를 붙여주는 헬퍼 함수
+            def _p(val, is_diff=False):
+                s = str(_fmt(val, is_pct=True, decimal=1)).replace('%', '')
+                return s + ('%' if is_diff else '%') if s and s != '-' else s 
+
             rows.append({
-                '구분':          '%',
-                전월_col:        _fmt(전월_p,                   is_pct=True),
-                '당월_계획':     _fmt(당월계획_p,               is_pct=True),
-                '당월_실적':     _fmt(당월실적_p,               is_pct=True),
-                '당월_계획대비': _fmt(당월실적_p - 당월계획_p,  is_pct=True),
-                '당월_전월대비': _fmt(당월실적_p - 전월_p,      is_pct=True),
-                '누적_계획':     _fmt(누적계획_p,               is_pct=True),
-                '누적_실적':     _fmt(누적실적_p,               is_pct=True),
-                '누적_계획대비': _fmt(누적실적_p - 누적계획_p,  is_pct=True),
+                '구분':          '영업이익률 (%)',
+                전월_col:        _p(전월_p),
+                '당월_계획':     _p(당월계획_p),
+                '당월_실적':     _p(당월실적_p),
+                '당월_계획대비': _p(당월실적_p - 당월계획_p, True),
+                '당월_전월대비': _p(당월실적_p - 전월_p, True),
+                '누적_계획':     _p(누적계획_p),
+                '누적_실적':     _p(누적실적_p),
+                '누적_계획대비': _p(누적실적_p - 누적계획_p, True),
             })
 
     return pd.DataFrame({col: [r.get(col, '') for r in rows] for col in columns})
+
 
 def _build_태국_table(get, year, month, 사업장='태국'):
     yr2, mo2 = _prev(year, month, 1)
@@ -464,7 +470,7 @@ def _build_태국_table(get, year, month, 사업장='태국'):
     rows, 매출액 = [], {}
 
     for g in overseas_SONIK_구분_순서:
-        div      = 1  # 수정됨: 시트 데이터가 이미 백만원/톤 단위이므로 1,000,000으로 나누지 않음
+        div      = 1
         dec      = SONIK_소수점.get(g, 0)
         전월_v   = get('실적', yr2, mo2, 장=사업장, 구분=g)
         당월계획  = get('계획', year, month, 장=사업장, 구분=g)
@@ -494,16 +500,22 @@ def _build_태국_table(get, year, month, 사업장='태국'):
             당월실적_p  = _pct(당월실적, 매출액['당월실적'])
             누적계획_p  = _pct(누적계획, 매출액['누적계획'])
             누적실적_p  = _pct(누적실적, 매출액['누적실적'])
+            
+            # _fmt가 반환하는 문자열에서 기존 '%'를 안전하게 제거한 뒤 적절한 기호를 붙여주는 헬퍼 함수
+            def _p(val, is_diff=False):
+                s = str(_fmt(val, is_pct=True, decimal=1)).replace('%', '')
+                return s + ('%p' if is_diff else '%') if s and s != '-' else s
+
             rows.append({
-                '구분':          '%',
-                전월_col:        _fmt(전월_p,                   is_pct=True),
-                '당월_계획':     _fmt(당월계획_p,               is_pct=True),
-                '당월_실적':     _fmt(당월실적_p,               is_pct=True),
-                '당월_계획대비': _fmt(당월실적_p - 당월계획_p,  is_pct=True),
-                '당월_전월대비': _fmt(당월실적_p - 전월_p,      is_pct=True),
-                '누적_계획':     _fmt(누적계획_p,               is_pct=True),
-                '누적_실적':     _fmt(누적실적_p,               is_pct=True),
-                '누적_계획대비': _fmt(누적실적_p - 누적계획_p,  is_pct=True),
+                '구분':          '영업이익률 (%)',
+                전월_col:        _p(전월_p),
+                '당월_계획':     _p(당월계획_p),
+                '당월_실적':     _p(당월실적_p),
+                '당월_계획대비': _p(당월실적_p - 당월계획_p, True),
+                '당월_전월대비': _p(당월실적_p - 전월_p, True),
+                '누적_계획':     _p(누적계획_p),
+                '누적_실적':     _p(누적실적_p),
+                '누적_계획대비': _p(누적실적_p - 누적계획_p, True),
             })
 
     return pd.DataFrame({col: [r.get(col, '') for r in rows] for col in columns})
@@ -546,24 +558,31 @@ def _build_해외현금흐름표_base(year, month, corp):
     def get_accumulated(yr, target_mo, g1, g2, g3):
         return sum(get_val(yr, m, g1, g2, g3) for m in range(1, target_mo + 1))
 
-    # 기초현금/기말현금은 흐름의 누적이 아니라 특정 시점의 현황값이므로 월별 합산 대신
-    # 해당 시점의 값을 그대로 가져온다.
-    잔액_항목 = {'기초현금', '기말현금'}
+    # 시트에 기재된 명칭 반영 ("기초의 현금", "기말의 현금")
+    잔액_항목 = {'기초현금', '기말현금', '기초의 현금', '기말의 현금'}
     yr_전월, mo_전월 = _prev(year, month, 1)
 
+    # 수정된 부분: 기초/기말 명칭을 포괄적으로 확인하고 1월 및 기말 처리
     def get_잔액(label, period, g1, g2, g3):
-        if period in ('전전년', '전년'):
-            yr = year - 2 if period == '전전년' else year - 1
-            return get_val(yr, 1 if label == '기초현금' else 12, g1, g2, g3)
-        if period == '당월':
+        is_기초 = label in ('기초현금', '기초의 현금')
+        
+        if period == '전전년':
+            return get_val(year - 2, 1 if is_기초 else 12, g1, g2, g3)
+        elif period == '전년':
+            return get_val(year - 1, 1 if is_기초 else 12, g1, g2, g3)
+        elif period == '전월누적':
+            if is_기초:
+                return get_val(year, 1, g1, g2, g3)
+            else:
+                return get_val(yr_전월, mo_전월, g1, g2, g3)
+        elif period == '당월':
             return get_val(year, month, g1, g2, g3)
-        if label == '기초현금':
-            # 전월누적/당월누적 모두 해당 연도 1월의 기초현금
-            return get_val(year, 1, g1, g2, g3)
-        # 기말현금: 전월누적은 전월의 기말현금, 당월누적은 당월의 기말현금
-        if period == '전월누적':
-            return get_val(yr_전월, mo_전월, g1, g2, g3)
-        return get_val(year, month, g1, g2, g3)
+        elif period == '당월누적':
+            if is_기초:
+                return get_val(year, 1, g1, g2, g3) # 그 연도의 1월 값
+            else: # 기말의 현금
+                return get_val(year, month, g1, g2, g3) # 선택된 년도의 선택된 월의 값
+        return 0.0
 
     # 6. 표 뼈대 생성 (해당 연도에 존재하는 모든 구분 항목 추출)
     target = df[df['연도'] == year].copy()
@@ -646,8 +665,8 @@ def _build_해외재무상태표_base(year, month, corp):
         f"'{str(yr_y3)[2:]}년말",
         f"'{str(yr_y2)[2:]}년말",
         f"'{str(yr_y1)[2:]}년말",
-        f"'{str(yr_전월)[2:]} 전월",
-        "당월",
+        f"'{str(yr_전월)[2:]}.{mo_전월}월",
+        f"'{str(year)[2:]}.{month}월",
         "전월비"
     ]
 
@@ -770,8 +789,8 @@ def _build_해외판매구성_table(year, month):
     c2 = f"'{str(yr_m2)[2:]}년 {mo_m2}월"
     c3 = f"'{str(yr_m1)[2:]}년 {mo_m1}월"
     c4 = f"'{str(year)[2:]}년 {month}월"
-    c5 = f"'{str(year)[2:]}년 {month}월 전월대비 증감"
-    c6 = f"'{str(year)[2:]}년 {month}월 전월대비 증감률 %"
+    c5 = "전월대비 증감"
+    c6 = "전월대비 증감률 %"
     
     columns = ['구분', c1, c2, c3, c4, c5, c6]
     all_rows = []
@@ -809,6 +828,9 @@ def _build_해외판매구성_table(year, month):
         
         def fmt_pct_val(v):
             return f"{v*100:.1f}%"
+
+        def fmt_pct_val_diff(v):
+            return f"{v*100:.1f}%p"
             
         def fmt_row(label, series, is_pct_row=False):
             v_m1 = series[2]
@@ -824,8 +846,8 @@ def _build_해외판매구성_table(year, month):
                     c2: fmt_pct_val(series[1]),
                     c3: fmt_pct_val(series[2]),
                     c4: fmt_pct_val(series[3]),
-                    c5: fmt_pct_val(diff),
-                    c6: fmt_pct_val(diff_pct)
+                    c5: fmt_pct_val_diff(diff),
+                    c6: fmt_pct_val_diff(diff_pct)
                 }
             else:
                 return {
@@ -835,7 +857,7 @@ def _build_해외판매구성_table(year, month):
                     c3: _fmt(series[2]),
                     c4: _fmt(series[3]),
                     c5: _fmt(diff),
-                    c6: fmt_pct_val(diff_pct)
+                    c6: fmt_pct_val_diff(diff_pct)
                 }
 
         rows.append(fmt_row('POSCO', posco))
@@ -846,7 +868,7 @@ def _build_해외판매구성_table(year, month):
         rows.append(fmt_row('POSCO %', posco_pct, True))
         rows.append(fmt_row('정품', jungpum))
         rows.append(fmt_row('B급', b_grade))
-        rows.append(fmt_row('%', b_pct, True))
+        rows.append(fmt_row('B급 %', b_pct, True))
         rows.append(fmt_row(corp, total)) # 법인 합계 (중국/태국)
         
         return rows
@@ -856,27 +878,6 @@ def _build_해외판매구성_table(year, month):
     
     return pd.DataFrame(all_rows)
 
-def _등급별판매현황_to_html_table(df):
-    rows_html = ''
-    for idx, row in df.iterrows():
-        label = str(row.iloc[0])
-        is_total = label in ['중국', '태국']
-        
-        # '중국', '태국' 행은 약간의 배경색과 Bold 처리
-        bg = f'background:#f8f9fa;' if is_total else ''
-        fw = 'font-weight:700;' if is_total else ''
-        
-        cells = ''
-        for i, val in enumerate(row):
-            s = str(val)
-            align = 'center' if i == 0 else 'right'
-            color = f';color:{_C_RED}' if s.startswith('-') else ''
-            cells += f'<td style="padding:6px 12px;text-align:{align};border-bottom:1px solid #e2e8f0;{bg}{fw}{color}">{s}</td>'
-        
-        rows_html += f'<tr style="vertical-align:middle">{cells}</tr>'
-    
-    headers = ''.join(f'<th style="{_TH};text-align:center">{c}</th>' for c in df.columns)
-    return _html_table(f'<tr>{headers}</tr>', rows_html)
 
 def _build_세부판매현황_base_table(year, month, sheet_info, g1_name, g3_items, pct_target=None):
     """
@@ -924,8 +925,8 @@ def _build_세부판매현황_base_table(year, month, sheet_info, g1_name, g3_it
     c2 = f"'{str(yr_m2)[2:]}년 {mo_m2}월"
     c3 = f"'{str(yr_m1)[2:]}년 {mo_m1}월"
     c4 = f"'{str(year)[2:]}년 {month}월"
-    c5 = f"'{str(year)[2:]}년 {month}월 전월대비 증감"
-    c6 = f"'{str(year)[2:]}년 {month}월 전월대비 증감률 %"
+    c5 = "전월대비 증감"
+    c6 = "전월대비 증감률 %"
     
     columns = ['구분', '_depth', c1, c2, c3, c4, c5, c6]
     all_rows = []
@@ -947,7 +948,10 @@ def _build_세부판매현황_base_table(year, month, sheet_info, g1_name, g3_it
         
         def fmt_pct_val(v):
             return f"{v*100:.1f}%"
-            
+
+        def fmt_pct_val_diff(v):
+            return f"{v*100:.1f}%p"
+        
         def fmt_row(label, series, is_pct_row=False, depth=1):
             v_m1 = series[2]
             v_m = series[3]
@@ -963,8 +967,8 @@ def _build_세부판매현황_base_table(year, month, sheet_info, g1_name, g3_it
                     c2: fmt_pct_val(series[1]),
                     c3: fmt_pct_val(series[2]),
                     c4: fmt_pct_val(series[3]),
-                    c5: fmt_pct_val(diff),  
-                    c6: fmt_pct_val(diff_pct)
+                    c5: fmt_pct_val_diff(diff),  
+                    c6: fmt_pct_val_diff(diff_pct)
                 }
             else:
                 return {
@@ -975,7 +979,7 @@ def _build_세부판매현황_base_table(year, month, sheet_info, g1_name, g3_it
                     c3: _fmt(series[2]),
                     c4: _fmt(series[3]),
                     c5: _fmt(diff),
-                    c6: fmt_pct_val(diff_pct)
+                    c6: fmt_pct_val_diff(diff_pct)
                 }
 
         # 개별 항목 추가 (depth=1)
@@ -995,6 +999,29 @@ def _build_세부판매현황_base_table(year, month, sheet_info, g1_name, g3_it
     all_rows.extend(calc_metrics('태국'))
     
     return pd.DataFrame(all_rows)
+
+def _등급별판매현황_to_html_table(df):
+    rows_html = ''
+    for idx, row in df.iterrows():
+        label = str(row.iloc[0])
+        is_total = label in ['중국', '태국']
+        
+        # '중국', '태국' 행은 약간의 배경색과 Bold 처리
+        bg = f'background:#f8f9fa;' if is_total else ''
+        fw = 'font-weight:700;' if is_total else ''
+        
+        cells = ''
+        for i, val in enumerate(row):
+            s = str(val)
+            align = 'center' if i == 0 else 'right'
+            color = f';color:{_C_RED}' if s.startswith('-') else ''
+            cells += f'<td style="padding:6px 12px;text-align:{align};border-bottom:1px solid #e2e8f0;{bg}{fw}{color}">{s}</td>'
+        
+        rows_html += f'<tr style="vertical-align:middle">{cells}</tr>'
+    
+    headers = ''.join(f'<th style="{_TH};text-align:center">{c}</th>' for c in df.columns)
+    return _html_table(f'<tr>{headers}</tr>', rows_html)
+
 
 def _세부판매현황_to_html_table(df):
     depths = df['_depth'].tolist() if '_depth' in df.columns else [1] * len(df)
@@ -1095,7 +1122,7 @@ def _해외손익차이_to_html_table(df):
         label = str(row.iloc[0])
         
         # 주요 합계 항목(매출이익, 영업이익차이)은 배경색 및 굵게 처리
-        is_highlight = label in ['매출이익', '영업이익차이']
+        is_highlight = label in ['매출이익', '영업이익차이', '판매비와관리비']
         bg = 'background:#f8f9fa;' if is_highlight else ''
         fw = 'font-weight:700;' if is_highlight else ''
         
@@ -1122,7 +1149,7 @@ _중국재고_ITEM_ORDER = ['제품', '재공', '원재료']
 
 
 # 기존 _중국재고_ITEM_ORDER 대신 공통으로 사용할 순서 지정
-_해외재고_ITEM_ORDER = ['제품', '재공', '원재료']
+_해외재고_ITEM_ORDER = ['원재료', '재공', '제품']
 
 # 스타일 상수 (views.common에 없을 경우를 대비한 기본 스타일 선언)
 ROW_SEC = "padding:6px 12px;background:#f8f9fa;font-weight:700;text-align:left;border-bottom:1px solid #e2e8f0;color:#1e293b;"
@@ -1188,11 +1215,34 @@ def _build_해외재고자산_table(year, month, corp):
         v += [c - p, pct_chg(c, p)]
         return v
 
+    # 부모(구분1) 그룹별 합계를 구하는 함수 추가
+    def _sum_g1_vals(g1, g2_list):
+        def s(yr, mo): return sum(raw(g1, d, yr, mo) for d in g2_list)
+        v  = [s(yr, 12) for yr in past_years]
+        v += [s(yr_c, mo_c) for yr_c, mo_c in recent_curr]
+        c, p = s(year, month), s(prev_yr, prev_mo)
+        v += [c - p, pct_chg(c, p)]
+        return v
+
+    # 구분2 표시 순서 정의
+    g2_order = ['POSCO', 'LOCAL', '기타']
+
     rows = []
     for g1 in items:
-        rows.append(('parent', g1))
-        # 해당 구분1에 속한 구분2 항목들 나열
-        for d in list(dict.fromkeys(df[df['구분1'] == g1]['구분2'].tolist())):
+        # 1) 해당 구분1에 속한 구분2 unique 목록 추출
+        raw_g2_list = list(dict.fromkeys(df[df['구분1'] == g1]['구분2'].tolist()))
+        
+        # 부모(구분1) 행에 자식(구분2)들의 합계를 함께 저장하도록 변경
+        rows.append(('parent', g1, _sum_g1_vals(g1, raw_g2_list), 0))
+        
+        # 2) g2_order 순서에 맞춰 정렬 (목록에 없는 항목은 뒤로 배치)
+        sorted_g2_list = sorted(
+            raw_g2_list, 
+            key=lambda x: g2_order.index(x) if x in g2_order else 999
+        )
+        
+        # 3) 정렬된 순서대로 child 항목 추가
+        for d in sorted_g2_list:
             rows.append(('child', d, make_vals(g1, d), 0)) # 기본 소수점 0자리 처리
 
     def _sum_vals():
@@ -1203,11 +1253,11 @@ def _build_해외재고자산_table(year, month, corp):
         v += [c - p, pct_chg(c, p)]
         return v
 
-    rows.append(('total_hdr', '재고자산 계'))
     rows.append(('total_child', '합계', _sum_vals(), 0))
 
     col_spec = {'past_years': past_years, 'recent_curr': recent_curr}
     return rows, col_spec
+
 
 def _해외재고자산_to_html(rows, col_spec):
     if not rows:
@@ -1223,7 +1273,7 @@ def _해외재고자산_to_html(rows, col_spec):
         
     last_yr = None
     for yr_c, mo_c in recent_curr:
-        lbl = f"'{str(yr_c)[2:]}.{mo_c}월말" if yr_c != last_yr else f"{mo_c}월말"
+        lbl = f"'{str(yr_c)[2:]}.{mo_c}월말"
         th += f'<th style="{_TH}">{lbl}</th>'
         last_yr = yr_c
         
@@ -1236,7 +1286,7 @@ def _해외재고자산_to_html(rows, col_spec):
         n = len(vals)
         for i, v in enumerate(vals):
             s = red_s if v < 0 else num_s
-            if i == n - 1: # 증감률 열 처리
+            if i == n - 1: # 증감률 열 처리 (기존 %에서 %p로 변경)
                 txt = f'-{abs(round(v, 1))}%' if v < 0 else f'{round(v, 1)}%'
             else:
                 txt = _fmt(v, decimal=decimal)
@@ -1248,16 +1298,27 @@ def _해외재고자산_to_html(rows, col_spec):
     for row in rows:
         kind = row[0]
         if kind == 'parent':
-            cells = f'<td style="{ROW_SEC}" colspan="{n_cols}">{row[1]}</td>'
+            # 부모(원재료, 재공, 제품) 행에도 합계 데이터를 렌더링하도록 수정
+            _, label, vals, dec = row
+            ROW_SEC_RIGHT = ROW_SEC.replace('text-align:left', 'text-align:right')
+            ROW_SEC_RIGHT_RED = ROW_SEC_RIGHT + 'color:#ef4444;'
+            
+            cells = (f'<td style="{ROW_SEC}">{label}</td>'
+                     + val_cells(vals, dec, ROW_SEC_RIGHT, ROW_SEC_RIGHT_RED))
         elif kind == 'child':
             _, label, vals, dec = row
             cells = f'<td style="{ROW_ITEM}">{_I1}{label}</td>' + val_cells(vals, dec)
         elif kind == 'total_hdr':
-            cells = f'<td style="{ROW_HDR_LBL}" colspan="{n_cols}">{row[1]}</td>'
-        else:  # 'total_child'
+            cells = f'<td style="{ROW_SEC}" colspan="{n_cols}">{row[1]}</td>'
+        else:  # 'total_child' (합계 행)
             _, label, vals, dec = row
-            cells = (f'<td style="{ROW_HDR_LBL}">{_I1}{label}</td>'
-                     + val_cells(vals, dec, ROW_HDR_NUM, ROW_HDR_RED))
+            
+            # 숫자를 우측 정렬(text-align:right)하는 스타일 정의
+            ROW_SEC_RIGHT = ROW_SEC.replace('text-align:left', 'text-align:right')
+            ROW_SEC_RIGHT_RED = ROW_SEC_RIGHT + 'color:#ef4444;'  # 음수 시 빨간색 강조
+            
+            cells = (f'<td style="{ROW_SEC}">{label}</td>'
+                     + val_cells(vals, dec, ROW_SEC_RIGHT, ROW_SEC_RIGHT_RED))
         body += f'<tr>{cells}</tr>'
 
     return _html_table(thead, body)
@@ -1265,21 +1326,23 @@ def _해외재고자산_to_html(rows, col_spec):
 _해외부적합장기재고_ITEM_ORDER = ['부적합재고', '장기재고']
 
 def _build_해외부적합장기재고_flow_table(year, month, corp):
-    # 전월, 전전월, 전년말 연월 계산[cite: 2]
+    # 전월, 전전월, 전년말 연월 계산
     prev_yr, prev_mo = _prev(year, month, 1)
     prev2_yr, prev2_mo = _prev(year, month, 2)
     py_yr, py_mo = year - 1, 12
     
-    # 동적 컬럼명 생성 (숫자로 표시)[cite: 2]
+    # 동적 컬럼명 생성
     c_py = f"'{str(py_yr)[2:]}년말"
     c_p2 = f"'{str(prev2_yr)[2:]}.{prev2_mo}월말"
     c_p1 = f"'{str(prev_yr)[2:]}.{prev_mo}월말"
     c_in = "당월 발생"
     c_out = "당월 소진"
     c_c = f"'{str(year)[2:]}.{month}월말"
-    c_diff = "전월비 증감률"  # 컬럼명 변경
+    c_diff_val = "전월비 증감" # 새로 추가된 컬럼
+    c_diff_pct = "전월비 증감률"
 
-    columns = ['구분', '_depth', c_py, c_p2, c_p1, c_in, c_out, c_c, c_diff]
+    # columns에 전월비 증감(c_diff_val) 추가
+    columns = ['구분', '_depth', c_py, c_p2, c_p1, c_in, c_out, c_c, c_diff_val, c_diff_pct]
 
     df = load_sheet(Sheets.해외부적합장기재고_DB) 
     
@@ -1290,24 +1353,24 @@ def _build_해외부적합장기재고_flow_table(year, month, corp):
     df = _drop_empty(df, '연도', '월')
     df['_v'] = df['값'].apply(_parse)
     
-    # 해당 사업장 필터링[cite: 2]
+    # 해당 사업장 필터링
     df = df[df['사업장'] == corp]
 
     for c in ['구분1', '구분2', '구분3']:
         df[c] = df[c].astype(str).str.strip()
 
-    # 값 롤업 매핑 생성 (품목별, 발생/소진/실적별 합산)[cite: 2]
+    # 값 롤업 매핑 생성 (품목별, 발생/소진/실적별 합산)
     vm = df.groupby(['구분1', '구분2', '구분3', '연도', '월'])['_v'].sum().to_dict()
 
     def get_v(g1, g2, g3, y, m):
         return vm.get((g1, g2, g3, y, m), 0.0)
 
-    # 증감률 계산 헬퍼 함수
+    # 증감률 계산 헬퍼 함수 - %p 추가 및 0 처리 간소화
     def calc_pct_str(curr, prev):
         if prev == 0:
-            return "0.0%"
+            return "0.0%" # %p 로 변경
         val = (curr - prev) / abs(prev) * 100
-        return f"{val:.1f}%"
+        return f"{val:.1f}%" # %p 로 변경
 
     items_in_db = list(dict.fromkeys(df['구분1'].tolist()))
     g1_list = [it for it in _해외부적합장기재고_ITEM_ORDER if it in items_in_db]
@@ -1317,13 +1380,13 @@ def _build_해외부적합장기재고_flow_table(year, month, corp):
     grand_totals = {c_py: 0, c_p2: 0, c_p1: 0, c_in: 0, c_out: 0, c_c: 0}
 
     for g1 in g1_list:
-        # 해당 구분1에 속한 품목(구분2) 리스트 추출[cite: 2]
+        # 해당 구분1에 속한 품목(구분2) 리스트 추출
         g2_list = list(dict.fromkeys(df[df['구분1'] == g1]['구분2'].tolist()))
         
         g1_totals = {c_py: 0, c_p2: 0, c_p1: 0, c_in: 0, c_out: 0, c_c: 0}
         g2_rows = []
         
-        # 세부 품목별 데이터 계산[cite: 2]
+        # 세부 품목별 데이터 계산
         for g2 in g2_list:
             v_py  = get_v(g1, g2, '실적', py_yr, py_mo)
             v_p2  = get_v(g1, g2, '실적', prev2_yr, prev2_mo)
@@ -1348,10 +1411,11 @@ def _build_해외부적합장기재고_flow_table(year, month, corp):
                 c_in: _fmt(v_in),
                 c_out: _fmt(v_out),
                 c_c: _fmt(v_c),
-                c_diff: calc_pct_str(v_c, v_p1) # 증감률 포맷팅 적용
+                c_diff_val: _fmt(v_c - v_p1), # 전월비 증감(값) 추가
+                c_diff_pct: calc_pct_str(v_c, v_p1) # 증감률 포맷팅 적용
             })
             
-        # 그룹(구분1) 합계 행 추가 (부적합재고 합계, 장기재고 합계)[cite: 2]
+        # 그룹(구분1) 합계 행 추가 (부적합재고 합계, 장기재고 합계)
         rows.append({
             '구분': f'{g1} 합계',
             '_depth': 0,
@@ -1361,16 +1425,17 @@ def _build_해외부적합장기재고_flow_table(year, month, corp):
             c_in: _fmt(g1_totals[c_in]),
             c_out: _fmt(g1_totals[c_out]),
             c_c: _fmt(g1_totals[c_c]),
-            c_diff: calc_pct_str(g1_totals[c_c], g1_totals[c_p1]) # 증감률 포맷팅 적용
+            c_diff_val: _fmt(g1_totals[c_c] - g1_totals[c_p1]), # 전월비 증감(값) 추가
+            c_diff_pct: calc_pct_str(g1_totals[c_c], g1_totals[c_p1]) # 증감률 포맷팅 적용
         })
         
-        # 세부 품목 행을 그룹 합계 아래에 추가[cite: 2]
+        # 세부 품목 행을 그룹 합계 아래에 추가
         rows.extend(g2_rows)
         
         for k in grand_totals:
             grand_totals[k] += g1_totals[k]
 
-    # 최종 총계 행 추가[cite: 2]
+    # 최종 총계 행 추가
     if rows:
         rows.append({
             '구분': '총계',
@@ -1381,10 +1446,11 @@ def _build_해외부적합장기재고_flow_table(year, month, corp):
             c_in: _fmt(grand_totals[c_in]),
             c_out: _fmt(grand_totals[c_out]),
             c_c: _fmt(grand_totals[c_c]),
-            c_diff: calc_pct_str(grand_totals[c_c], grand_totals[c_p1]) # 증감률 포맷팅 적용
+            c_diff_val: _fmt(grand_totals[c_c] - grand_totals[c_p1]), # 전월비 증감(값) 추가
+            c_diff_pct: calc_pct_str(grand_totals[c_c], grand_totals[c_p1]) # 증감률 포맷팅 적용
         })
 
-    # 최종 결과 데이터프레임 순서를 명확하게 지정하여 반환[cite: 2]
+    # 최종 결과 데이터프레임 순서를 명확하게 지정하여 반환
     return pd.DataFrame(rows, columns=columns)
 
 def _해외부적합장기재고_flow_to_html_table(df):
@@ -1417,7 +1483,7 @@ def _해외부적합장기재고_flow_to_html_table(df):
     headers = ''.join(f'<th style="{_TH};text-align:center">{c}</th>' for c in render_df.columns)
     return _html_table(f'<tr>{headers}</tr>', rows_html)
 
-_해외연령별_ITEM_ORDER = ['제품', '재공', '원재료']
+_해외연령별_ITEM_ORDER = ['원재료', '재공', '제품']
 _해외연령별_AGE_ORDER = ['3개월 이하', '3개월 초과', '6개월 초과', '1년 초과']
 _해외연령별_UNIT_ORDER = ['중량', '금액']
 
@@ -1690,7 +1756,7 @@ def _build_해외채권현황_table(year, month, corp):
 
     # 행 구성을 위한 설정 리스트: (표시명, depth, 수치계산함수)[cite: 3]
     row_configs = [
-        ('매출액(세금포함)', 0, lambda y, m: get_raw('매출액(세금포함)', '', y, m)),
+        ('매출액', 0, lambda y, m: get_raw('매출액', '', y, m)),
         ('정상채권', 0, val_jongsang_total),
         ('3개월 이하', 1, val_age_3m_under),
         ('3개월 초과', 1, val_age_3m_over),
@@ -1726,7 +1792,6 @@ def _build_해외채권현황_table(year, month, corp):
 
     return pd.DataFrame(rows, columns=columns)
 
-
 def _해외채권현황_to_html_table(df):
     if df.empty:
         return ""
@@ -1738,7 +1803,13 @@ def _해외채권현황_to_html_table(df):
     for (_, row), depth in zip(render_df.iterrows(), depths):
         label = str(row.iloc[0])
         
-        # 이미지 형태처럼 깔끔한 Flat 스타일 유지
+        # 특정 행(매출액, 정상채권, 매출채권 계, 차이) 강조 처리
+        is_highlight = label in ['매출액', '정상채권', '매출채권 계', '차이']
+        
+        # 다른 탭과 동일한 강조 배경색(#f8f9fa) 적용
+        bg = 'background:#f8f9fa;' if is_highlight else ''
+        fw = 'font-weight:700;' if is_highlight else ''
+        
         # 하위 연령 항목(3개월 이하 등)에만 1단계 들여쓰기 적용
         indent = '&nbsp;&nbsp;&nbsp;&nbsp;' if depth == 1 else ''
             
@@ -1746,10 +1817,10 @@ def _해외채권현황_to_html_table(df):
         for i, val in enumerate(row):
             s = str(val)
             if i == 0:
-                cells += f'<td style="padding:6px 12px;text-align:left;border-bottom:1px solid #e2e8f0;">{indent}{s}</td>'
+                cells += f'<td style="padding:6px 12px;text-align:left;border-bottom:1px solid #e2e8f0;{bg}{fw}">{indent}{s}</td>'
             else:
                 color = f';color:{_C_RED}' if s.startswith('-') else ''
-                cells += f'<td style="padding:6px 12px;text-align:right;border-bottom:1px solid #e2e8f0;{color}">{s}</td>'
+                cells += f'<td style="padding:6px 12px;text-align:right;border-bottom:1px solid #e2e8f0;{bg}{fw}{color}">{s}</td>'
         
         rows_html += f'<tr style="vertical-align:middle">{cells}</tr>'
     

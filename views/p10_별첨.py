@@ -640,7 +640,7 @@ def _유형별_영업이익_to_html_table(df: pd.DataFrame) -> str:
     for (_, row), depth in zip(render_df.iterrows(), depths):
         d = int(depth) if str(depth).lstrip('-').isdigit() else 1
         label = str(row.iloc[0])
-        is_sub = (d == 0) or label in ["내수", "수출", "총계", "합계", "실수요", "유통", "계", "포항공장", "충주공장", "충주2공장", "총합계", "정상", "매입매출"]
+        is_sub = (d == 0) or label in ["내수", "수출", "총계", "합계", "계", "포항공장", "충주공장", "충주2공장", "총합계", "정상", "매입매출"]
         pad = _pad.get(d, '20px')
         prefix = _prefix.get(d, '&nbsp;&nbsp;&nbsp;')
 
@@ -713,6 +713,192 @@ def _라디오_선택_section(title, per_item_dfs, item_labels, prefix="type_op"
     tab_html = f'<style>{css}</style>' + inputs + tab_bar + panels
     return _layout100(title, tab_html, memo, unit)
 
+def _build_실수요유통영업이익_table(year: int, month: int) -> pd.DataFrame:
+    df_src = load_sheet(Sheets.실수요유통영업이익_DB) if hasattr(Sheets, '실수요유통영업이익_DB') else load_sheet('실수요유통영업이익_DB')
+    df = df_src.copy()
+    
+    for c in ["구분1", "구분2", "구분3", "구분4"]:
+        if c in df.columns:
+            df[c] = df[c].fillna('').astype(str).str.strip()
+            
+    val_col = '실적' if '실적' in df.columns else '값'
+    df[val_col] = df[val_col].apply(_to_number)
+    df["연도"] = pd.to_numeric(df["연도"], errors='coerce').fillna(0).astype(int)
+    df["월"] = pd.to_numeric(df["월"], errors='coerce').fillna(0).astype(int)
+
+    mask = (df["연도"] == int(year)) & (df["월"] == int(month))
+    df = df.loc[mask].copy()
+
+    products = ["CHQ", "CD", "STS", "BTB", "PB"]
+
+    tmp = df.pivot_table(
+        index=["구분2", "구분3", "구분1"], columns="구분4", values=val_col, aggfunc="sum", fill_value=0.0
+    ).reset_index()
+
+    for col in ["매출중량", "매출금액", "영업이익"]:
+        if col not in tmp.columns: tmp[col] = 0.0
+
+    tmp["판매중량"], tmp["판매금액"], tmp["영업이익금액"] = tmp["매출중량"], tmp["매출금액"], tmp["영업이익"]
+    metrics_cols = ["판매중량", "판매금액", "영업이익금액"]
+
+    def make_row(sub: pd.DataFrame, label: str) -> dict:
+        row = {"구분": label}
+        prod_sums = {}
+        for p in products:
+            d = sub[sub["구분1"] == p]
+            vals = d[metrics_cols].sum() if not d.empty else pd.Series([0.0, 0.0, 0.0], index=metrics_cols)
+            qty, amt, op = vals["판매중량"], vals["판매금액"], vals["영업이익금액"]
+            row[f"{p}_판매중량"] = qty
+            row[f"{p}_영업이익_단가"] = op / qty if qty != 0 else 0.0
+            row[f"{p}_영업이익_금액"] = op
+            row[f"{p}_영업이익_%"] = (op / amt * 100.0) if amt != 0 else 0.0
+            prod_sums[p] = (qty, amt, op)
+
+        total_qty = sum(q for q, _, _ in prod_sums.values())
+        total_amt = sum(a for _, a, _ in prod_sums.values())
+        total_op = sum(o for _, _, o in prod_sums.values())
+
+        row["총계_판매중량"] = total_qty
+        row["총계_영업이익_단가"] = total_op / total_qty if total_qty != 0 else 0.0
+        row["총계_영업이익_금액"] = total_op
+        row["총계_영업이익_%"] = (total_op / total_amt * 100.0) if total_amt != 0 else 0.0
+        return row
+
+    # 구분3 기준 (실수요, 유통)
+    type_order = ["실수요", "유통"]
+    rows = []
+    
+    base_내수 = tmp[tmp["구분2"] == "내수"]
+    r_내수 = make_row(base_내수, "내수")
+    r_내수["_depth"] = 0
+    rows.append(r_내수)
+    for t_type in type_order:
+        r_type = make_row(base_내수[base_내수["구분3"] == t_type], t_type)
+        r_type["_depth"] = 1
+        rows.append(r_type)
+
+    base_수출 = tmp[tmp["구분2"] == "수출"]
+    r_수출 = make_row(base_수출, "수출")
+    r_수출["_depth"] = 0
+    rows.append(r_수출)
+    for t_type in type_order:
+        r_type = make_row(base_수출[base_수출["구분3"] == t_type], t_type)
+        r_type["_depth"] = 1
+        rows.append(r_type)
+
+    r_tot = make_row(tmp, "총계")
+    r_tot["_depth"] = 0
+    rows.append(r_tot)
+    for t_type in type_order:
+        r_type = make_row(tmp[tmp["구분3"] == t_type], t_type)
+        r_type["_depth"] = 1
+        rows.append(r_type)
+
+    df_out = pd.DataFrame(rows)
+    cols = ["구분", "_depth"] + [f"{prod}_{m}" for prod in ["총계"] + products for m in ["판매중량", "영업이익_단가", "영업이익_금액", "영업이익_%"]]
+    cols = [c for c in cols if c in df_out.columns]
+    df_out = df_out[cols]
+
+    for c in [c for c in df_out.columns if "판매중량" in c]:
+        df_out[c] = df_out[c].apply(lambda x: int(round(float(x) / 1000.0, 0)) if pd.notna(x) else x)
+    for c in [c for c in df_out.columns if "영업이익_금액" in c and "%" not in c]:
+        df_out[c] = df_out[c].apply(lambda x: int(round(float(x) / 1_000_000.0, 0)) if pd.notna(x) else x)
+
+    return df_out
+
+
+def _build_메이커별영업이익_table(year: int, month: int) -> pd.DataFrame:
+    df_src = load_sheet(Sheets.메이커별영업이익_DB) if hasattr(Sheets, '메이커별영업이익_DB') else load_sheet('메이커별영업이익_DB')
+    df = df_src.copy()
+    
+    for c in ["구분1", "구분2", "구분3", "구분4"]:
+        if c in df.columns:
+            df[c] = df[c].fillna('').astype(str).str.strip()
+            
+    val_col = '실적' if '실적' in df.columns else '값'
+    df[val_col] = df[val_col].apply(_to_number)
+    df["연도"] = pd.to_numeric(df["연도"], errors='coerce').fillna(0).astype(int)
+    df["월"] = pd.to_numeric(df["월"], errors='coerce').fillna(0).astype(int)
+
+    mask = (df["연도"] == int(year)) & (df["월"] == int(month))
+    df = df.loc[mask].copy()
+
+    products = ["CHQ", "CD", "STS", "BTB", "PB"]
+
+    tmp = df.pivot_table(
+        index=["구분2", "구분3", "구분1"], columns="구분4", values=val_col, aggfunc="sum", fill_value=0.0
+    ).reset_index()
+
+    for col in ["매출중량", "매출금액", "영업이익"]:
+        if col not in tmp.columns: tmp[col] = 0.0
+
+    tmp["판매중량"], tmp["판매금액"], tmp["영업이익금액"] = tmp["매출중량"], tmp["매출금액"], tmp["영업이익"]
+    metrics_cols = ["판매중량", "판매금액", "영업이익금액"]
+
+    def make_row(sub: pd.DataFrame, label: str) -> dict:
+        row = {"구분": label}
+        prod_sums = {}
+        for p in products:
+            d = sub[sub["구분1"] == p]
+            vals = d[metrics_cols].sum() if not d.empty else pd.Series([0.0, 0.0, 0.0], index=metrics_cols)
+            qty, amt, op = vals["판매중량"], vals["판매금액"], vals["영업이익금액"]
+            row[f"{p}_판매중량"] = qty
+            row[f"{p}_영업이익_단가"] = op / qty if qty != 0 else 0.0
+            row[f"{p}_영업이익_금액"] = op
+            row[f"{p}_영업이익_%"] = (op / amt * 100.0) if amt != 0 else 0.0
+            prod_sums[p] = (qty, amt, op)
+
+        total_qty = sum(q for q, _, _ in prod_sums.values())
+        total_amt = sum(a for _, a, _ in prod_sums.values())
+        total_op = sum(o for _, _, o in prod_sums.values())
+
+        row["총계_판매중량"] = total_qty
+        row["총계_영업이익_단가"] = total_op / total_qty if total_qty != 0 else 0.0
+        row["총계_영업이익_금액"] = total_op
+        row["총계_영업이익_%"] = (total_op / total_amt * 100.0) if total_amt != 0 else 0.0
+        return row
+
+    # 구분3 기준 메이커 명단
+    maker_order = ["포스코", "JFE STEEL(S)", "세아창원특수강", "현대제철", "세아베스틸", "기타"]
+    rows = []
+    
+    base_내수 = tmp[tmp["구분2"] == "내수"]
+    r_내수 = make_row(base_내수, "내수")
+    r_내수["_depth"] = 0
+    rows.append(r_내수)
+    for maker in maker_order:
+        r_maker = make_row(base_내수[base_내수["구분3"] == maker], maker)
+        r_maker["_depth"] = 1
+        rows.append(r_maker)
+
+    base_수출 = tmp[tmp["구분2"] == "수출"]
+    r_수출 = make_row(base_수출, "수출")
+    r_수출["_depth"] = 0
+    rows.append(r_수출)
+    for maker in maker_order:
+        r_maker = make_row(base_수출[base_수출["구분3"] == maker], maker)
+        r_maker["_depth"] = 1
+        rows.append(r_maker)
+
+    r_tot = make_row(tmp, "총계")
+    r_tot["_depth"] = 0
+    rows.append(r_tot)
+    for maker in maker_order:
+        r_maker = make_row(tmp[tmp["구분3"] == maker], maker)
+        r_maker["_depth"] = 1
+        rows.append(r_maker)
+
+    df_out = pd.DataFrame(rows)
+    cols = ["구분", "_depth"] + [f"{prod}_{m}" for prod in ["총계"] + products for m in ["판매중량", "영업이익_단가", "영업이익_금액", "영업이익_%"]]
+    cols = [c for c in cols if c in df_out.columns]
+    df_out = df_out[cols]
+
+    for c in [c for c in df_out.columns if "판매중량" in c]:
+        df_out[c] = df_out[c].apply(lambda x: int(round(float(x) / 1000.0, 0)) if pd.notna(x) else x)
+    for c in [c for c in df_out.columns if "영업이익_금액" in c and "%" not in c]:
+        df_out[c] = df_out[c].apply(lambda x: int(round(float(x) / 1_000_000.0, 0)) if pd.notna(x) else x)
+
+    return df_out
 
 def _build_부서_메이커별_영업이익_table(year: int, month: int) -> pd.DataFrame:
     df_src = load_sheet(Sheets.부서메이커별영업이익_DB)
@@ -998,7 +1184,6 @@ def _build_부서별_인당_영업이익_table(year: int, month: int) -> pd.Data
 
 
 def _build_인당_영업이익_period_dfs(df_out: pd.DataFrame) -> dict:
-    # 💡 [Fix] 요청사항 반영: '총계' 탭 제외 후 ['누적', '전월', '당월'] 만 생성
     periods = ["누적", "전월", "당월"]
     period_dfs = {}
 
@@ -1111,6 +1296,28 @@ def render_page(app, year_state, month_state):
                 app.markdown("<br>", unsafe_allow_html=True)
             except Exception as e:
                 app.markdown(f"<p style='color:#d32f2f;'>1) 산업군별 영업이익 생성 오류: {e}</p>", unsafe_allow_html=True)
+
+            # 2) 실수요/유통 영업이익
+            try:
+                df2 = _build_실수요유통영업이익_table(year, month)
+                per_item_dfs2 = _build_개별_그룹_dfs(df2, ["총계", "CHQ", "CD", "STS", "BTB", "PB"])
+                item_labels2 = ["총계", "CHQ", "CD", "STS", "BTB", "PB"]
+                memo2 = ''
+                app.markdown(_라디오_선택_section("2) 실수요/유통 영업이익 (B급 제외)", per_item_dfs2, item_labels2, prefix="usage_op", memo=memo2, unit="(단위: 톤, 백만원, %)"), unsafe_allow_html=True)
+                app.markdown("<br>", unsafe_allow_html=True)
+            except Exception as e:
+                app.markdown(f"<p style='color:#d32f2f;'>2) 실수요/유통 영업이익 생성 오류: {e}</p>", unsafe_allow_html=True)
+
+            # 3) 메이커별 영업이익
+            try:
+                df3 = _build_메이커별영업이익_table(year, month)
+                per_item_dfs3 = _build_개별_그룹_dfs(df3, ["총계", "CHQ", "CD", "STS", "BTB", "PB"])
+                item_labels3 = ["총계", "CHQ", "CD", "STS", "BTB", "PB"]
+                memo3 = ''
+                app.markdown(_라디오_선택_section("3) 메이커별 영업이익 (B급 제외)", per_item_dfs3, item_labels3, prefix="maker_op", memo=memo3, unit="(단위: 톤, 백만원, %)"), unsafe_allow_html=True)
+                app.markdown("<br>", unsafe_allow_html=True)
+            except Exception as e:
+                app.markdown(f"<p style='color:#d32f2f;'>3) 메이커별 영업이익 생성 오류: {e}</p>", unsafe_allow_html=True)
 
             # 4) 부서/메이커별 영업이익
             try:

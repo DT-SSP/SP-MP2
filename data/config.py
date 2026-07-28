@@ -46,6 +46,7 @@ class SheetID:
     손익계산서수정 = "1FhJMtgXIBPd0C9QXg2UI3Ems3xhUi6B1tHjlR6IYfUc"
     유형별손익 = "1PHoRSoY6vjge7JabpimzCiD5csgCHHowIRnGYhZMDWE"
     부서별유형별손익 = "1GScomsP1JpIZIOTvydHgVdH_xU4gB4XZ-2BUdnfZJhQ"
+                    
 
 class Sheets:
 
@@ -158,7 +159,7 @@ class Sheets:
     성과급및격려금_메모 = (SheetID.성과급및격려금, "28. 성과급 및 격려금_메모")
 
     ## 3. 매출분석 30~39
-
+    
     # 30~39. 매출
     계획대비매출실적_DB = (SheetID.매출, "30.계획대비 매출 실적_DB")
     계획대비매출실적_메모 = (SheetID.매출, "30.계획대비 매출 실적_메모")
@@ -221,6 +222,7 @@ class Sheets:
 
     # 8. 기타 60
     인원_DB = (SheetID.인원, "60. 인원현황_DB")
+    인원_메모 = (SheetID.인원, "60. 인원현황_메모")
 
     #9. 해외법인실적 61~88
     해외손익요약_DB = (SheetID.해외손익요약, "(해외)손익요약")
