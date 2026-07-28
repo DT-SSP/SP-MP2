@@ -830,6 +830,26 @@ def _chart_등급별(x_labels, grade_data, rework_data):
 # ══════════════════════════════════════════════════════════════════════════
 # ── render_page ──────────────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════════
+def _get_memo(sheet_info, year, month, gubun=None):
+    df = load_sheet(sheet_info)
+    df['연도'] = df['연도'].astype(str).str.strip()
+    df['월']   = df['월'].astype(str).str.strip()
+    
+    # 기본 연도, 월 필터
+    mask = (df['연도'] == str(year)) & (df['월'] == str(month))
+    
+    # DB에 '구분1' 열이 있고, gubun 파라미터가 전달된 경우 필터 추가
+    if gubun and '구분1' in df.columns:
+        df['구분1'] = df['구분1'].astype(str).str.strip()
+        mask &= (df['구분1'] == gubun)
+        
+    row = df[mask]
+    memo_val = str(row.iloc[0]['메모']) if not row.empty else ''
+    
+    # nan 등 빈 데이터 처리
+    if memo_val.lower() == 'nan' or not memo_val.strip():
+        return ''
+    return memo_val
 
 def render_page(app, year_state, month_state):
 
@@ -863,85 +883,101 @@ def render_page(app, year_state, month_state):
             year, month = int(year_state.value), int(month_state.value)
             df, col_spec = _load_연령별(year, month)
             x_labels = _col_labels(col_spec)
-            memo = _get_memo(Sheets.연령별재고현황_메모, year, month)
 
-            chart_wrapper = '<div style="display:flex; flex-direction:column; justify-content:flex-end; height:100%; min-height:280px; padding-top:40px;">'
+            # 표 제목(약 28px) 높이만큼 여백을 주어 표 데이터와 메모의 상단 라인을 맞춤 (배경 및 테두리 제거)
+            memo_style = 'margin-top:28px;'
+            chart_wrapper = '<div style="margin-top:10px; margin-bottom:50px;">'
          
-            # 1) 원재료 현황 (여기부터 수정됨)
+            # 1) 원재료 현황
             rows_원재료 = _build_단품_rows('원재료', df, col_spec)
             정상_1, 매입_1, 기타_1, 장기_1 = _build_단품_chart_data('원재료', df, col_spec)
+            memo_원재료 = _get_memo(Sheets.연령별재고현황_메모, year, month, gubun='원재료')
 
             col_l, col_r = app.columns([6, 4])
-            with col_l:
+            with col_l: # 6: 표
                 app.markdown(
                     _sec_title('1) 원재료 현황', '[단위: 톤]') 
                     + _단품_to_html(rows_원재료, col_spec, '원재료'),
                     unsafe_allow_html=True)
-            with col_r:
-                app.markdown(
-                    chart_wrapper 
-                    + _fig_to_iframe(_chart_단품(x_labels, 정상_1, 매입_1, 기타_1, 장기_1, decimal=0, g1_label='원재료'))
-                    + '</div>', 
-                    unsafe_allow_html=True)
+            with col_r: # 4: 메모
+                if memo_원재료:
+                    app.markdown(f'<div style="{memo_style}">{_memo_html(memo_원재료)}</div>', unsafe_allow_html=True)
+            
+            # 차트 (표와 메모 하단)
+            app.markdown(
+                chart_wrapper 
+                + _fig_to_iframe(_chart_단품(x_labels, 정상_1, 매입_1, 기타_1, 장기_1, decimal=0, g1_label='원재료'))
+                + '</div>', 
+                unsafe_allow_html=True)
+
 
             # 2) 재공품 현황
             rows_재공품 = _build_단품_rows('재공품', df, col_spec)
             정상_2, 매입_2, 기타_2, 장기_2 = _build_단품_chart_data('재공품', df, col_spec)
+            memo_재공품 = _get_memo(Sheets.연령별재고현황_메모, year, month, gubun='재공품')
 
             col_l2, col_r2 = app.columns([6, 4])
-            with col_l2:
+            with col_l2: # 6: 표
                 app.markdown(
                     _sec_title('2) 재공품 현황', '[단위: 톤]') 
                     + _단품_to_html(rows_재공품, col_spec, '재공품'),
                     unsafe_allow_html=True)
-            with col_r2:
-                app.markdown(
-                    chart_wrapper
-                    # 재공품 차트도 decimal=0으로 변경
-                    + _fig_to_iframe(_chart_단품(x_labels, 정상_2, 매입_2, 기타_2, 장기_2, decimal=0, g1_label='재공품'))
-                    + '</div>', 
-                    unsafe_allow_html=True)
+            with col_r2: # 4: 메모
+                if memo_재공품:
+                    app.markdown(f'<div style="{memo_style}">{_memo_html(memo_재공품)}</div>', unsafe_allow_html=True)
+                    
+            # 차트 (표와 메모 하단)
+            app.markdown(
+                chart_wrapper
+                + _fig_to_iframe(_chart_단품(x_labels, 정상_2, 매입_2, 기타_2, 장기_2, decimal=0, g1_label='재공품'))
+                + '</div>', 
+                unsafe_allow_html=True)
+
 
             # 3) 제품 현황
             rows_제품 = _build_단품_rows('제품', df, col_spec)
             정상_3, 매입_3, 기타_3, 장기_3 = _build_단품_chart_data('제품', df, col_spec)
+            memo_제품 = _get_memo(Sheets.연령별재고현황_메모, year, month, gubun='제품')
 
             col_l3, col_r3 = app.columns([6, 4])
-            with col_l3:
+            with col_l3: # 6: 표
                 app.markdown(
                     _sec_title('3) 제품 현황', '[단위: 톤]') 
                     + _단품_to_html(rows_제품, col_spec, '제품'),
                     unsafe_allow_html=True)
-            with col_r3:
-                app.markdown(
-                    chart_wrapper
-                    # 제품 차트도 decimal=0으로 변경
-                    + _fig_to_iframe(_chart_단품(x_labels, 정상_3, 매입_3, 기타_3, 장기_3, decimal=0, g1_label='제품'))
-                    + '</div>', 
-                    unsafe_allow_html=True)
+            with col_r3: # 4: 메모
+                if memo_제품:
+                    app.markdown(f'<div style="{memo_style}">{_memo_html(memo_제품)}</div>', unsafe_allow_html=True)
+            
+            # 차트 (표와 메모 하단)
+            app.markdown(
+                chart_wrapper
+                + _fig_to_iframe(_chart_단품(x_labels, 정상_3, 매입_3, 기타_3, 장기_3, decimal=0, g1_label='제품'))
+                + '</div>', 
+                unsafe_allow_html=True)
+
 
             # 4) 종합 현황 
             rows_종합 = _build_종합_rows(df, col_spec)
             제품_v, 재공품_v, 원재료_v, 장기_v, pct_v = _build_종합_chart_data(df, col_spec)
+            memo_종합 = _get_memo(Sheets.연령별재고현황_메모, year, month, gubun='종합')
 
             col_l4, col_r4 = app.columns([6, 4])
-            with col_l4:
+            with col_l4: # 6: 표
                 app.markdown(
                     _sec_title('4) 총 재고 및 장기재고 현황', '[단위: 톤]')
                     + _종합_to_html(rows_종합, col_spec),
                     unsafe_allow_html=True)
-            with col_r4:
-                app.markdown(
-                    chart_wrapper
-                    + _fig_to_iframe(_chart_종합(x_labels, 제품_v, 재공품_v, 원재료_v, 장기_v, pct_v))
-                    + '</div>',
-                    unsafe_allow_html=True)
-                    
-            # 5) 메모 출력
-            if memo:
-                app.markdown('<br><hr style="border-top:1px solid #ddd;">', unsafe_allow_html=True)
-                app.markdown(_sec_title('', ''), unsafe_allow_html=True)
-                app.markdown(_memo_html(memo), unsafe_allow_html=True)
+            with col_r4: # 4: 메모
+                if memo_종합:
+                    app.markdown(f'<div style="{memo_style}">{_memo_html(memo_종합)}</div>', unsafe_allow_html=True)
+            
+            # 차트 (표와 메모 하단)
+            app.markdown(
+                chart_wrapper
+                + _fig_to_iframe(_chart_종합(x_labels, 제품_v, 재공품_v, 원재료_v, 장기_v, pct_v))
+                + '</div>',
+                unsafe_allow_html=True)
 
         app.If(lambda: True, _render_연령별)
 

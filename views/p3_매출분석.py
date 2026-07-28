@@ -472,7 +472,7 @@ def _build_CHQ_B급제외_data(year, month):
         return sum(vals) / len(vals) if vals else 0.0
 
     # --- 4. 데이터 조립 ---
-    yr_2, yr_1 = year - 2, year - 1
+    yr_2, yr_1 = year - 1, year
     recent_4 = _recent_months(year, month, n=4) 
 
     col_hdrs = [f"'{str(yr_2)[2:]}년 월평균", f"'{str(yr_1)[2:]}년 월평균"]
@@ -583,7 +583,7 @@ def _build_CHQ_산업중국재_data(year, month):
         vals = [v for m in range(1, 13) if (v := raw(g3, yr, m)) != 0]
         return sum(vals) / len(vals) if vals else 0.0
 
-    yr_2, yr_1 = year - 2, year - 1
+    yr_2, yr_1 = year - 1, year
     recent_4 = _recent_months(year, month, n=4) 
 
     col_hdrs = [f"'{str(yr_2)[2:]}년 월평균", f"'{str(yr_1)[2:]}년 월평균"]
@@ -693,7 +693,7 @@ def _build_CD_B급제외_data(year, month):
         vals = [v for m in range(1, 13) if (v := raw(g, yr, m)) != 0]
         return sum(vals) / len(vals) if vals else 0.0
 
-    yr_2, yr_1 = year - 2, year - 1
+    yr_2, yr_1 = year - 1, year
     recent_4 = _recent_months(year, month, n=4) 
 
     col_hdrs = [f"'{str(yr_2)[2:]}년 월평균", f"'{str(yr_1)[2:]}년 월평균"]
@@ -799,7 +799,7 @@ def _build_CD_산업중국재_data(year, month):
         vals = [v for m in range(1, 13) if (v := raw(g, yr, m)) != 0]
         return sum(vals) / len(vals) if vals else 0.0
 
-    yr_2, yr_1 = year - 2, year - 1
+    yr_2, yr_1 = year - 1, year
     recent_4 = _recent_months(year, month, n=4) 
 
     col_hdrs = [f"'{str(yr_2)[2:]}년 월평균", f"'{str(yr_1)[2:]}년 월평균"]
@@ -924,7 +924,7 @@ def _build_비가공품판매현황_data(year, month):
         vals = [v for m in range(1, 13) if (v := raw(g, yr, m)) != 0]
         return sum(vals) / len(vals) if vals else 0.0
 
-    yr_2, yr_1 = year - 2, year - 1
+    yr_2, yr_1 = year - 1, year 
     recent_4 = _recent_months(year, month, n=4) 
 
     col_hdrs = [f"'{str(yr_2)[2:]}년 월평균", f"'{str(yr_1)[2:]}년 월평균"]
@@ -1082,7 +1082,7 @@ def _build_동일거래매입매출_data(year, month):
         vals = [v for m in range(1, 13) if (v := raw(g, yr, m)) != 0]
         return sum(vals) / len(vals) if vals else 0.0
 
-    yr_2, yr_1 = year - 2, year - 1
+    yr_2, yr_1 = year - 1, year
     recent_4 = _recent_months(year, month, n=4) 
 
     col_hdrs = [f"'{str(yr_2)[2:]}년 월평균", f"'{str(yr_1)[2:]}년 월평균"]
@@ -1298,6 +1298,7 @@ def render_page(app, year_state, month_state):
         def _render_판매구성():
             year, month = int(year_state.value), int(month_state.value)
             
+            # ── 데이터 로드 ──
             rows_등급, hdrs_등급 = _build_판매현황_등급별(year, month)
             rows_CHQ, hdrs_CHQ = _build_CHQ_B급제외_data(year, month)
             rows_산업, hdrs_산업 = _build_CHQ_산업중국재_data(year, month)
@@ -1306,10 +1307,10 @@ def render_page(app, year_state, month_state):
             rows_비가공품, hdrs_비가공품 = _build_비가공품판매현황_data(year, month)
             rows_동일거래, hdrs_동일거래 = _build_동일거래매입매출_data(year, month)
 
-            
-            col_l, _ = app.columns([6, 4])
-            with col_l:
-                # 1. 등급별 판매현황
+            # ── 1) 등급별 판매현황 ──────────────────────────────────────────
+            memo_1 = _get_memo(Sheets.등급별판매구성_메모, year, month)
+            col1_l, col1_r = app.columns([6, 4])
+            with col1_l:
                 app.markdown(
                     _sec_title('1) 등급별 판매현황', '[단위: 톤]')
                     + _판매현황_등급별_to_html(rows_등급, hdrs_등급),
@@ -1319,8 +1320,15 @@ def render_page(app, year_state, month_state):
                     _build_판매현황_등급별_chart(hdrs_등급, rows_등급),
                     use_container_width=True,
                 )
+            with col1_r:
+                app.markdown(_memo_html(memo_1), unsafe_allow_html=True)
 
-                # 2) CHQ 제품 판매현황 (수정)
+            # ── 2) CHQ 제품 판매현황 ─────────────────────────────────────────
+            memo_2_1 = _get_memo(Sheets.CHQ제품판매현황_B급제외_메모, year, month)
+            memo_2_2 = _get_memo(Sheets.CHQ제품판매현황_산업중국재_메모, year, month)
+            
+            col2_l, col2_r = app.columns([6, 4])
+            with col2_l:
                 app.markdown(
                     _sec_title('2-1) CHQ 제품 판매현황 [월별 CHQ 판매 추이 (산업/중국材 포함, B급 제외)]', '[단위 : 톤]'),
                     unsafe_allow_html=True,
@@ -1329,8 +1337,6 @@ def render_page(app, year_state, month_state):
                     _build_CHQ_B급제외_chart(hdrs_CHQ, rows_CHQ),
                     use_container_width=True
                 )
-
-                # 3)산업/중국재 제품 판매현황 (수정 - 좌측 제목을 비움)
                 app.markdown(
                     _sec_title('2-2) CHQ 제품 판매현황 [월별 산업/중국材 판매 추이(B급 제외)]', '[단위 : 톤]'),
                     unsafe_allow_html=True,
@@ -1339,8 +1345,17 @@ def render_page(app, year_state, month_state):
                     _build_CHQ_산업중국재_chart(hdrs_산업, rows_산업),
                     use_container_width=True
                 )
-                
-                # 4) CD 강종류별 판매현황 (B급 제외) (추가)
+            with col2_r:
+                # 2-1 메모와 2-2 메모를 순서대로 나열하여 우측에 배치
+                memo_2_combined = f"{memo_2_1}\n\n{memo_2_2}".strip()
+                app.markdown(_memo_html(memo_2_combined), unsafe_allow_html=True)
+
+            # ── 3) CD 강종류별 판매현황 ──────────────────────────────────────
+            memo_3_1 = _get_memo(Sheets.CD제품판매현황_B급제외_메모, year, month)
+            memo_3_2 = _get_memo(Sheets.CD제품판매현황_산업중국재_메모, year, month)
+
+            col3_l, col3_r = app.columns([6, 4])
+            with col3_l:
                 app.markdown(
                     _sec_title('3-1) CD 강종류별 판매현황 [월별 CD 판매 추이 (산업/중국材 포함, B급 제외)]', '[단위 : 톤]'),
                     unsafe_allow_html=True,
@@ -1349,17 +1364,23 @@ def render_page(app, year_state, month_state):
                     _build_CD_B급제외_chart(hdrs_CD_B급제외, rows_CD_B급제외),
                     use_container_width=True
                 )
-
-                # 5) CD 산업/중국재 판매현황 (추가 - 좌측 제목을 비움)
                 app.markdown(
-                    _sec_title('3-1) CD 강종류별 판매현황 [월별 산업/중국材 CD 판매 추이(B급 제외)]', '[단위 : 톤]'),
+                    _sec_title('3-2) CD 강종류별 판매현황 [월별 산업/중국材 CD 판매 추이(B급 제외)]', '[단위 : 톤]'),
                     unsafe_allow_html=True,
                 )
                 app.plotly_chart(
                     _build_CD_산업중국재_chart(hdrs_CD_산업, rows_CD_산업),
                     use_container_width=True
                 )
+            with col3_r:
+                # 3-1 메모와 3-2 메모를 순서대로 나열하여 우측에 배치
+                memo_3_combined = f"{memo_3_1}\n\n{memo_3_2}".strip()
+                app.markdown(_memo_html(memo_3_combined), unsafe_allow_html=True)
 
+            # ── 4) 비가공품 판매현황 ─────────────────────────────────────────
+            memo_4 = _get_memo(Sheets.비가공품판매현황_메모, year, month)
+            col4_l, col4_r = app.columns([6, 4])
+            with col4_l:
                 app.markdown(
                     _sec_title('4) 비가공품 판매현황 [월별/품목별 비가공품 판매 추이]', '[단위 : 톤]'),
                     unsafe_allow_html=True,
@@ -1368,7 +1389,13 @@ def render_page(app, year_state, month_state):
                     _build_비가공품판매현황_chart(hdrs_비가공품, rows_비가공품),
                     use_container_width=True
                 )
+            with col4_r:
+                app.markdown(_memo_html(memo_4), unsafe_allow_html=True)
 
+            # ── 5) 동일거래 매입매출 현황 ──────────────────────────────────────
+            memo_5 = _get_memo(Sheets.동일거래매입매출현황_메모, year, month)
+            col5_l, col5_r = app.columns([6, 4])
+            with col5_l:
                 app.markdown(
                     _sec_title('5) 동일거래 매입매출 현황 [월별 동일거래 매입/매출 추이]', '[단위 : 톤]'),
                     unsafe_allow_html=True,
@@ -1377,18 +1404,34 @@ def render_page(app, year_state, month_state):
                     _build_동일거래매입매출_chart(hdrs_동일거래, rows_동일거래),
                     use_container_width=True,
                 )
+            with col5_r:
+                app.markdown(_memo_html(memo_5), unsafe_allow_html=True)
 
+            # ── 6-1) PSI (입고, 판매, 재고) 지표 (매입매출 포함) ─────────────────────
+            # ※ PSI 지표 메모 시트는 별도로 선언되어 있지 않으므로 38번 DB를 기반으로 작동합니다.
+            col6_1_l, col6_1_r = app.columns([6, 4])
+            with col6_1_l:
                 app.markdown(
                     _sec_title('(6-1) PSI (입고, 판매, 재고) 지표 (매입매출 포함)', '[단위: 톤]')
                     + _build_PSI_매입매출포함_table(year, month),
                     unsafe_allow_html=True
                 )
-                app.markdown("<br>", unsafe_allow_html=True)
+            with col6_1_r:
+                # 필요시 메모 시트가 추가되면 아래에 연결하시면 됩니다.
+                pass
 
+            app.markdown("<br>", unsafe_allow_html=True)
+
+            # ── 6-2) PSI (입고, 판매, 재고) 지표 (매입매출 제외) ─────────────────────
+            col6_2_l, col6_2_r = app.columns([6, 4])
+            with col6_2_l:
                 app.markdown(
                     _sec_title('(6-2) PSI (입고, 판매, 재고) 지표 (매입매출 제외)', '[단위: 톤]')
                     + _build_PSI_매입매출제외_table(year, month),
                     unsafe_allow_html=True
                 )
+            with col6_2_r:
+                # 필요시 메모 시트가 추가되면 아래에 연결하시면 됩니다.
+                pass
 
         app.If(lambda: True, _render_판매구성)

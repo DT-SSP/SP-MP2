@@ -207,13 +207,29 @@ def _build_단가추이_data(year, month):
     if not items:
         items = ['데이터 없음 (DB 시트 연결 확인 필요)']
 
+    # ==========================================
+    # [추가/수정할 부분] 특정 항목 최우선 배치 로직
+    # ==========================================
+    priority_items = ['LNG(원/㎥)', 'LNG_전년동기(원/㎥)']
+    
+    # 1. 우선순위 항목 중 실제 DB 데이터에 존재하는 것만 순서대로 추출
+    ordered_items = [item for item in priority_items if item in items]
+    
+    # 2. 나머지 항목들을 기존 순서 그대로 뒤에 추가
+    for item in items:
+        if item not in priority_items:
+            ordered_items.append(item)
+            
+    # 정렬된 리스트로 덮어쓰기
+    items = ordered_items
+    # ==========================================
+
     rows = []
     for item in items:
         vals = [vm.get((item, y, m), 0.0) for y, m in recent]
         rows.append((item, vals))
 
     return rows, col_hdrs
-
 
 def _build_단가추이_table_html(rows, col_hdrs):
     th = f'<th style="{_TH}"></th>'
@@ -602,6 +618,7 @@ def render_page(app, year_state, month_state):
                 ('2) 부재료 사용량 원단위 (충주)', '충주'),
                 ('3) 부재료 사용량 원단위 (충주2)', '충주2')
             ]
+            memo1 = _get_memo(Sheets.부재료사용량_메모, year, month)
 
             for title, loc in locations:
                 rows, hdrs = _build_부재료_data(loc, year, month)
@@ -609,7 +626,7 @@ def render_page(app, year_state, month_state):
                 app.markdown(
                     _layout100(title,
                               _build_부재료_table_html(loc, rows, hdrs),
-                              "",
+                              memo1,
                               unit=unit_text),
                     unsafe_allow_html=True,
                 )
@@ -621,11 +638,12 @@ def render_page(app, year_state, month_state):
                 app.markdown('<div style="margin-top:48px;"></div>', unsafe_allow_html=True)
 
             rows_단가, hdrs_단가 = _build_단가추이_data(year, month)
+            memo2 = _get_memo(Sheets.부재료단가추이_메모, year, month)
             
             app.markdown(
                 _layout100('4) 단가 추이',
                           _build_단가추이_table_html(rows_단가, hdrs_단가),
-                          ""),
+                          memo2),
                 unsafe_allow_html=True,
             )
 
@@ -639,6 +657,7 @@ def render_page(app, year_state, month_state):
         def _render_클레임():
             year, month = int(year_state.value), int(month_state.value)
             unit_text = '(단위 : 백만원)'
+            
 
             # 1. 월 평균 클레임 지급액
             rows_월평균, hdrs_월평균 = _build_월평균클레임_data(year, month)
@@ -655,15 +674,17 @@ def render_page(app, year_state, month_state):
 
             # 2. 당월 클레임 내역
             rows_당월, hdrs_당월 = _build_당월클레임_data(year, month)
+            memo2 = _get_memo(Sheets.당월클레임_메모, year, month)
             app.markdown(
                 _layout64('2) 당월 클레임 내역',
                           _build_당월클레임_table_html(rows_당월, hdrs_당월),
-                          "",
+                          memo2,
                           unit=unit_text),
                 unsafe_allow_html=True,
             )
-            
+
         app.If(lambda: True, _render_클레임)
+            
 
     with tabs[2]:
         def _render_영업외비용():

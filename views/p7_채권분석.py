@@ -200,24 +200,22 @@ def _build_부서별_채권기일_현황(year, month):
     for metric in metrics:
         vals = []
         for py, pm in periods:
-            # 26년 5월 이후 여부 확인
-            is_after_2605 = (py > 2026) or (py == 2026 and pm >= 5)
-            
-            if is_after_2605:
-                # 26년 5월부터는 전체 = 내수(선재+봉강+부산+대구) + 수출
-                val_naesu = sum(raw(k, metric, py, pm) for k in ['선재', '봉강', '부산', '대구'])
-                val_suchul = raw('수출', metric, py, pm)
-                val_total = val_naesu + val_suchul
+            # 1) 지표가 '일수'인 경우 시트의 '전체', '일수' 값을 그대로 사용
+            if metric == '일수':
+                val_total = raw('전체', '일수', py, pm)
                 
-                if metric in ['매출', '채권']:
-                    val_total = val_total / UNIT
+            # 2) 지표가 '매출' 또는 '채권'인 경우 합산 로직 적용
             else:
-                # 26년 5월 이전 기존 로직
-                if metric == '일수':
-                    # 시트에 있는 '합계', '일수' 값을 계산 없이 바로 가져옵니다
-                    val_total = raw('전체', '일수', py, pm)
+                # 26년 5월 이후 여부 확인
+                is_after_2605 = (py > 2026) or (py == 2026 and pm >= 5)
+                
+                if is_after_2605:
+                    # 26년 5월부터는 전체 = 내수(선재+봉강+부산+대구) + 수출
+                    val_naesu = sum(raw(k, metric, py, pm) for k in ['선재', '봉강', '부산', '대구'])
+                    val_suchul = raw('수출', metric, py, pm)
+                    val_total = (val_naesu + val_suchul) / UNIT
                 else:
-                    # 매출과 채권은 내수, 수출 단순 합산 후 억원 단위 변환
+                    # 26년 5월 이전 기존 로직
                     val_total = (raw('내수', metric, py, pm) + raw('수출', metric, py, pm)) / UNIT
                 
             vals.append(val_total)
@@ -225,6 +223,7 @@ def _build_부서별_채권기일_현황(year, month):
         rows.append(('total', metric, *vals))
 
     return rows, col_headers
+
 def _부서별_채권기일_to_html(rows, col_headers):
     # views.common에 ROW_SEC가 없다면 아래 주석을 해제하여 사용하세요.
     # ROW_SEC = "background:#eef1f6;font-weight:bold;text-align:center;border:1px solid #c0c0c0;padding:5px;"

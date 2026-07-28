@@ -363,7 +363,7 @@ def _build_포함_table(get, 사업장_list, year, month):
     전전월_col = _월헤더(yr1, mo1)
     전월_col   = _월헤더(yr2, mo2)
     당월_col   = _당월헤더(year, month, len(사업장_list))
-    _장_표시명 = {'본사': '선재_국내', '남통': '선재_남통', '타이': '선재_타이'}
+    _장_표시명 = {'본사': '선재_국내', '남통': '선재_중국', '타이': '선재_타이'}
     장_cols    = [f"{_장_표시명.get(장, 장)} {_기호[i]}" for i, 장 in enumerate(사업장_list)]
     columns    = ['구분', 전전월_col, 전월_col, '계획', 당월_col] + 장_cols + ['전월대비', '계획대비']
 
@@ -476,12 +476,16 @@ def _build_현금흐름표_연결_table(year, month):
     df['구분3'] = df['구분3'].fillna('').astype(str).str.strip()
     df['구분4'] = df['구분4'].fillna('').astype(str).str.strip()
 
-    # 전체, 천진 사업장 제외
-    df = df[df['사업장'] != '전체']
-    df = df[df['사업장'] != '천진']
-
-    db_corps    = _sort_corps(df['사업장'].unique().tolist(), 현금_CORP_ORDER)
-    corp_labels = [현금_사업장_표시명.get(c, c) for c in db_corps]
+    # 천진, 전체 사업장은 개별 탭에서 제외하고 합산 대상에서도 제외 (본사, 남통, 태국만 남김)
+    db_corps = [c for c in _sort_corps(df['사업장'].unique().tolist(), 현금_CORP_ORDER) if c not in ('천진', '전체')]
+    
+    corp_labels = []
+    for c in db_corps:
+        lbl = 현금_사업장_표시명.get(c, c)
+        # 남통 탭의 이름을 선재_중국으로 변경
+        if c == '남통' or lbl == '선재_남통':
+            lbl = '선재_중국'
+        corp_labels.append(lbl)
 
     sub_labels = [
         f"'{str(year - 1)[2:]}년",
@@ -501,38 +505,53 @@ def _build_현금흐름표_연결_table(year, month):
         return val_map.get((yr, mo, g4, g1, g2, g3, 장), 0.0)
 
     def get_accumulated(yr, target_mo, g1, g2, g3, 장):
-        if yr < 2025:
+        if yr <= 2025:
             return get_val(yr, 12, '누적', g1, g2, g3, 장)
         return sum(get_val(yr, m, '당월', g1, g2, g3, 장) for m in range(1, target_mo + 1))
 
-    # 기초현금/기말현금은 흐름의 누적이 아니라 특정 시점의 현황값이므로 월별 합산 대신
-    # 해당 시점의 값을 그대로 가져온다.
+    # 기초현금/기말현금은 흐름의 누적이 아니라 특정 시점의 현황값이므로
+    # 2026년 이후는 DB의 '당월' 값을 기준으로 가져옵니다.
     잔액_항목 = {'기초현금', '기말현금'}
     yr_전월, mo_전월 = _prev(year, month, 1)
 
     def get_잔액(label, period, g1, g2, g3, 장):
+        # 1. 전년 데이터
         if period == '전년':
             return get_val(year - 1, 12, '누적', g1, g2, g3, 장)
-        if period == '당월':
-            return get_val(year, month, '당월', g1, g2, g3, 장)
-        if label == '기초현금':
-            # 전월누적/당월누적 모두 해당 연도 1월의 기초현금
-            return get_val(year, 1, '당월', g1, g2, g3, 장)
-        # 기말현금: 전월누적은 전월의 기말현금, 당월누적은 당월의 기말현금
+            
+        # 2. 전월누적 데이터
         if period == '전월누적':
+            if yr_전월 <= 2025:
+                return get_val(yr_전월, 12, '누적', g1, g2, g3, 장)
+            if label == '기초현금':
+                # 누적의 기초현금은 해당 연도 1월의 당월 기초현금
+                return get_val(year, 1, '당월', g1, g2, g3, 장)
             return get_val(yr_전월, mo_전월, '당월', g1, g2, g3, 장)
+            
+        # 3. 당월 / 당월누적 데이터
+        if year <= 2025:
+            return get_val(year, 12, '누적', g1, g2, g3, 장)
+            
+        if label == '기초현금':
+            if period == '당월누적':
+                return get_val(year, 1, '당월', g1, g2, g3, 장)
+            return get_val(year, month, '당월', g1, g2, g3, 장)
+            
+        # 기말현금 (당월, 당월누적 모두 해당 조회 월의 기말현금)
         return get_val(year, month, '당월', g1, g2, g3, 장)
 
     columns = ['구분', '_depth'] + sub_labels
     소계행  = 현금_소계행
     헤더행  = set()
 
-    # 선재(연결) 탭을 선재_국내 앞에 추가 — 사업장 전체 합산
-    tab_groups = [('선재(연결)', db_corps)] + [(corp_disp, [db_corp]) for db_corp, corp_disp in zip(db_corps, corp_labels)]
+    # 매핑된 법인 탭(본사, 남통, 태국)만 남기고, 가장 앞에 선재_전체 탭을 수동 추가
+    tab_groups = [('선재_전체', db_corps)] + [(corp_disp, [db_corp]) for db_corp, corp_disp in zip(db_corps, corp_labels)]
 
     per_corp_dfs = {}
     for tab_label, target_corps in tab_groups:
         rows = []
+        is_total_tab = (tab_label == '선재_전체')
+
         for g1, g2, g3 in 행_순서:
             # 구분이 비어있으면 상위 구분을 라벨로 사용
             if not g2 and not g3:
@@ -547,17 +566,33 @@ def _build_현금흐름표_연결_table(year, month):
 
             if label in 소계행:
                 depth = 0
-
+            
             if label in 잔액_항목:
-                전년누적_v = sum(get_잔액(label, '전년',   g1, g2, g3, c) for c in target_corps)
-                전월누적_v = sum(get_잔액(label, '전월누적', g1, g2, g3, c) for c in target_corps)
-                당월_v     = sum(get_잔액(label, '당월',   g1, g2, g3, c) for c in target_corps)
-                당월누적_v = sum(get_잔액(label, '당월누적', g1, g2, g3, c) for c in target_corps)
+                if is_total_tab:
+                    # 첫번째 컬럼은 '전체' 사업장의 누적 데이터 사용
+                    전년누적_v = get_val(year - 1, 12, '누적', g1, g2, g3, '전체')
+                    # 나머지 3개 컬럼은 국내(본사) + 중국(남통) + 태국 합산
+                    전월누적_v = sum(get_잔액(label, '전월누적', g1, g2, g3, c) for c in target_corps)
+                    당월_v     = sum(get_잔액(label, '당월',     g1, g2, g3, c) for c in target_corps)
+                    당월누적_v = sum(get_잔액(label, '당월누적', g1, g2, g3, c) for c in target_corps)
+                else:
+                    전년누적_v = sum(get_잔액(label, '전년',   g1, g2, g3, c) for c in target_corps)
+                    전월누적_v = sum(get_잔액(label, '전월누적', g1, g2, g3, c) for c in target_corps)
+                    당월_v     = sum(get_잔액(label, '당월',     g1, g2, g3, c) for c in target_corps)
+                    당월누적_v = sum(get_잔액(label, '당월누적', g1, g2, g3, c) for c in target_corps)
             else:
-                전년누적_v = sum(get_accumulated(year - 1, 12,          g1, g2, g3, c) for c in target_corps)
-                전월누적_v = sum(get_accumulated(year,     month - 1,   g1, g2, g3, c) for c in target_corps)
-                당월_v     = sum(get_val(year, month, '당월',           g1, g2, g3, c) for c in target_corps)
-                당월누적_v = sum(get_accumulated(year,     month,       g1, g2, g3, c) for c in target_corps)
+                if is_total_tab:
+                    # 첫번째 컬럼은 '전체' 사업장의 누적 데이터 사용
+                    전년누적_v = get_val(year - 1, 12, '누적', g1, g2, g3, '전체')
+                    # 나머지 3개 컬럼은 국내(본사) + 중국(남통) + 태국 합산
+                    전월누적_v = sum(get_accumulated(year, month - 1, g1, g2, g3, c) for c in target_corps)
+                    당월_v     = sum(get_val(year, month, '당월', g1, g2, g3, c) for c in target_corps)
+                    당월누적_v = sum(get_accumulated(year, month, g1, g2, g3, c) for c in target_corps)
+                else:
+                    전년누적_v = sum(get_accumulated(year - 1, 12,          g1, g2, g3, c) for c in target_corps)
+                    전월누적_v = sum(get_accumulated(year,     month - 1,   g1, g2, g3, c) for c in target_corps)
+                    당월_v     = sum(get_val(year, month, '당월',           g1, g2, g3, c) for c in target_corps)
+                    당월누적_v = sum(get_accumulated(year,     month,       g1, g2, g3, c) for c in target_corps)
 
             rows.append({
                 '구분':        label,
@@ -572,7 +607,7 @@ def _build_현금흐름표_연결_table(year, month):
             {col: [r.get(col, '') for r in rows] for col in columns}
         )
 
-    corp_labels = ['선재(연결)'] + corp_labels
+    corp_labels = ['선재_전체'] + corp_labels
 
     return per_corp_dfs, 소계행, 헤더행, corp_labels
 
@@ -588,7 +623,14 @@ def _build_재무상태표_table(year, month):
     yr_전월, mo_전월 = _prev(year, month, 1)
 
     db_corps    = _sort_corps(df['사업장'].unique().tolist(), 재무_CORP_ORDER)
-    corp_labels = [재무_사업장_표시명.get(c, c) for c in db_corps]
+    
+    # 남통 탭의 이름을 선재_중국으로 변경
+    corp_labels = []
+    for c in db_corps:
+        lbl = 재무_사업장_표시명.get(c, c)
+        if c == '남통' or lbl == '선재_남통':
+            lbl = '선재_중국'
+        corp_labels.append(lbl)
 
     sub_labels = [
         f"'{str(year - 1)[2:]}년",
@@ -638,7 +680,7 @@ def _build_재무상태표_table(year, month):
         행_순서_final.extend(totals + others)
 
     # 선재(연결) 탭을 선재_국내 앞에 추가 — 사업장 전체 합산
-    tab_groups = [('선재(연결)', db_corps)] + [(corp_disp, [db_corp]) for db_corp, corp_disp in zip(db_corps, corp_labels)]
+    tab_groups = [('선재_전체', db_corps)] + [(corp_disp, [db_corp]) for db_corp, corp_disp in zip(db_corps, corp_labels)]
 
     per_corp_dfs = {}
     for tab_label, target_corps in tab_groups:
@@ -672,7 +714,7 @@ def _build_재무상태표_table(year, month):
             {col: [r.get(col, '') for r in rows] for col in columns}
         )
 
-    corp_labels = ['선재(연결)'] + corp_labels
+    corp_labels = ['선재_전체'] + corp_labels
 
     return per_corp_dfs, 소계행, 헤더행, corp_labels
 
@@ -751,13 +793,20 @@ def _build_수정원가기준손익_별도_table(year, month):
         return val_map.get((g1, g2), 0.0)
 
     def get_pct(g1, g2):
-        return val_map.get((f'%({g1})', g2), None)
+        # 시트에 저장된 '%(영업이익)' 또는 '%(한계이익)' 행의 값을 직접 가져옵니다.
+        # 띄어쓰기 등 오타로 인한 누락을 방지하기 위해 공백을 무시하고 매핑합니다.
+        target_g1 = f'%({g1})'.replace(' ', '')
+        for (k1, k2), v in val_map.items():
+            if str(k1).replace(' ', '') == target_g1 and k2 == g2:
+                return v
+        return None
 
     품목_cols = ['계', 'CHQ', 'CD', 'STS', 'BTB', 'PB', '내수', '수출']
     구분_목록 = ['매출액', '판매량', 'X등급및재고평가', '영업이익', '한계이익']
     구분_표시명 = {'X등급및재고평가': 'X등급 및 재고평가'}
 
     rows = []
+    매출액_dict = {} # 💡 매출액 저장을 위한 딕셔너리 추가
 
     for g1 in 구분_목록:
         row = {'구분': 구분_표시명.get(g1, g1)}
@@ -768,25 +817,27 @@ def _build_수정원가기준손익_별도_table(year, month):
                 row[p] = ''
             else:
                 row[p] = _fmt(v, decimal=0)
+            
+            # 💡 매출액인 경우 나눗셈을 위해 값을 저장해둠
+            if g1 == '매출액':
+                매출액_dict[p] = v
 
         rows.append(row)
 
-        # 영업이익, 한계이익 다음 행에 직접 계산한 이익률 표시
+        # 💡 영업이익, 한계이익 다음 행에 직접 계산(나눗셈)하여 비율 표시
         if g1 in ['영업이익', '한계이익']:
             pct_row = {'구분': '%'}
 
             for p in 품목_cols:
-                # 이익(영업이익 or 한계이익) 금액과 매출액 금액을 각각 가져옴
-                profit = get_val(g1, p)
-                sales = get_val('매출액', p)
+                매출_v = 매출액_dict.get(p, 0)
+                이익_v = get_val(g1, p)
                 
-                # 매출액이 0이 아닐 때만 비율을 계산 (0으로 나누는 에러 방지)
-                if sales and sales != 0:
-                    v = profit / sales  # 퍼센트 표기 방식에 따라 * 100이 필요할 수 있습니다.
+                # 매출액이 존재하고 이익 값이 0이 아닐 때만 계산
+                if 매출_v and 이익_v != 0.0:
+                    calculated_pct = _pct(이익_v, 매출_v)
+                    pct_row[p] = _fmt_pct_val(calculated_pct)
                 else:
-                    v = None
-                    
-                pct_row[p] = _fmt_pct_val(v) if v is not None else ''
+                    pct_row[p] = ''
             
             rows.append(pct_row)
 
@@ -922,7 +973,7 @@ def _build_현금흐름표_별도_table(year, month):
     for c in ['구분1', '구분2', '구분3', '구분4']:
         df[c] = df[c].fillna('').astype(str).str.strip().str.replace(r"\s+", " ", regex=True)
 
-    # 3. 데이터 롤업(Roll-up) 해시맵 생성
+    # 3. 데이터 매핑 (DB에 이미 소계/합계가 있으므로 롤업 제외)
     val_map = {}
     for _, row in df.iterrows():
         y, m, g4 = int(row['연도']), int(row['월']), row['구분4']
@@ -934,9 +985,14 @@ def _build_현금흐름표_별도_table(year, month):
             key = (y, m, g4, k_g1, k_g2, k_g3)
             val_map[key] = val_map.get(key, 0.0) + v
         
-        add(g1, g2, g3)
-        if g3: add(g1, g2, '')
-        if g2 or g3: add(g1, '', '')
+        # 24년 이하(과거 데이터)는 DB에 소계행이 없으므로 파이썬에서 하위 항목을 끌어올려(Roll-up) 합산합니다.
+        if y <= 2024:
+            add(g1, g2, g3)
+            if g3: add(g1, g2, '')
+            if g2 or g3: add(g1, '', '')
+        else:
+            # 25년 이상(최신 데이터)은 DB에 소계행이 이미 존재하므로 중복 방지를 위해 있는 그대로 매핑합니다.
+            add(g1, g2, g3)
 
     def get_val(yr, mo, g4, g1, g2, g3):
         return val_map.get((yr, mo, g4, g1, g2, g3), 0.0)
@@ -1289,7 +1345,7 @@ def _build_수익성_연결_table(year, month):
     yr_전월, mo_전월 = _prev(year, month, 1)
 
     수익성_CORP_ORDER    = ['계', '본사', '남통', '태국']
-    수익성_사업장_표시명  = {'계': '선재_전체', '본사': '선재_국내', '남통': '선재_남통', '태국': '선재_태국'}
+    수익성_사업장_표시명  = {'계': '선재_전체', '본사': '선재_국내', '남통': '선재_중국', '태국': '선재_태국'}
 
     db_corps    = _sort_corps(df['사업장'].unique().tolist(), 수익성_CORP_ORDER)
     corp_labels = [수익성_사업장_표시명.get(c, c) for c in db_corps]
@@ -1413,7 +1469,7 @@ def _build_판매계획및실적_html(year, month):
         # 🟢 국내 계: 판매량은 '국내선재'만 가져오고, 단가는 숨김
         {'label': '국내 계', 'keys': k_국내계, 'vol_keys': k_국내선재, 'lv': 0, 'bold': True, 'bg': '#E9ECEF', 'skip_price': True},
 
-        {'label': '선재_남통', 'keys': k_포스세아, 'lv': 1, 'bold': True, 'is_AT': False},
+        {'label': '선재_중국', 'keys': k_포스세아, 'lv': 1, 'bold': True, 'is_AT': False},
         {'label': 'AT_중국', 'keys': k_기차배건, 'lv': 1, 'bold': True, 'is_AT': True},
         # 🟢 중국 계: 판매량은 '포스세아(선재)'만 가져오고, 단가는 숨김
         {'label': '중국 계', 'keys': k_중국계, 'vol_keys': k_포스세아, 'lv': 0, 'bold': True, 'bg': '#E9ECEF', 'skip_price': True},

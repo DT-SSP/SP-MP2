@@ -600,7 +600,12 @@ def _build_QD실적차이_table(year: int, month: int):
         # 단가차이 (구분2 == "단가차이" 시트 데이터 직접 조회)
         diff_qty = df_curr[(df_curr["구분1"] == company) & (df_curr["구분2"] == "단가차이") & (df_curr["구분3"] == "중량")]["값"].sum()
         diff_amt = df_curr[(df_curr["구분1"] == company) & (df_curr["구분2"] == "단가차이") & (df_curr["구분3"] == "금액")]["값"].sum()
-        diff_price = curr_price - prev_price
+        
+        # [수정] 단가차이의 단가를 금액 / 중량 * 1000으로 계산
+        if diff_qty != 0:
+            diff_price = (diff_amt / diff_qty) * 1000.0
+        else:
+            diff_price = 0
 
         # 데이터 추가
         row_data.update({
@@ -615,7 +620,6 @@ def _build_QD실적차이_table(year: int, month: int):
     for col in result_rows[0].keys():
         if col != "구분": total_row[col] = sum(row.get(col, 0) for row in result_rows)
         
-    # [수정] 합계 행의 단가는 단순 합산이 아닌 (금액 합계 / 중량 합계)로 재계산
     tot_prev_qty = total_row.get(f"{prev_label} 중량", 0)
     tot_prev_amt = total_row.get(f"{prev_label} 금액", 0)
     total_row[f"{prev_label} 단가"] = (tot_prev_amt / tot_prev_qty) if tot_prev_qty != 0 else 0
@@ -624,8 +628,15 @@ def _build_QD실적차이_table(year: int, month: int):
     tot_curr_amt = total_row.get(f"{curr_label} 금액", 0)
     total_row[f"{curr_label} 단가"] = (tot_curr_amt / tot_curr_qty) if tot_curr_qty != 0 else 0
     
-    # [수정] 합계 행의 단가 차이도 새로 계산된 (당월 합계 단가 - 전월 합계 단가)로 덮어쓰기
-    total_row["단가차이 단가"] = total_row[f"{curr_label} 단가"] - total_row[f"{prev_label} 단가"]
+    # [수정] 합계 행의 단가 차이도 새로 계산된 (금액 / 중량) * 1000 로직 적용
+    # (주의: 저장된 단가차이 중량은 이미 / 1000 처리가 되어 있으므로 원복해서 계산)
+    tot_diff_qty_original = total_row.get("단가차이 중량", 0) * 1000.0
+    tot_diff_amt = total_row.get("단가차이 금액", 0)
+    
+    if tot_diff_qty_original != 0:
+        total_row["단가차이 단가"] = (tot_diff_amt / tot_diff_qty_original) * 1000.0
+    else:
+        total_row["단가차이 단가"] = 0
     
     result_rows.append(total_row)
 
@@ -662,13 +673,21 @@ def _QD실적차이_to_html(df) -> str:
                     text = ""
                 else:
                     c_str = str(c)
-                    if "금액" in c_str: divisor = 1000000.0
-                    elif "단가" in c_str: divisor = 1.0
-                    elif "중량" in c_str: divisor = 1000.0
-                    else: divisor = 1.0
+                    
+                    # [수정] 단가차이 단가 컬럼은 1000으로 나누고 소수점 첫째 자리 반올림
+                    if c_str == "단가차이 단가":
+                        val_div = val / 1000.0
+                        text = f"{abs(val_div):,.1f}"
+                    else:
+                        if "금액" in c_str: divisor = 1000000.0
+                        elif "단가" in c_str: divisor = 1.0
+                        elif "중량" in c_str: divisor = 1000.0
+                        else: divisor = 1.0
 
-                    val_div = val / divisor
-                    text = f"{abs(int(round(val_div))):,}"
+                        val_div = val / divisor
+                        text = f"{abs(int(round(val_div))):,}"
+                        
+                    # 음수일 경우 붉은색 서식 적용
                     if val_div < 0:
                         text = f'<span style="color:#d32f2f;">-{text}</span>'
 
@@ -677,7 +696,6 @@ def _QD실적차이_to_html(df) -> str:
         body_html += '</tr>'
 
     return _html_table(th_html, body_html)
-
 # ────────────────────────────────────────────────────────────────────────
 # 공통 유틸 함수
 # ────────────────────────────────────────────────────────────────────────
@@ -823,14 +841,14 @@ def _포스코_JFE_입고가격_to_html(df) -> str:
                         # 변동폭 행일 경우 증감 아이콘 및 색상 처리
                         if is_variance_row:
                             if f_val > 0:
-                                text = f'<span style="color:#1565C0;">▲ {f_val:,.1f}</span>'  # 파란색 상향
+                                text = f'<span style="color:#1565C0;">▲ {f_val:,.0f}</span>'  # 파란색 상향
                             elif f_val < 0:
-                                text = f'<span style="color:#C62828;">▼ {abs(f_val):,.1f}</span>' # 빨간색 하향
+                                text = f'<span style="color:#C62828;">▼ {abs(f_val):,.0f}</span>' # 빨간색 하향
                             else:
                                 text = "0.0"
                         else:
                             # 일반 수치형 데이터 (소수점 1자리, 천 단위 콤마)
-                            text = f"{f_val:,.1f}"
+                            text = f"{f_val:,.0f}"
                             
                     except ValueError:
                         # 숫자로 변환할 수 없는 예외적인 경우(텍스트 등) 그대로 출력
@@ -889,7 +907,7 @@ def _build_포스코_JFE_투입비중_table(year: int, month: int):
         if col not in col_order:
             col_order.append(col)
             
-        if y <= 2024:
+        if y <= 2025:
             # [수정] 24년 이전 투입비중도 '월' 값이 비어있을 수 있으므로 연도로만 필터링
             dd = d[(d["구분3"] == "월평균") & (d["연도"] == y)]
             if not dd.empty and col not in frames_dict:
@@ -1692,8 +1710,10 @@ def _build_포스코지원금_table(year, month):
         prev_y = year - 1 if cur_q == 1 else year
         q_labels = [f"{str(prev_y)[2:]}.{prev_q}Q", f"{str(year)[2:]}.{cur_q}Q"]
 
-    # 같은 분기(구분1) 라벨이 여러 달에 걸쳐 누적 기록되므로, 분기 라벨 기준으로 전체 합산
-    val_map = df.groupby(['구분1', '구분2', '구분3'])['값'].sum().to_dict()
+    # [수정1] 값이 3배로 튀는 오류 해결
+    # 동일 분기에 대해 매월 동일한 값이 들어있으므로, 중복을 제거하고 최신(last) 데이터만 남겨 합산 방지
+    df_unique = df.sort_values(['연도', '월']).drop_duplicates(subset=['구분1', '구분2', '구분3'], keep='last')
+    val_map = df_unique.groupby(['구분1', '구분2', '구분3'])['값'].sum().to_dict()
 
     def get_val(q_label, g2, g3):
         return val_map.get((q_label, g2, g3), 0.0)
@@ -1701,11 +1721,17 @@ def _build_포스코지원금_table(year, month):
     items = ['수출지원(ES)', '일반재', '특가지원(SP)']
 
     def calc(lbl, target_items):
-        v_qty = sum(get_val(lbl, it, '주문량') for it in target_items)
-        v_amt = sum(get_val(lbl, it, '할인금액') for it in target_items)
+        v_qty_raw = sum(get_val(lbl, it, '주문량') for it in target_items)
+        v_amt_raw = sum(get_val(lbl, it, '할인금액') for it in target_items)
         
-        # [수정] 단가 = 할인금액 / 주문량 * 1000
-        price = (v_amt / v_qty * 1000.0) if v_qty else 0
+        # [수정2] 단위 맞추기
+        # 중량(주문량)은 톤단위로 변환 (kg -> ton : / 1000)
+        v_qty = v_qty_raw / 1000.0 if v_qty_raw else 0.0
+        # 금액(할인금액)은 백만원 단위로 변환 (/ 1,000,000)
+        v_amt = v_amt_raw / 1000000.0 if v_amt_raw else 0.0
+        
+        # 단가(원/톤) = 원본 금액 / 톤단위 중량 
+        price = (v_amt_raw / v_qty) if v_qty else 0.0
         
         return v_qty, price, v_amt
 
@@ -1716,8 +1742,6 @@ def _build_포스코지원금_table(year, month):
             v_qty, price, v_amt = calc(lbl, [item])
             row[f'{lbl}_주문량']  = _fmt(v_qty, decimal=0)
             row[f'{lbl}_단가']    = _fmt(price, decimal=0)
-            
-            # [수정] 100만 나누기 제거 (시트 데이터 그대로 활용)
             row[f'{lbl}_할인금액'] = _fmt(v_amt, decimal=0)
         rows.append(row)
 
@@ -1727,8 +1751,6 @@ def _build_포스코지원금_table(year, month):
         v_qty, price, v_amt = calc(lbl, items)
         total_row[f'{lbl}_주문량']  = _fmt(v_qty, decimal=0)
         total_row[f'{lbl}_단가']    = _fmt(price, decimal=0)
-        
-        # [수정] 100만 나누기 제거 (시트 데이터 그대로 활용)
         total_row[f'{lbl}_할인금액'] = _fmt(v_amt, decimal=0)
     rows.append(total_row)
 

@@ -68,7 +68,7 @@ PAGE_SHEETS_MAP = {
     "5. 비용분석": [
         Sheets.부재료사용량_DB, Sheets.부재료사용량_메모,
         Sheets.부재료단가추이_DB, Sheets.부재료단가추이_메모,
-        Sheets.월평균클레임_DB, Sheets.월평균클레임_메모,
+        Sheets.월평균클레임_DB, Sheets.당월클레임_메모,
         Sheets.당월클레임_DB,
         Sheets.영업외비용_DB, Sheets.영업외비용_메모
     ],

@@ -138,7 +138,7 @@ def _생산실적_to_html(rows, col_hdrs):
         cells = f'<td style="{lbl_s}">{label}</td>'
         cells += ''.join(f'<td style="{num_s}">{_fmt(v)}</td>' for v in vals)
         cells += f'<td style="{red_s if mom < 0 else num_s}">{_fmt(mom, decimal=1)}</td>'
-        cells += f'<td style="{red_s if pct < 0 else num_s}">{_fmt(abs(pct), decimal=1)}%</td>'
+        cells += f'<td style="{red_s if pct < 0 else num_s}">{_fmt(pct, decimal=1)}%</td>'
         body += f'<tr>{cells}</tr>'
     return _html_table(f'<tr>{th}</tr>', body)
 
@@ -255,16 +255,14 @@ def _build_부적합_충주(year, month):
     grand_total = [0.0] * num_cols
 
     g1 = '충주'
-    # DB에 존재하는 '충주'의 제품군(CHQ 등)을 자동으로 추출
     g2_list = sorted(list(set([k[1] for k in vm.keys() if k[0] == g1])))
     if not g2_list:
-        g2_list = ['CHQ'] # 데이터가 없을 경우 기본값
+        g2_list = ['CHQ']
 
     for g2 in g2_list:
         subtotal = [0.0] * num_cols
         
         for g3 in ['공정성', '소재성']:
-            # 목표, 당해연도 1월~선택월 누적 합계 및 누적 월평균
             p_avg = prev_yr_avg(g1, g2, g3, prev_year)
             target = p_avg * 0.5
             recents = [raw(g1, g2, g3, y, m) for y, m in recent]
@@ -284,8 +282,8 @@ def _build_부적합_충주(year, month):
         rows.append(('total', g2, subtotal))
         grand_total = [a + b for a, b in zip(grand_total, subtotal)]
 
-    return rows, col_hdrs
-
+    # 수정된 부분: 하단 총계를 계산하기 위해 변수 3개 추가 반환
+    return rows, col_hdrs, grand_total_공정성, grand_total_소재성, grand_total
 
 def _build_부적합_충주2(year, month):
     df = load_sheet(Sheets.부적합발생추이_포항_충주_충주2_DB) 
@@ -320,16 +318,14 @@ def _build_부적합_충주2(year, month):
     grand_total = [0.0] * num_cols
 
     g1 = '충주2'
-    # DB에 존재하는 '충주2'의 제품군(CD, STS 등)을 자동으로 추출
     g2_list = sorted(list(set([k[1] for k in vm.keys() if k[0] == g1])))
     if not g2_list:
-        g2_list = ['CD'] # 데이터가 없을 경우 기본값
+        g2_list = ['CD']
 
     for g2 in g2_list:
         subtotal = [0.0] * num_cols
         
         for g3 in ['공정성', '소재성']:
-            # 목표, 당해연도 1월~선택월 누적 합계 및 누적 월평균
             p_avg = prev_yr_avg(g1, g2, g3, prev_year)
             target = p_avg * 0.5
             recents = [raw(g1, g2, g3, y, m) for y, m in recent]
@@ -349,7 +345,8 @@ def _build_부적합_충주2(year, month):
         rows.append(('total', g2, subtotal))
         grand_total = [a + b for a, b in zip(grand_total, subtotal)]
 
-    return rows, col_hdrs
+    # 수정된 부분: 하단 총계를 계산하기 위해 변수 3개 추가 반환
+    return rows, col_hdrs, grand_total_공정성, grand_total_소재성, grand_total
 
 def _부적합_표_to_html(rows, col_hdrs):
     th = ''.join(f'<th style="{_TH}">{h}</th>' for h in ['구분'] + col_hdrs)
@@ -408,26 +405,40 @@ def render_page(app, year_state, month_state):
         def _render_불량_충주():
             year, month = int(year_state.value), int(month_state.value)
             
-            # 1) 충주 1공장 렌더링
-            rows1, col_hdrs1 = _build_부적합_충주(year, month)
-            memo1 = _get_memo(Sheets.부적합발생추이_충주_충주2_메모, year, month)
+            # 1) 충주 1공장 데이터 가져오기 (반환된 총계 3개 포함)
+            rows1, col_hdrs, g1_공, g1_소, g1_합 = _build_부적합_충주(year, month)
             
-            app.markdown(
-                _layout64('1) 부적합 발생내역 (충주 공장)',
-                          _부적합_표_to_html(rows1, col_hdrs1),
-                          memo1,
-                          unit='(단위 : 톤, %)'),
-                unsafe_allow_html=True,
-            )
+            # 2) 충주 2공장 데이터 가져오기 (반환된 총계 3개 포함)
+            rows2, _, g2_공, g2_소, g2_합 = _build_부적합_충주2(year, month)
+            
+            # 3) 두 공장의 데이터를 하나의 리스트로 통합하며 행 이름(Label) 변경
+            combined_rows = []
+            for kind, label, vals in rows1:
+                new_label = f"{label}" if kind == 'item' else f"충주 계 ({label})"
+                combined_rows.append((kind, new_label, vals))
+                
+            for kind, label, vals in rows2:
+                new_label = f"{label}" if kind == 'item' else f"충주2 계 ({label})"
+                combined_rows.append((kind, new_label, vals))
 
-            # 2) 충주 2공장 렌더링
-            rows2, col_hdrs2 = _build_부적합_충주2(year, month)
-            memo2 = "" # 필요 시 2공장 전용 메모 연동 가능
+            # --- 🌟 추가된 부분: 충주 전체(1+2공장) 합계 3줄 하단 추가 ---
+            final_공정성 = [a + b for a, b in zip(g1_공, g2_공)]
+            final_소재성 = [a + b for a, b in zip(g1_소, g2_소)]
+            final_총계 = [a + b for a, b in zip(g1_합, g2_합)]
             
+            combined_rows.append(('item', '공정성', final_공정성))
+            combined_rows.append(('item', '소재성', final_소재성))
+            combined_rows.append(('total', '충주 총계', final_총계))
+            # -----------------------------------------------------------------
+                
+            # 통합된 메모 (기존 충주 1공장 메모 사용)
+            memo = _get_memo(Sheets.부적합발생추이_충주_충주2_메모, year, month)
+            
+            # 4) 하나의 레이아웃으로 렌더링
             app.markdown(
-                _layout64('2) 부적합 발생내역 (충주 2공장)',
-                          _부적합_표_to_html(rows2, col_hdrs2),
-                          memo2,
+                _layout64('1) 부적합 발생내역 (충주)',
+                          _부적합_표_to_html(combined_rows, col_hdrs),
+                          memo,
                           unit='(단위 : 톤, %)'),
                 unsafe_allow_html=True,
             )

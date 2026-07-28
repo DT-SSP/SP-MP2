@@ -442,7 +442,9 @@ def _build_중국_table(get, year, month, 사업장='중국'):
             # _fmt가 반환하는 문자열에서 기존 '%'를 안전하게 제거한 뒤 적절한 기호를 붙여주는 헬퍼 함수
             def _p(val, is_diff=False):
                 s = str(_fmt(val, is_pct=True, decimal=1)).replace('%', '')
-                return s + ('%' if is_diff else '%') if s and s != '-' else s 
+                # 기존: return s + ('%' if is_diff else '%') if s and s != '-' else s 
+                # 수정: is_diff가 True일 때 '%p'를 반환하도록 변경
+                return s + ('%p' if is_diff else '%') if s and s != '-' else s
 
             rows.append({
                 '구분':          '영업이익률 (%)',
@@ -562,26 +564,18 @@ def _build_해외현금흐름표_base(year, month, corp):
     잔액_항목 = {'기초현금', '기말현금', '기초의 현금', '기말의 현금'}
     yr_전월, mo_전월 = _prev(year, month, 1)
 
-    # 수정된 부분: 기초/기말 명칭을 포괄적으로 확인하고 1월 및 기말 처리
+    # 💡 수정된 부분: 기초의 현금도 1월로 강제하지 않고 해당 월의 데이터를 그대로 가져오도록 변경
     def get_잔액(label, period, g1, g2, g3):
-        is_기초 = label in ('기초현금', '기초의 현금')
-        
         if period == '전전년':
-            return get_val(year - 2, 1 if is_기초 else 12, g1, g2, g3)
+            return get_val(year - 2, 12, g1, g2, g3)
         elif period == '전년':
-            return get_val(year - 1, 1 if is_기초 else 12, g1, g2, g3)
+            return get_val(year - 1, 12, g1, g2, g3)
         elif period == '전월누적':
-            if is_기초:
-                return get_val(year, 1, g1, g2, g3)
-            else:
-                return get_val(yr_전월, mo_전월, g1, g2, g3)
+            return get_val(yr_전월, mo_전월, g1, g2, g3)
         elif period == '당월':
             return get_val(year, month, g1, g2, g3)
         elif period == '당월누적':
-            if is_기초:
-                return get_val(year, 1, g1, g2, g3) # 그 연도의 1월 값
-            else: # 기말의 현금
-                return get_val(year, month, g1, g2, g3) # 선택된 년도의 선택된 월의 값
+            return get_val(year, month, g1, g2, g3)
         return 0.0
 
     # 6. 표 뼈대 생성 (해당 연도에 존재하는 모든 구분 항목 추출)
@@ -613,6 +607,7 @@ def _build_해외현금흐름표_base(year, month, corp):
     for r in rows:
         g1, g2, g3 = r['keys']
         label = r['label']
+        
         if label in 잔액_항목:
             v0 = get_잔액(label, '전전년',   g1, g2, g3)
             v1 = get_잔액(label, '전년',     g1, g2, g3)
@@ -620,8 +615,8 @@ def _build_해외현금흐름표_base(year, month, corp):
             v3 = get_잔액(label, '당월',     g1, g2, g3)
             v4 = get_잔액(label, '당월누적', g1, g2, g3)
         else:
-            v0 = get_accumulated(yr_y2, 12, g1, g2, g3)
-            v1 = get_accumulated(yr_y1, 12, g1, g2, g3)
+            v0 = get_val(yr_y2, 12, g1, g2, g3)
+            v1 = get_val(yr_y1, 12, g1, g2, g3)
             v2 = get_accumulated(year, month - 1, g1, g2, g3)
             v3 = get_val(year, month, g1, g2, g3)
             v4 = get_accumulated(year, month, g1, g2, g3)
@@ -636,11 +631,10 @@ def _build_해외현금흐름표_base(year, month, corp):
             sub_labels[4]: _fmt(v4),
         })
 
-    if not final_rows:  # 빈 데이터프레임 방지
+    if not final_rows:
         return _현금흐름표_연결_to_html_table(pd.DataFrame(columns=['구분', '_depth'] + sub_labels), 소계행, set())
 
     return _현금흐름표_연결_to_html_table(pd.DataFrame(final_rows), 소계행, set())
-
 
 def _build_현금흐름표_중국_table(year, month):
     return _build_해외현금흐름표_base(year, month, '중국')
@@ -847,7 +841,7 @@ def _build_해외판매구성_table(year, month):
                     c3: fmt_pct_val(series[2]),
                     c4: fmt_pct_val(series[3]),
                     c5: fmt_pct_val_diff(diff),
-                    c6: fmt_pct_val_diff(diff_pct)
+                    c6: fmt_pct_val(diff_pct)
                 }
             else:
                 return {
@@ -857,7 +851,7 @@ def _build_해외판매구성_table(year, month):
                     c3: _fmt(series[2]),
                     c4: _fmt(series[3]),
                     c5: _fmt(diff),
-                    c6: fmt_pct_val_diff(diff_pct)
+                    c6: fmt_pct_val(diff_pct)
                 }
 
         rows.append(fmt_row('POSCO', posco))
@@ -968,7 +962,7 @@ def _build_세부판매현황_base_table(year, month, sheet_info, g1_name, g3_it
                     c3: fmt_pct_val(series[2]),
                     c4: fmt_pct_val(series[3]),
                     c5: fmt_pct_val_diff(diff),  
-                    c6: fmt_pct_val_diff(diff_pct)
+                    c6: fmt_pct_val(diff_pct)
                 }
             else:
                 return {
@@ -979,7 +973,7 @@ def _build_세부판매현황_base_table(year, month, sheet_info, g1_name, g3_it
                     c3: _fmt(series[2]),
                     c4: _fmt(series[3]),
                     c5: _fmt(diff),
-                    c6: fmt_pct_val_diff(diff_pct)
+                    c6: fmt_pct_val(diff_pct)
                 }
 
         # 개별 항목 추가 (depth=1)
