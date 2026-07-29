@@ -1327,8 +1327,9 @@ def render_page(app, year_state, month_state):
             memo_2_1 = _get_memo(Sheets.CHQ제품판매현황_B급제외_메모, year, month)
             memo_2_2 = _get_memo(Sheets.CHQ제품판매현황_산업중국재_메모, year, month)
             
-            col2_l, col2_r = app.columns([6, 4])
-            with col2_l:
+            # 2-1) 배치
+            col2_1_l, col2_1_r = app.columns([6, 4])
+            with col2_1_l:
                 app.markdown(
                     _sec_title('2-1) CHQ 제품 판매현황 [월별 CHQ 판매 추이 (산업/중국材 포함, B급 제외)]', '[단위 : 톤]'),
                     unsafe_allow_html=True,
@@ -1337,6 +1338,12 @@ def render_page(app, year_state, month_state):
                     _build_CHQ_B급제외_chart(hdrs_CHQ, rows_CHQ),
                     use_container_width=True
                 )
+            with col2_1_r:
+                app.markdown(_memo_html(memo_2_1), unsafe_allow_html=True)
+
+            # 2-2) 배치
+            col2_2_l, col2_2_r = app.columns([6, 4])
+            with col2_2_l:
                 app.markdown(
                     _sec_title('2-2) CHQ 제품 판매현황 [월별 산업/중국材 판매 추이(B급 제외)]', '[단위 : 톤]'),
                     unsafe_allow_html=True,
@@ -1345,17 +1352,16 @@ def render_page(app, year_state, month_state):
                     _build_CHQ_산업중국재_chart(hdrs_산업, rows_산업),
                     use_container_width=True
                 )
-            with col2_r:
-                # 2-1 메모와 2-2 메모를 순서대로 나열하여 우측에 배치
-                memo_2_combined = f"{memo_2_1}\n\n{memo_2_2}".strip()
-                app.markdown(_memo_html(memo_2_combined), unsafe_allow_html=True)
+            with col2_2_r:
+                app.markdown(_memo_html(memo_2_2), unsafe_allow_html=True)
 
             # ── 3) CD 강종류별 판매현황 ──────────────────────────────────────
             memo_3_1 = _get_memo(Sheets.CD제품판매현황_B급제외_메모, year, month)
             memo_3_2 = _get_memo(Sheets.CD제품판매현황_산업중국재_메모, year, month)
 
-            col3_l, col3_r = app.columns([6, 4])
-            with col3_l:
+            # 3-1) 배치
+            col3_1_l, col3_1_r = app.columns([6, 4])
+            with col3_1_l:
                 app.markdown(
                     _sec_title('3-1) CD 강종류별 판매현황 [월별 CD 판매 추이 (산업/중국材 포함, B급 제외)]', '[단위 : 톤]'),
                     unsafe_allow_html=True,
@@ -1364,6 +1370,12 @@ def render_page(app, year_state, month_state):
                     _build_CD_B급제외_chart(hdrs_CD_B급제외, rows_CD_B급제외),
                     use_container_width=True
                 )
+            with col3_1_r:
+                app.markdown(_memo_html(memo_3_1), unsafe_allow_html=True)
+                
+            # 3-2) 배치
+            col3_2_l, col3_2_r = app.columns([6, 4])
+            with col3_2_l:
                 app.markdown(
                     _sec_title('3-2) CD 강종류별 판매현황 [월별 산업/중국材 CD 판매 추이(B급 제외)]', '[단위 : 톤]'),
                     unsafe_allow_html=True,
@@ -1372,10 +1384,8 @@ def render_page(app, year_state, month_state):
                     _build_CD_산업중국재_chart(hdrs_CD_산업, rows_CD_산업),
                     use_container_width=True
                 )
-            with col3_r:
-                # 3-1 메모와 3-2 메모를 순서대로 나열하여 우측에 배치
-                memo_3_combined = f"{memo_3_1}\n\n{memo_3_2}".strip()
-                app.markdown(_memo_html(memo_3_combined), unsafe_allow_html=True)
+            with col3_2_r:
+                app.markdown(_memo_html(memo_3_2), unsafe_allow_html=True)
 
             # ── 4) 비가공품 판매현황 ─────────────────────────────────────────
             memo_4 = _get_memo(Sheets.비가공품판매현황_메모, year, month)
@@ -1408,7 +1418,6 @@ def render_page(app, year_state, month_state):
                 app.markdown(_memo_html(memo_5), unsafe_allow_html=True)
 
             # ── 6-1) PSI (입고, 판매, 재고) 지표 (매입매출 포함) ─────────────────────
-            # ※ PSI 지표 메모 시트는 별도로 선언되어 있지 않으므로 38번 DB를 기반으로 작동합니다.
             col6_1_l, col6_1_r = app.columns([6, 4])
             with col6_1_l:
                 app.markdown(
@@ -1417,7 +1426,6 @@ def render_page(app, year_state, month_state):
                     unsafe_allow_html=True
                 )
             with col6_1_r:
-                # 필요시 메모 시트가 추가되면 아래에 연결하시면 됩니다.
                 pass
 
             app.markdown("<br>", unsafe_allow_html=True)
@@ -1431,7 +1439,6 @@ def render_page(app, year_state, month_state):
                     unsafe_allow_html=True
                 )
             with col6_2_r:
-                # 필요시 메모 시트가 추가되면 아래에 연결하시면 됩니다.
                 pass
 
         app.If(lambda: True, _render_판매구성)

@@ -21,6 +21,8 @@ from views.common import (
     html_table as _html_table, memo_html as _memo_html, layout64 as _layout64, layout100 as _layout100,
 )
 
+from views.p1_실적요약 import _build_현금흐름표_연결_table, _현금흐름표_연결_to_html_table
+
 _기호 = ['①', '②', '③', '④', '⑤', '⑥']
 
 
@@ -135,51 +137,6 @@ def _재무_section(title, per_corp_dfs, 소계행, 헤더행, corp_labels, memo
 
     tab_html = f'<style>{css}</style>' + inputs + tab_bar + panels
     return _layout64(title, tab_html, memo, unit)
-
-def _현금흐름표_연결_to_html_table(df, 소계행, 헤더행):
-    depths    = df['_depth'].tolist() if '_depth' in df.columns else [1] * len(df)
-    render_df = df.drop(columns=['_depth'], errors='ignore')
-
-    _td_hdr_num = f'background:{_C_LT_GRAY};border-bottom:1px solid #DEE2E6'
-    _pad    = {0: '8px',  1: '20px', 2: '36px'}
-    _prefix = {0: '',     1: '&nbsp;&nbsp;&nbsp;', 2: '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'}
-
-    rows_html = ''
-    for (_, row), depth in zip(render_df.iterrows(), depths):
-        d      = int(depth) if str(depth).lstrip('-').isdigit() else 1
-        label  = str(row.iloc[0])
-        is_hdr = label in 헤더행
-        is_sub = label in 소계행
-        bg     = ''
-        pad    = _pad.get(d, '20px')
-        prefix = _prefix.get(d, '&nbsp;&nbsp;&nbsp;')
-
-        cells = ''
-        for i, val in enumerate(row):
-            s = str(val)
-            if is_hdr:
-                lbl_st = (f'padding:4px 8px;padding-left:{pad};text-align:left;'
-                          f'background:{_C_LT_GRAY};font-weight:700;color:{_C_NAVY};'
-                          f'border-bottom:1px solid #DEE2E6')
-                cells += (f'<td style="{lbl_st}">{prefix}{s}</td>' if i == 0
-                          else f'<td style="{_td_hdr_num}"></td>')
-            elif i == 0:
-                if is_sub:
-                    lbl_st = (f'padding:5px 8px;padding-left:{pad};text-align:left;'
-                              f'background:{_C_LT_GRAY};font-weight:600;'
-                              f'border-bottom:1px solid #e2e8f0')
-                else:
-                    lbl_st = (f'padding:5px 8px;padding-left:{pad};text-align:left;'
-                              f'border-bottom:1px solid #e2e8f0;{bg}')
-                cells += f'<td style="{lbl_st}">{prefix}{s}</td>'
-            elif s.startswith('-'):
-                cells += f'<td style="{_TD_SUB_RED if is_sub else _TD_RED+";"+bg}">{s}</td>'
-            else:
-                cells += f'<td style="{_TD_SUB_NUM if is_sub else _TD_NUM+";"+bg}">{s}</td>'
-        rows_html += f'<tr style="vertical-align:middle">{cells}</tr>'
-
-    headers = ''.join(f'<th style="{_TH}">{c}</th>' for c in render_df.columns)
-    return _html_table(f'<tr>{headers}</tr>', rows_html)
 
 
 def _현금흐름표_연결_section(title, per_corp_dfs, 소계행, 헤더행, corp_labels, memo='', unit='[단위: 백만원]'):
@@ -537,46 +494,84 @@ def _build_해외현금흐름표_base(year, month, corp):
     for c in ['구분1', '구분2', '구분3']:
         df[c] = df[c].fillna('').astype(str).str.strip().str.replace(r"\s+", " ", regex=True)
 
-    # 4. 데이터 롤업(Roll-up) 해시맵 생성
-    val_map = {}
-    for _, row in df.iterrows():
-        y, m = int(row['연도']), int(row['월'])
-        g1, g2, g3 = row['구분1'], row['구분2'], row['구분3']
-        v = row[val_col]
-        if v == 0: continue
-        
-        def add(k_g1, k_g2, k_g3):
-            key = (y, m, k_g1, k_g2, k_g3)
-            val_map[key] = val_map.get(key, 0.0) + v
-        
-        add(g1, g2, g3)
-        if g3: add(g1, g2, '')
-        if g2 or g3: add(g1, '', '')
+    # 4. 실적요약 로직 적용: 트리 구조 기반 데이터 롤업(Roll-up) 해시맵 생성
+    direct_map = df.groupby(['연도', '월', '구분1', '구분2', '구분3'])['값'].sum().to_dict()
+
+    tree_map: dict = {}
+    for (yr, mo, g1, g2, g3), v in direct_map.items():
+        node = tree_map.setdefault((yr, mo, g1), {})
+        node.setdefault(g2, {})[g3] = v
 
     def get_val(yr, mo, g1, g2, g3):
-        return val_map.get((yr, mo, g1, g2, g3), 0.0)
+        node = tree_map.get((yr, mo, g1))
+        if node is None:
+            return 0.0
 
-    # 5. 조회 로직: 구분4(당월/누적)가 없으므로 해당 월까지 1~M월을 합산
+        if g2:
+            g3_map = node.get(g2, {})
+            if g3:
+                return g3_map.get(g3, 0.0)
+            if '' in g3_map:
+                return g3_map['']
+            return sum(v for k, v in g3_map.items() if k)
+
+        # g1 최상위 총계: 직접 값이 있으면 그대로, 없으면 하위 구분2들을 합산
+        top = node.get('', {})
+        if '' in top:
+            return top['']
+        total = 0.0
+        for g2x, g3_map in node.items():
+            if not g2x:
+                continue
+            total += g3_map[''] if '' in g3_map else sum(v for k, v in g3_map.items() if k)
+        return total
+
     def get_accumulated(yr, target_mo, g1, g2, g3):
         return sum(get_val(yr, m, g1, g2, g3) for m in range(1, target_mo + 1))
 
-    # 시트에 기재된 명칭 반영 ("기초의 현금", "기말의 현금")
+    # 5. 실적요약 로직 적용: 기초현금/기말현금 롤포워드(Roll-forward) 및 현금증감 계산
     잔액_항목 = {'기초현금', '기말현금', '기초의 현금', '기말의 현금'}
+    _흐름_G1 = ['영업활동현금흐름', '투자활동현금흐름', '재무활동현금흐름']
+
+    def get_현금증감_월(yr, mo):
+        return sum(get_val(yr, mo, g, '', '') for g in _흐름_G1)
+
+    def get_기초현금_월(yr, mo):
+        if mo <= 1:
+            # 1월은 DB에 입력된 연초 기초현금 리터럴 값 사용 (명칭 호환성 고려)
+            v1 = get_val(yr, 1, '기초현금', '', '')
+            v2 = get_val(yr, 1, '기초의 현금', '', '')
+            return v1 if v1 != 0 else v2
+        return get_기말현금_월(yr, mo - 1)
+
+    def get_기말현금_월(yr, mo):
+        환율 = get_val(yr, mo, '환율변동효과', '', '')
+        return get_기초현금_월(yr, mo) + get_현금증감_월(yr, mo) + 환율
+
     yr_전월, mo_전월 = _prev(year, month, 1)
 
-    # 💡 수정된 부분: 기초의 현금도 1월로 강제하지 않고 해당 월의 데이터를 그대로 가져오도록 변경
     def get_잔액(label, period, g1, g2, g3):
-        if period == '전전년':
-            return get_val(year - 2, 12, g1, g2, g3)
-        elif period == '전년':
-            return get_val(year - 1, 12, g1, g2, g3)
-        elif period == '전월누적':
-            return get_val(yr_전월, mo_전월, g1, g2, g3)
-        elif period == '당월':
-            return get_val(year, month, g1, g2, g3)
-        elif period == '당월누적':
-            return get_val(year, month, g1, g2, g3)
-        return 0.0
+        if period == '전년':
+            if label in ('기초현금', '기초의 현금'): return get_기초현금_월(year - 1, 1)
+            return get_기말현금_월(year - 1, 12)
+
+        if label in ('기초현금', '기초의 현금'):
+            if period in ('전월누적', '당월누적'):
+                return get_기초현금_월(year, 1) # 당해연도 1월(연초) 기초현금
+            return get_기초현금_월(year, month) # 당월 기초현금
+            
+        if period == '전월누적':
+            return get_기말현금_월(yr_전월, mo_전월)
+        return get_기말현금_월(year, month)
+
+    def get_현금증감(period):
+        if period == '전년':
+            return sum(get_accumulated(year - 1, 12, g, '', '') for g in _흐름_G1)
+        if period == '전월누적':
+            return sum(get_accumulated(year, month - 1, g, '', '') for g in _흐름_G1)
+        if period == '당월':
+            return get_현금증감_월(year, month)
+        return sum(get_accumulated(year, month, g, '', '') for g in _흐름_G1)
 
     # 6. 표 뼈대 생성 (해당 연도에 존재하는 모든 구분 항목 추출)
     target = df[df['연도'] == year].copy()
@@ -601,40 +596,57 @@ def _build_해외현금흐름표_base(year, month, corp):
                 rows.append({'label': g3, 'depth': 2, 'keys': (g1, g2, g3)})
 
     final_rows = []
-    yr_y2, yr_y1 = year - 2, year - 1
-    sub_labels = [f"'{str(yr_y2)[2:]}년", f"'{str(yr_y1)[2:]}년", '전월누적', '당월', f"'{str(year)[2:]}년누적"]
+    yr_y1 = year - 1
+    
+    # 1월일 경우에는 '전월누적'을 제외하고 sub_labels 구성 (전전년 제거됨)
+    sub_labels = [f"'{str(yr_y1)[2:]}년"]
+    if month != 1:
+        sub_labels.append('전월누적')
+    sub_labels.extend(['당월', f"'{str(year)[2:]}년누적"])
     
     for r in rows:
         g1, g2, g3 = r['keys']
         label = r['label']
         
-        if label in 잔액_항목:
-            v0 = get_잔액(label, '전전년',   g1, g2, g3)
+        if label in ('현금성자산의 증감',):
+            v1 = get_현금증감('전년')
+            v2 = get_현금증감('전월누적')
+            v3 = get_현금증감('당월')
+            v4 = get_현금증감('당월누적')
+        elif label in 잔액_항목:
             v1 = get_잔액(label, '전년',     g1, g2, g3)
             v2 = get_잔액(label, '전월누적', g1, g2, g3)
             v3 = get_잔액(label, '당월',     g1, g2, g3)
             v4 = get_잔액(label, '당월누적', g1, g2, g3)
         else:
-            v0 = get_val(yr_y2, 12, g1, g2, g3)
             v1 = get_val(yr_y1, 12, g1, g2, g3)
             v2 = get_accumulated(year, month - 1, g1, g2, g3)
             v3 = get_val(year, month, g1, g2, g3)
             v4 = get_accumulated(year, month, g1, g2, g3)
 
-        final_rows.append({
+        row_dict = {
             '구분':        label,
             '_depth':      r['depth'],
-            sub_labels[0]: _fmt(v0),
-            sub_labels[1]: _fmt(v1),
-            sub_labels[2]: _fmt(v2),
-            sub_labels[3]: _fmt(v3),
-            sub_labels[4]: _fmt(v4),
-        })
+            sub_labels[0]: _fmt(v1),
+        }
+        
+        # 1월이 아닐 때만 전월누적 데이터 할당
+        if month != 1:
+            row_dict['전월누적'] = _fmt(v2)
+            
+        row_dict['당월'] = _fmt(v3)
+        row_dict[f"'{str(year)[2:]}년누적"] = _fmt(v4)
+        
+        final_rows.append(row_dict)
 
     if not final_rows:
         return _현금흐름표_연결_to_html_table(pd.DataFrame(columns=['구분', '_depth'] + sub_labels), 소계행, set())
 
-    return _현금흐름표_연결_to_html_table(pd.DataFrame(final_rows), 소계행, set())
+    # 컬럼 순서를 sub_labels에 맞게 명시적으로 지정하여 DataFrame 생성
+    df_final = pd.DataFrame(final_rows)[['구분', '_depth'] + sub_labels]
+    
+    return _현금흐름표_연결_to_html_table(df_final, 소계행, set())
+
 
 def _build_현금흐름표_중국_table(year, month):
     return _build_해외현금흐름표_base(year, month, '중국')
@@ -2094,16 +2106,20 @@ def render_page(app, year_state, month_state):
     with tabs[1]:
         def _render_해외현금흐름():
             year, month = int(year_state.value), int(month_state.value)
-            
-            # 중국 현금흐름표 렌더링
+
+            # 1) 현금흐름표 (중국): 2) 현금흐름표 (연결)의 "선재_국내" 탭 데이터를 그대로 재사용
+            _cf_per_corp, _cf_소계행, _cf_헤더행, _ = _build_현금흐름표_연결_table(year, month)
+            html_cn = _현금흐름표_연결_to_html_table(_cf_per_corp['선재_중국'], _cf_소계행, _cf_헤더행)
             memo_cn = _get_memo(Sheets.해외현금흐름_중국_메모, year, month)
-            app.markdown(_layout64("1) 현금흐름표 (중국)", _build_현금흐름표_중국_table(year, month), memo_cn, '[단위: 백만원]'),
+            app.markdown(_layout64("1) 현금흐름표 (중국)", html_cn, memo_cn, '[단위: 백만원]'),
                          unsafe_allow_html=True)
-            
-            # 태국 현금흐름표 렌더링
+
+            # 2) 현금흐름표 (태국): 2) 현금흐름표 (연결)의 "선재_국내" 탭 데이터를 그대로 재사용
+            _cf_per_corp, _cf_소계행, _cf_헤더행, _ = _build_현금흐름표_연결_table(year, month)
+            html_th = _현금흐름표_연결_to_html_table(_cf_per_corp['선재_태국'], _cf_소계행, _cf_헤더행)
             memo_th = _get_memo(Sheets.해외현금흐름_태국_메모, year, month)
-            app.markdown(_layout64("2) 현금흐름표 (태국)", _build_현금흐름표_태국_table(year, month), memo_th, '[단위: 백만원]'),
-                         unsafe_allow_html=True)
+            app.markdown(_layout64("2) 현금흐름표 (태국)", html_th, memo_th, '[단위: 백만원]'),
+                            unsafe_allow_html=True)
             
         app.If(lambda: True, _render_해외현금흐름)
 

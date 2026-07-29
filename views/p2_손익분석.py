@@ -223,10 +223,15 @@ def _build_손익요약표_table(year: int, month: int) -> pd.DataFrame:
     # [추가] 전월대비, 계획대비용 %p 서식
     def fmt_pct_diff(x):
         if pd.isna(x): return ""
-        try: v = float(x)
-        except: return str(x)
-        if v < 0: return f'<span style="color:#d32f2f;">-{abs(v):,.1f}%p</span>'
-        return f"{v:,.1f}%p"
+        try: 
+            v = float(x)
+        except: 
+            return ""  # 숫자로 변환할 수 없는 경우 빈 문자열 반환 (필요에 따라 return str(x)로 변경 가능)
+            
+        if v is None: return ""
+        if v > 0: return f"↑{v:.1f}%p"
+        if v < 0: return f"↓{abs(v):.1f}%p"
+        return f"{v:.1f}%p"
 
     out[cols_num] = out[cols_num].astype(object)
 
@@ -1580,43 +1585,57 @@ def _build_성과급_table(year, month):
 
     def metrics(items):
         연간 = sum(연간_v(g1, g2) for g1, g2 in items)
+        전년 = sum(전년_v(g1, g2) for g1, g2 in items)
+        당월 = sum(당월_v(g1, g2) for g1, g2 in items)
+        누적 = sum(누적_v(g1, g2) for g1, g2 in items)
+        월 = 연간 / 12
+        퍼센트 = (누적 / 전년 * 100) if 전년 != 0 else np.nan
+        
         return {
-            '전년': sum(전년_v(g1, g2) for g1, g2 in items),
-            '당월': sum(당월_v(g1, g2) for g1, g2 in items),
-            '누적': sum(누적_v(g1, g2) for g1, g2 in items),
+            '전년': 전년,
+            '당월': 당월,
+            '누적': 누적,
+            '%': 퍼센트,
             '연간': 연간,
-            '월':   연간 / 12,
+            '월': 월,
         }
 
-    격려_제조 = [('제조', '제조_격려')]
-    성과_제조 = [('제조', '제조_성과')]
-    제조_합   = 격려_제조 + 성과_제조
+    # DB 구분을 이미지의 계층(성과/직원/임원, 격려, 외주)에 맞게 매핑
+    성과_직원_제조 = [('제조', '제조_성과')]
+    성과_직원_판관 = [('판관_직원', '판관_직원_성과')]
+    성과_직원_합 = 성과_직원_제조 + 성과_직원_판관
 
-    임원_판관 = [('판관', '판관_임원')]
-    격려_직원 = [('판관_직원', '판관_직원_격려')]
-    성과_직원 = [('판관_직원', '판관_직원_성과')]
-    직원_합   = 격려_직원 + 성과_직원
-    판관_합   = 임원_판관 + 직원_합
+    성과_임원_제조 = [('제조', '제조_임원')] 
+    성과_임원_판관 = [('판관', '판관_임원')]
+    성과_임원_합 = 성과_임원_제조 + 성과_임원_판관
+
+    성과_합 = 성과_직원_합 + 성과_임원_합
+
+    격려_제조 = [('제조', '제조_격려')]
+    격려_판관 = [('판관_직원', '판관_직원_격려')]
+    격려_합 = 격려_제조 + 격려_판관
 
     외주_항목 = [('외주', '외주')]
 
-    총_항목 = 제조_합 + 판관_합 + 외주_항목
+    합계_항목 = 성과_합 + 격려_합 + 외주_항목
 
     # (라벨, depth, bold, 합산대상, 최상단 구분선 여부)
     rows_info = [
-        ('제조', 0, True,  제조_합, False),
-        ('격려', 1, False, 격려_제조, False),
-        ('성과', 1, False, 성과_제조, False),
-        (None,   0, False, None,     False),
-        ('판관', 0, True,  판관_합, False),
-        ('임원', 1, False, 임원_판관, False),
-        ('직원', 1, True,  직원_합, False),
-        ('격려', 2, False, 격려_직원, False),
-        ('성과', 2, False, 성과_직원, False),
-        (None,   0, False, None,     False),
-        ('외주', 0, True,  외주_항목, False),
-        (None,   0, False, None,     False),
-        ('총',   0, True,  총_항목,  True),
+        ('성과', 0, True, 성과_합, False),
+        ('직원', 1, True, 성과_직원_합, False),
+        ('제조', 2, False, 성과_직원_제조, False),
+        ('판관', 2, False, 성과_직원_판관, False),
+        ('임원', 1, True, 성과_임원_합, False),
+        ('제조', 2, False, 성과_임원_제조, False),
+        ('판관', 2, False, 성과_임원_판관, False),
+        (None, 0, False, None, False),
+        ('격려', 0, True, 격려_합, False),
+        ('제조', 1, False, 격려_제조, False),
+        ('판관', 1, False, 격려_판관, False),
+        (None, 0, False, None, False),
+        ('외주', 0, True, 외주_항목, False),
+        (None, 0, False, None, False),
+        ('합계', 0, True, 합계_항목, True),
     ]
 
     rows = []
@@ -1624,7 +1643,16 @@ def _build_성과급_table(year, month):
         if label is None:
             rows.append({'_spacer': True})
             continue
+        
         m = metrics(items)
+        
+        # % 값 포맷팅
+        pct_val = m['%']
+        if pd.isna(pct_val):
+            pct_str = ""
+        else:
+            pct_str = f"{int(round(pct_val))}%"
+
         rows.append({
             '_spacer':    False,
             '_depth':     depth,
@@ -1634,6 +1662,7 @@ def _build_성과급_table(year, month):
             '전년':       _fmt(m['전년'], decimal=0),
             '당월':       _fmt(m['당월'], decimal=0),
             '누적':       _fmt(m['누적'], decimal=0),
+            '%':          pct_str,
             '연간':       _fmt(m['연간'], decimal=0),
             '월':         _fmt(m['월'],   decimal=0),
         })
@@ -1642,16 +1671,17 @@ def _build_성과급_table(year, month):
 
 
 def _성과급_to_html(rows) -> str:
-    col_keys = ['전년', '당월', '누적', '연간', '월']
+    col_keys = ['전년', '당월', '누적', '%', '연간', '월']
 
+    # % 컬럼 추가에 따른 실적 colspan 변경 (3 -> 4)
     th_html = f'''
     <tr>
         <th rowspan="2" style="{_TH}">구분</th>
-        <th colspan="3" style="{_TH}">실적</th>
+        <th colspan="4" style="{_TH}">실적</th>
         <th colspan="2" style="{_TH}">성과급 100% (자사)</th>
     </tr>
     <tr>
-        <th style="{_TH}">전년</th><th style="{_TH}">당월</th><th style="{_TH}">누적</th>
+        <th style="{_TH}">전년</th><th style="{_TH}">당월</th><th style="{_TH}">누적</th><th style="{_TH}">%</th>
         <th style="{_TH}">연간</th><th style="{_TH}">월</th>
     </tr>
     '''

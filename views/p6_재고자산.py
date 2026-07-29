@@ -724,18 +724,18 @@ def _build_등급별_rows(df, col_spec):
                 + [v_제품합계(yr_c, mo_c) for yr_c, mo_c in recent_curr])
 
     rows = []
-    # 1. 제품 개별 등급
+    
+    # 1. 재공품 (맨위로 이동, kind='total' 및 <b> 적용으로 합계처럼 배경/볼드 처리)
+    rows.append({'label': '<b>재공품 (재공품)</b>', 'kind': 'total', 'vals': cvs('재공품', '재공품')})
+    
+    # 2. 제품 개별 등급
     for g2 in grades:
         rows.append({'label': f'제품 ({g2})', 'kind': 'detail', 'vals': cvs('제품', g2)})
     
-    # 2. 제품 합계
-    rows.append({'label': '제품 (합계)', 'kind': 'total', 'vals': cvs_제품합계()})
-    
-    # 3. 재공품
-    rows.append({'label': '재공품 (재공품)', 'kind': 'detail', 'vals': cvs('재공품', '재공품')})
+    # 3. 제품 합계
+    rows.append({'label': '<b>제품 (합계)</b>', 'kind': 'total', 'vals': cvs_제품합계()})
 
     return rows
-
 
 def _등급별_to_html(rows, col_spec):
     col_lbls = _col_labels(col_spec)
@@ -783,7 +783,7 @@ def _build_등급별_chart_data(df, col_spec):
 def _chart_등급별(x_labels, grade_data, rework_data):
     fig = go.Figure()
 
-    # 이미지 기준 색상 매칭 (B급: 어두운 네이비, C급: 주황/다홍, D급: 회색 계열 등)
+    # 이미지 기준 색상 매칭
     colors = {
         'B급': '#34495e',
         'C급': '#e74c3c',
@@ -793,7 +793,7 @@ def _chart_등급별(x_labels, grade_data, rework_data):
         '재공품': '#2ecc71'
     }
 
-    # 스택 바 차트 생성 (아래에서 위로 쌓이는 순서)
+    # 1. 스택 바 차트 생성 (아래에서 위로 쌓이는 순서, 기본 Y축 사용)
     order = ['B급', 'C급', 'D급', 'D2급', 'X급']
     for g in order:
         vals = grade_data[g]
@@ -802,30 +802,71 @@ def _chart_등급별(x_labels, grade_data, rework_data):
             marker_color=colors.get(g, C_NAVY), marker_line_width=0,
             text=[_fmt(v, decimal=0) if v > 0 else '' for v in vals],
             textposition='inside', textfont=dict(color='white', size=10),
+            yaxis='y1'  # 기본 Y축에 매핑
         ))
 
-    # 재공품 스택 추가
-    fig.add_trace(go.Bar(
-        name='재공품(재공품)', x=x_labels, y=rework_data,
-        marker_color=colors['재공품'], marker_line_width=0,
-        text=[_fmt(v, decimal=0) if v > 0 else '' for v in rework_data],
-        textposition='outside', textfont=dict(color='#333333', size=10),
+    # 2. 막대그래프(제품) 합계 텍스트 추가 (가장 위 막대 위에 위치)
+    totals = []
+    for i in range(len(x_labels)):
+        totals.append(sum(grade_data[g][i] for g in order))
+        
+    fig.add_trace(go.Scatter(
+        name='제품 합계', x=x_labels, y=totals,
+        mode='text',
+        # 텍스트를 볼드 처리하여 잘 보이게 설정
+        text=[f"<b>{_fmt(v, decimal=0)}</b>" if v > 0 else '' for v in totals],
+        textposition='top center',
+        textfont=dict(size=11, color='#333333'),
+        showlegend=False, # 범례에서는 숨김 처리
+        yaxis='y1',
+        hoverinfo='skip'
     ))
+
+    # 3. 재공품 스택 -> 꺾은선 그래프 (보조 Y축 사용)
+    fig.add_trace(go.Scatter(
+        name='재공품(재공품)', x=x_labels, y=rework_data,
+        mode='lines+markers+text',
+        line=dict(color=colors['재공품'], width=2),
+        marker=dict(size=8, color='white', line=dict(color=colors['재공품'], width=2)),
+        text=[_fmt(v, decimal=0) if v > 0 else '' for v in rework_data],
+        textposition='top center',
+        textfont=dict(size=10, color=colors['재공품']),
+        yaxis='y2'  # 보조 Y축으로 분리
+    ))
+
+    # 여백 확보를 위한 최대값 별도 계산
+    max_bar = max(totals, default=1)
+    max_line = max(rework_data, default=1)
 
     fig.update_layout(
         barmode='stack', height=320,
-        margin=dict(l=10, r=10, t=20, b=20),
+        margin=dict(l=10, r=10, t=30, b=20),
         showlegend=True,
         legend=dict(orientation='h', x=0.5, xanchor='center',
                     y=-0.2, yanchor='top',
                     font=dict(size=11), bgcolor='rgba(255,255,255,0.8)',
                     borderwidth=0),
         xaxis=dict(showgrid=False, tickfont=dict(size=11, color=C_NAVY)),
-        yaxis=dict(showgrid=True, gridcolor=C_CHART_GRID, showticklabels=False),
+        
+        # 기본 Y축 (막대그래프 - 제품)
+        yaxis=dict(
+            showgrid=True, gridcolor=C_CHART_GRID, 
+            showticklabels=False, 
+            range=[0, max_bar * 1.25] # 합계 텍스트가 잘리지 않도록 25% 여유
+        ),
+        
+        # 보조 Y축 (꺾은선그래프 - 재공품)
+        yaxis2=dict(
+            showgrid=False, # 그리드 선 겹침 방지
+            showticklabels=False, # Y축 라벨 숨김
+            overlaying='y',       # 기본 y축과 겹치게 설정
+            side='right',         # 축 위치를 우측으로 배치
+            range=[0, max_line * 1.3] # 텍스트가 잘리지 않도록 30% 여유
+        ),
+        
         plot_bgcolor='white', paper_bgcolor='white', bargap=0.3,
     )
     return fig
-
 
 # ══════════════════════════════════════════════════════════════════════════
 # ── render_page ──────────────────────────────────────────────────────────
@@ -878,6 +919,7 @@ def render_page(app, year_state, month_state):
         app.If(lambda: True, _render_재고현황)
 
     # ── 탭 1: 연령별 재고현황 ────────────────────────────────────────────
+    # ── 탭 1: 연령별 재고현황 ────────────────────────────────────────────
     with tabs[1]:
         def _render_연령별():
             year, month = int(year_state.value), int(month_state.value)
@@ -894,21 +936,20 @@ def render_page(app, year_state, month_state):
             memo_원재료 = _get_memo(Sheets.연령별재고현황_메모, year, month, gubun='원재료')
 
             col_l, col_r = app.columns([6, 4])
-            with col_l: # 6: 표
+            with col_l: # 6: 표 및 차트
                 app.markdown(
                     _sec_title('1) 원재료 현황', '[단위: 톤]') 
                     + _단품_to_html(rows_원재료, col_spec, '원재료'),
                     unsafe_allow_html=True)
+                # 차트 (표 하단에 배치되나 표 너비만큼 제한됨)
+                app.markdown(
+                    chart_wrapper 
+                    + _fig_to_iframe(_chart_단품(x_labels, 정상_1, 매입_1, 기타_1, 장기_1, decimal=0, g1_label='원재료'))
+                    + '</div>', 
+                    unsafe_allow_html=True)
             with col_r: # 4: 메모
                 if memo_원재료:
                     app.markdown(f'<div style="{memo_style}">{_memo_html(memo_원재료)}</div>', unsafe_allow_html=True)
-            
-            # 차트 (표와 메모 하단)
-            app.markdown(
-                chart_wrapper 
-                + _fig_to_iframe(_chart_단품(x_labels, 정상_1, 매입_1, 기타_1, 장기_1, decimal=0, g1_label='원재료'))
-                + '</div>', 
-                unsafe_allow_html=True)
 
 
             # 2) 재공품 현황
@@ -917,21 +958,20 @@ def render_page(app, year_state, month_state):
             memo_재공품 = _get_memo(Sheets.연령별재고현황_메모, year, month, gubun='재공품')
 
             col_l2, col_r2 = app.columns([6, 4])
-            with col_l2: # 6: 표
+            with col_l2: # 6: 표 및 차트
                 app.markdown(
                     _sec_title('2) 재공품 현황', '[단위: 톤]') 
                     + _단품_to_html(rows_재공품, col_spec, '재공품'),
                     unsafe_allow_html=True)
+                # 차트
+                app.markdown(
+                    chart_wrapper
+                    + _fig_to_iframe(_chart_단품(x_labels, 정상_2, 매입_2, 기타_2, 장기_2, decimal=0, g1_label='재공품'))
+                    + '</div>', 
+                    unsafe_allow_html=True)
             with col_r2: # 4: 메모
                 if memo_재공품:
                     app.markdown(f'<div style="{memo_style}">{_memo_html(memo_재공품)}</div>', unsafe_allow_html=True)
-                    
-            # 차트 (표와 메모 하단)
-            app.markdown(
-                chart_wrapper
-                + _fig_to_iframe(_chart_단품(x_labels, 정상_2, 매입_2, 기타_2, 장기_2, decimal=0, g1_label='재공품'))
-                + '</div>', 
-                unsafe_allow_html=True)
 
 
             # 3) 제품 현황
@@ -940,22 +980,21 @@ def render_page(app, year_state, month_state):
             memo_제품 = _get_memo(Sheets.연령별재고현황_메모, year, month, gubun='제품')
 
             col_l3, col_r3 = app.columns([6, 4])
-            with col_l3: # 6: 표
+            with col_l3: # 6: 표 및 차트
                 app.markdown(
                     _sec_title('3) 제품 현황', '[단위: 톤]') 
                     + _단품_to_html(rows_제품, col_spec, '제품'),
+                    unsafe_allow_html=True)
+                # 차트
+                app.markdown(
+                    chart_wrapper
+                    + _fig_to_iframe(_chart_단품(x_labels, 정상_3, 매입_3, 기타_3, 장기_3, decimal=0, g1_label='제품'))
+                    + '</div>', 
                     unsafe_allow_html=True)
             with col_r3: # 4: 메모
                 if memo_제품:
                     app.markdown(f'<div style="{memo_style}">{_memo_html(memo_제품)}</div>', unsafe_allow_html=True)
             
-            # 차트 (표와 메모 하단)
-            app.markdown(
-                chart_wrapper
-                + _fig_to_iframe(_chart_단품(x_labels, 정상_3, 매입_3, 기타_3, 장기_3, decimal=0, g1_label='제품'))
-                + '</div>', 
-                unsafe_allow_html=True)
-
 
             # 4) 종합 현황 
             rows_종합 = _build_종합_rows(df, col_spec)
@@ -963,21 +1002,20 @@ def render_page(app, year_state, month_state):
             memo_종합 = _get_memo(Sheets.연령별재고현황_메모, year, month, gubun='종합')
 
             col_l4, col_r4 = app.columns([6, 4])
-            with col_l4: # 6: 표
+            with col_l4: # 6: 표 및 차트
                 app.markdown(
                     _sec_title('4) 총 재고 및 장기재고 현황', '[단위: 톤]')
                     + _종합_to_html(rows_종합, col_spec),
                     unsafe_allow_html=True)
+                # 차트
+                app.markdown(
+                    chart_wrapper
+                    + _fig_to_iframe(_chart_종합(x_labels, 제품_v, 재공품_v, 원재료_v, 장기_v, pct_v))
+                    + '</div>',
+                    unsafe_allow_html=True)
             with col_r4: # 4: 메모
                 if memo_종합:
                     app.markdown(f'<div style="{memo_style}">{_memo_html(memo_종합)}</div>', unsafe_allow_html=True)
-            
-            # 차트 (표와 메모 하단)
-            app.markdown(
-                chart_wrapper
-                + _fig_to_iframe(_chart_종합(x_labels, 제품_v, 재공품_v, 원재료_v, 장기_v, pct_v))
-                + '</div>',
-                unsafe_allow_html=True)
 
         app.If(lambda: True, _render_연령별)
 
@@ -991,31 +1029,29 @@ def render_page(app, year_state, month_state):
             grade_data, rework_data = _build_등급별_chart_data(df, col_spec)
             memo = _get_memo(Sheets.등급별재고현황_메모, year, month)
 
-            chart_wrapper = '<div style="display:flex; flex-direction:column; justify-content:flex-end; height:100%; min-height:280px; padding-top:40px;">'
+            # 연령별 재고현황과 동일한 배치 적용
+            memo_style = 'margin-top:28px;'
+            chart_wrapper = '<div style="margin-top:10px; margin-bottom:50px;">'
 
             col_l, col_r = app.columns([6, 4])
             
-            # 1) 왼쪽 영역 (6): 표 렌더링
+            # 1) 왼쪽 영역 (6): 표 및 차트 렌더링
             with col_l:
                 app.markdown(
                     _sec_title('1) 등급별 재고현황', '[단위: 톤]')
                     + _등급별_to_html(rows_등급, col_spec),
                     unsafe_allow_html=True,
                 )
-                
-            # 2) 오른쪽 영역 (4): 차트 렌더링
-            with col_r:
                 app.markdown(
                     chart_wrapper
                     + _fig_to_iframe(_chart_등급별(x_labels, grade_data, rework_data))
                     + '</div>',
                     unsafe_allow_html=True,
                 )
-
-            # 3) 메모 출력 (가장 아래 배치)
-            if memo:
-                app.markdown('<br><hr style="border-top:1px solid #ddd;">', unsafe_allow_html=True)
-                app.markdown(_sec_title('', ''), unsafe_allow_html=True)
-                app.markdown(_memo_html(memo), unsafe_allow_html=True)
+                
+            # 2) 오른쪽 영역 (4): 메모 렌더링
+            with col_r:
+                if memo:
+                    app.markdown(f'<div style="{memo_style}">{_memo_html(memo)}</div>', unsafe_allow_html=True)
 
         app.If(lambda: True, _render_등급별)
