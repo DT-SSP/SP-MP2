@@ -1220,7 +1220,7 @@ def _build_안정성_별도_table(year, month):
 
     item_col = '구분2' if '구분2' in df.columns and df['구분2'].str.strip().astype(bool).any() else '구분1'
     df[item_col] = df[item_col].fillna('').astype(str).str.strip()
-    
+
     val_map = df.groupby(['연도', '월', item_col])[val_col].sum().to_dict()
 
     def 값(yr, mo, 항목):
@@ -1277,15 +1277,15 @@ def _build_수익성_별도_table(year, month):
     yr_전월, mo_전월 = _prev(year, month, 1)
 
     sub_labels = [
-        f"'{str(yr_전기)[2:]}년말",
-        f"'{str(yr_전월)[2:]}.{mo_전월}월",
-        f"'{str(year)[2:]}.{month}월",
+        f"'{str(yr_전기)[2:]}년 누적",
+        f"'{str(yr_전월)[2:]}.{mo_전월}월 누적",
+        f"'{str(year)[2:]}.{month}월 누적",
         '전월대비'
     ]
 
     item_col = '구분2' if '구분2' in df.columns and df['구분2'].str.strip().astype(bool).any() else '구분1'
     df[item_col] = df[item_col].fillna('').astype(str).str.strip()
-    
+
     val_map = df.groupby(['연도', '월', item_col])[val_col].sum().to_dict()
 
     def 값(yr, mo, 항목):
@@ -1345,9 +1345,9 @@ def _build_수익성_연결_table(year, month):
     corp_labels = [수익성_사업장_표시명.get(c, c) for c in db_corps]
 
     sub_labels = [
-        f"'{str(yr_전기)[2:]}년말",
-        f"'{str(yr_전월)[2:]}.{mo_전월}월",
-        f"'{str(year)[2:]}.{month}월",
+        f"'{str(yr_전기)[2:]}년 누적",
+        f"'{str(yr_전월)[2:]}.{mo_전월}월 누적",
+        f"'{str(year)[2:]}.{month}월 누적",
         '전월대비',
     ]
 

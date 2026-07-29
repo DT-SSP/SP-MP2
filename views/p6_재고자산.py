@@ -279,23 +279,23 @@ def _build_원재료_rows(df, col_spec):
         sub_rows = [('ton', cvs(v, g2), mom(v, g2), 0, False)]
         return {'label': g2, 'kind': 'detail', 'sub_rows': sub_rows}
 
-    def subtotal_row(label, fn, with_pct=False):
+    def subtotal_row(label, fn, with_pct=False, kind='subtotal'):
         sub_rows = [('ton', cvs(fn), mom(fn), 0, False)]
         if with_pct:
             p_vals, p_mom = pct_col(fn, v_총계)
             sub_rows.append(('(%)', p_vals, p_mom, None, True))
-        return {'label': label, 'kind': 'subtotal', 'sub_rows': sub_rows}
+        return {'label': label, 'kind': kind, 'sub_rows': sub_rows}
 
     rows = []
     rows.append(detail_row('3개월 이하'))
     rows.append(detail_row('3개월 초과'))
-    rows.append(subtotal_row('정상재고', v_정상))
-    
     rows.append(detail_row('6개월 초과'))
     rows.append(detail_row('1년 초과'))
-    rows.append(subtotal_row('장기재고', v_장기, with_pct=True))
 
     rows.append({'label': '원재료 합계', 'kind': 'total', 'sub_rows': [('ton', cvs(v_총계), mom(v_총계), 0, False)]})
+
+    rows.append(subtotal_row('정상재고', v_정상, kind='detail'))
+    rows.append(subtotal_row('장기재고', v_장기, with_pct=True))
     return rows
 
 # ── 재공품/제품 데이터 빌더 ────────────────────────────────────────────────
@@ -329,21 +329,19 @@ def _build_단품_rows(g1, df, col_spec):
 
     dec = 0
     rows = []
-    
+
     # 1. 3개월 이하 ~ 1년 초과
     rows.append({'label': '3개월 이하', 'kind': 'detail', 'vals': cvs(v, '3개월 이하'), 'mom': mom(v, '3개월 이하'), 'dec': dec})
     rows.append({'label': '3개월 초과', 'kind': 'detail', 'vals': cvs(v, '3개월 초과'), 'mom': mom(v, '3개월 초과'), 'dec': dec})
     rows.append({'label': '6개월 초과', 'kind': 'detail', 'vals': cvs(v, '6개월 초과'), 'mom': mom(v, '6개월 초과'), 'dec': dec})
     rows.append({'label': '1년 초과', 'kind': 'detail', 'vals': cvs(v, '1년 초과'), 'mom': mom(v, '1년 초과'), 'dec': dec})
-    
-    # 2. 매입매출 및 정상재고 (요청하신 볼드 적용)
-    rows.append({'label': '<b>매입매출</b>', 'kind': 'detail', 'vals': cvs(v_매입), 'mom': mom(v_매입), 'dec': dec})
-    rows.append({'label': '<b>정상재고</b>', 'kind': 'subtotal', 'vals': cvs(v_정상), 'mom': mom(v_정상), 'dec': dec})
-    
-    # 3. [구분] 계 및 장기재고 (요청하신 볼드 적용 및 장기재고 비율 제거)
+
+    # 2. [구분] 계 → 정상재고(흰 배경·비볼드 값) → 매입매출(흰 배경·비볼드 값) → 장기재고
     rows.append({'label': f'<b>{g1} 계</b>', 'kind': 'total', 'vals': cvs(v_총계), 'mom': mom(v_총계), 'dec': dec})
+    rows.append({'label': '<b>정상재고</b>', 'kind': 'detail', 'vals': cvs(v_정상), 'mom': mom(v_정상), 'dec': dec})
+    rows.append({'label': '<b>매입매출</b>', 'kind': 'detail', 'vals': cvs(v_매입), 'mom': mom(v_매입), 'dec': dec})
     rows.append({'label': '<b>장기재고</b>', 'kind': 'total', 'vals': cvs(v_장기), 'mom': mom(v_장기), 'dec': dec})
-    
+
     return rows
 
 # ── 종합 현황 데이터 빌더 ────────────────────────────────────────────────
@@ -379,9 +377,9 @@ def _build_종합_rows(df, col_spec):
     for g1 in ['원재료', '재공품', '제품']:
         rows.append({'label': g1, 'kind': 'detail', 'vals': cvs(v, g1), 'mom': mom(v, g1), 'dec': dec})
     
-    # 장기재고 및 전체 총계 (비율 제거됨)
-    rows.append({'label': '<b>장기재고</b>', 'kind': 'total', 'vals': cvs(j_총계), 'mom': mom(j_총계), 'dec': dec})
+    # 전체 총계 및 장기재고 (비율 제거됨)
     rows.append({'label': '<b>총 재고 계</b>', 'kind': 'total', 'vals': cvs(v_총계), 'mom': mom(v_총계), 'dec': dec})
+    rows.append({'label': '<b>장기재고</b>', 'kind': 'total', 'vals': cvs(j_총계), 'mom': mom(j_총계), 'dec': dec})
     return rows
 
 # ── 차트 함수 생략 (기존 _build_단품_chart_data, _build_종합_chart_data, _chart_단품, _chart_종합은 그대로 유지) ──
@@ -519,7 +517,7 @@ def _chart_단품(x_labels, 정상_vals, 매입_vals, 기타_vals, 장기_vals, 
         marker_color='#3b4a5a', marker_line_width=0,
         text=[fmt_v(v) if v > 0 else '' for v in 정상_vals], # 볼드 제거
         textposition='inside', insidetextanchor='end',
-        textfont=dict(color='white', size=10), # 폰트 10으로 통일
+        textfont=dict(color='white', size=16), # 폰트 16으로 통일
     ))
     
     # 2. 매입매출 (빨간색 막대)
@@ -544,35 +542,25 @@ def _chart_단품(x_labels, 정상_vals, 매입_vals, 기타_vals, 장기_vals, 
         marker=dict(size=8, color='white', line=dict(color='#FFC000', width=2)), # 마커 스타일 통일
         text=[fmt_v(v) if v > 0 else '' for v in 장기_vals], # 볼드 제거
         textposition='top center',
-        textfont=dict(size=10, color='#FFC000'), # 폰트 10으로 통일
+        textfont=dict(size=16, color='#FFC000'), # 폰트 16으로 통일
     ))
 
     # 최대값 계산하여 여백 확보
     max_total = max([a + b + c for a, b, c in zip(정상_vals, 매입_vals, 기타_vals)], default=1)
 
     fig.update_layout(
-        barmode='stack', height=280,
+        barmode='stack', height=340,
+        font=dict(family='sans-serif'),
         margin=dict(l=40, r=20, t=30, b=40),
         showlegend=True,
         legend=dict(orientation='h', x=0.5, xanchor='center',
                     y=-0.15, yanchor='top',
                     font=dict(size=11), bgcolor='rgba(0,0,0,0)'),
-        xaxis=dict(showgrid=False, tickfont=dict(size=11, color=C_NAVY)), # 색상 통일
+        xaxis=dict(showgrid=False, tickfont=dict(size=14, color=C_NAVY)), # 색상 통일
         yaxis=dict(showgrid=True, gridcolor='#eee',
                    range=[0, max_total * 1.15], 
                    showticklabels=True, tickfont=dict(size=11, color='#555')),
-        plot_bgcolor='white', paper_bgcolor='white', bargap=0.4,
-        # 우측 상단 단위 라벨 추가
-        annotations=[
-            dict(
-                text='(단위 : 톤)',
-                xref='paper', yref='paper',
-                x=1.0, y=1.05,
-                showarrow=False,
-                font=dict(size=11, color='gray'),
-                xanchor='right', yanchor='bottom'
-            )
-        ]
+        plot_bgcolor='white', paper_bgcolor='white', bargap=0.52,
     )
     return fig
 
@@ -583,19 +571,19 @@ def _chart_종합(x_labels, 제품_v, 재공품_v, 원재료_v, 장기_v, pct_v)
         name='원재료', x=x_labels, y=원재료_v,
         marker_color=C_NAVY, marker_line_width=0,
         text=[_fmt(v, decimal=0) if v > 0 else '' for v in 원재료_v],
-        textposition='inside', textfont=dict(color='white', size=10),
+        textposition='inside', textfont=dict(color='white', size=16),
     ))
     fig.add_trace(go.Bar(
         name='재공품', x=x_labels, y=재공품_v,
         marker_color=C_CHART_SEC, marker_line_width=0,
         text=[_fmt(v, decimal=0) if v > 0 else '' for v in 재공품_v],
-        textposition='inside', textfont=dict(color='white', size=10),
+        textposition='inside', textfont=dict(color='white', size=16),
     ))
     fig.add_trace(go.Bar(
         name='제품', x=x_labels, y=제품_v,
         marker_color=C_ORANGE, marker_line_width=0,
         text=[_fmt(v, decimal=0) if v > 0 else '' for v in 제품_v],
-        textposition='inside', textfont=dict(color='white', size=10),
+        textposition='inside', textfont=dict(color='white', size=16),
     ))
     
     fig.add_trace(go.Scatter(
@@ -606,34 +594,25 @@ def _chart_종합(x_labels, 제품_v, 재공품_v, 원재료_v, 장기_v, pct_v)
         # ⭕ 값은 정수, 퍼센트는 소수점 1자리
         text=[f"{_fmt(v, decimal=0)}\n({p:.1f}%)" if v > 0 else '' for v, p in zip(장기_v, pct_v)],
         textposition='top center',
-        textfont=dict(size=10, color='#FFC000'),
+        textfont=dict(size=16, color='#FFC000'),
     ))
 
     max_total = max(a + b + c for a, b, c in zip(원재료_v, 재공품_v, 제품_v)) if 원재료_v else 1
 
     fig.update_layout(
-        barmode='stack', height=280,
+        barmode='stack', height=340,
+        font=dict(family='sans-serif'),
         margin=dict(l=40, r=20, t=30, b=40),
         showlegend=True,
         # ⭕ 다른 그래프와 동일한 범례 위치 적용
         legend=dict(orientation='h', x=0.5, xanchor='center',
                     y=-0.15, yanchor='top',
                     font=dict(size=11), bgcolor='rgba(0,0,0,0)'),
-        xaxis=dict(showgrid=False, tickfont=dict(size=11, color=C_NAVY)),
+        xaxis=dict(showgrid=False, tickfont=dict(size=14, color=C_NAVY)),
         yaxis=dict(showgrid=True, gridcolor='#eee',
                    range=[0, max_total * 1.15], 
                    showticklabels=True, tickfont=dict(size=11, color='#555')),
-        plot_bgcolor='white', paper_bgcolor='white', bargap=0.4,
-        annotations=[
-            dict(
-                text='(단위 : 톤)',
-                xref='paper', yref='paper',
-                x=1.0, y=1.05,
-                showarrow=False,
-                font=dict(size=11, color='gray'),
-                xanchor='right', yanchor='bottom'
-            )
-        ]
+        plot_bgcolor='white', paper_bgcolor='white', bargap=0.52,
     )
     return fig
 
@@ -801,7 +780,7 @@ def _chart_등급별(x_labels, grade_data, rework_data):
             name=f'제품({g})', x=x_labels, y=vals,
             marker_color=colors.get(g, C_NAVY), marker_line_width=0,
             text=[_fmt(v, decimal=0) if v > 0 else '' for v in vals],
-            textposition='inside', textfont=dict(color='white', size=10),
+            textposition='inside', textfont=dict(color='white', size=16),
             yaxis='y1'  # 기본 Y축에 매핑
         ))
 
@@ -830,7 +809,7 @@ def _chart_등급별(x_labels, grade_data, rework_data):
         marker=dict(size=8, color='white', line=dict(color=colors['재공품'], width=2)),
         text=[_fmt(v, decimal=0) if v > 0 else '' for v in rework_data],
         textposition='top center',
-        textfont=dict(size=10, color=colors['재공품']),
+        textfont=dict(size=16, color=colors['재공품']),
         yaxis='y2'  # 보조 Y축으로 분리
     ))
 
@@ -839,14 +818,15 @@ def _chart_등급별(x_labels, grade_data, rework_data):
     max_line = max(rework_data, default=1)
 
     fig.update_layout(
-        barmode='stack', height=320,
+        barmode='stack', height=380,
+        font=dict(family='sans-serif'),
         margin=dict(l=10, r=10, t=30, b=20),
         showlegend=True,
         legend=dict(orientation='h', x=0.5, xanchor='center',
                     y=-0.2, yanchor='top',
                     font=dict(size=11), bgcolor='rgba(255,255,255,0.8)',
                     borderwidth=0),
-        xaxis=dict(showgrid=False, tickfont=dict(size=11, color=C_NAVY)),
+        xaxis=dict(showgrid=False, tickfont=dict(size=14, color=C_NAVY)),
         
         # 기본 Y축 (막대그래프 - 제품)
         yaxis=dict(
@@ -864,7 +844,7 @@ def _chart_등급별(x_labels, grade_data, rework_data):
             range=[0, max_line * 1.3] # 텍스트가 잘리지 않도록 30% 여유
         ),
         
-        plot_bgcolor='white', paper_bgcolor='white', bargap=0.3,
+        plot_bgcolor='white', paper_bgcolor='white', bargap=0.44,
     )
     return fig
 

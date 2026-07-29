@@ -386,7 +386,7 @@ def _build_판매현황_등급별_chart(x_labels, rows):
                 text=[f"{int(v):,}" if v > 0 else '' for v in chart_vals],
                 textposition='inside',
                 insidetextanchor='middle',
-                textfont=dict(color='white', size=11),
+                textfont=dict(color='white', size=16),
             ))
             color_idx += 1
             
@@ -401,7 +401,7 @@ def _build_판매현황_등급별_chart(x_labels, rows):
         mode='text',
         text=[f"<b>{int(t):,}</b>" for t in totals],
         textposition='top center',
-        textfont=dict(color='#2d3748', size=12),
+        textfont=dict(color='#2d3748', size=17),
         showlegend=False,
         hoverinfo='skip'
     ))
@@ -410,14 +410,14 @@ def _build_판매현황_등급별_chart(x_labels, rows):
 
     fig.update_layout(
         barmode='stack',
-        height=360,
+        height=400,
         margin=dict(l=10, r=20, t=30, b=60),
         legend=dict(
             orientation='h', y=-0.22, x=0.5, xanchor='center',
-            font=dict(size=12), bgcolor='rgba(0,0,0,0)',
+            font=dict(size=12, family='sans-serif'), bgcolor='rgba(0,0,0,0)',
         ),
         xaxis=dict(
-            tickfont=dict(size=11, color='#4a5568'),
+            tickfont=dict(size=14, color='#4a5568'),
             showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
         ),
         yaxis=dict(
@@ -425,7 +425,7 @@ def _build_판매현황_등급별_chart(x_labels, rows):
             range=[0, max_tot * 1.20], # 합계 표시를 위한 여백 확보
             showticklabels=False, showline=False, zeroline=False,
         ),
-        plot_bgcolor='white', paper_bgcolor='white',
+        plot_bgcolor='white', paper_bgcolor='white', bargap=0.35,
         font=dict(size=12, family='sans-serif'),
     )
     return fig
@@ -514,7 +514,7 @@ def _build_CHQ_B급제외_chart(x_labels, rows):
                 text=[f"{int(v):,}" if v > 0 else '' for v in vals],
                 textposition='inside',
                 insidetextanchor='middle',
-                textfont=dict(color='white', size=12),
+                textfont=dict(color='white', size=17),
             ))
             for i, v in enumerate(vals):
                 totals[i] += v
@@ -526,7 +526,7 @@ def _build_CHQ_B급제외_chart(x_labels, rows):
         mode='text',
         text=[f"<b>{int(t):,}</b>" for t in totals],
         textposition='top center',
-        textfont=dict(color='#2d3748', size=12),
+        textfont=dict(color='#2d3748', size=17),
         showlegend=False,
         hoverinfo='skip'
     ))
@@ -535,14 +535,14 @@ def _build_CHQ_B급제외_chart(x_labels, rows):
 
     fig.update_layout(
         barmode='stack', 
-        height=380,
+        height=420,
         margin=dict(l=10, r=20, t=30, b=60),
         legend=dict(
             orientation='h', y=-0.22, x=0.5, xanchor='center',
-            font=dict(size=12), bgcolor='rgba(0,0,0,0)',
+            font=dict(size=12, family='sans-serif'), bgcolor='rgba(0,0,0,0)',
         ),
         xaxis=dict(
-            tickfont=dict(size=11, color='#4a5568'),
+            tickfont=dict(size=14, color='#4a5568'),
             showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
         ),
         yaxis=dict(
@@ -550,7 +550,7 @@ def _build_CHQ_B급제외_chart(x_labels, rows):
             range=[0, max_tot * 1.20],
             showticklabels=False, showline=False, zeroline=False,
         ),
-        plot_bgcolor='white', paper_bgcolor='white',
+        plot_bgcolor='white', paper_bgcolor='white', bargap=0.35,
         font=dict(size=12, family='sans-serif'),
     )
     return fig
@@ -625,7 +625,7 @@ def _build_CHQ_산업중국재_chart(x_labels, rows):
                 text=[f"{int(v):,}" if v > 0 else '' for v in vals],
                 textposition='inside',
                 insidetextanchor='middle',
-                textfont=dict(color='white', size=12),
+                textfont=dict(color='white', size=17),
             ))
             for i, v in enumerate(vals):
                 totals[i] += v
@@ -637,7 +637,7 @@ def _build_CHQ_산업중국재_chart(x_labels, rows):
         mode='text',
         text=[f"<b>{int(t):,}</b>" for t in totals],
         textposition='top center',
-        textfont=dict(color='#2d3748', size=12),
+        textfont=dict(color='#2d3748', size=17),
         showlegend=False,
         hoverinfo='skip'
     ))
@@ -646,14 +646,14 @@ def _build_CHQ_산업중국재_chart(x_labels, rows):
 
     fig.update_layout(
         barmode='stack',
-        height=380,
+        height=420,
         margin=dict(l=10, r=20, t=30, b=60),
         legend=dict(
             orientation='h', y=-0.22, x=0.5, xanchor='center',
-            font=dict(size=12), bgcolor='rgba(0,0,0,0)',
+            font=dict(size=12, family='sans-serif'), bgcolor='rgba(0,0,0,0)',
         ),
         xaxis=dict(
-            tickfont=dict(size=11, color='#4a5568'),
+            tickfont=dict(size=14, color='#4a5568'),
             showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
         ),
         yaxis=dict(
@@ -661,7 +661,7 @@ def _build_CHQ_산업중국재_chart(x_labels, rows):
             range=[0, max_tot * 1.20],
             showticklabels=False, showline=False, zeroline=False,
         ),
-        plot_bgcolor='white', paper_bgcolor='white',
+        plot_bgcolor='white', paper_bgcolor='white', bargap=0.35,
         font=dict(size=12, family='sans-serif'),
     )
     return fig
@@ -734,7 +734,7 @@ def _build_CD_B급제외_chart(x_labels, rows):
                 text=[f"{int(v):,}" if v > 0 else '' for v in vals],
                 textposition='inside',
                 insidetextanchor='middle',
-                textfont=dict(color='white', size=11),
+                textfont=dict(color='white', size=16),
             ))
             for i, v in enumerate(vals):
                 totals[i] += v
@@ -745,7 +745,7 @@ def _build_CD_B급제외_chart(x_labels, rows):
         mode='text',
         text=[f"<b>{int(t):,}</b>" for t in totals],
         textposition='top center',
-        textfont=dict(color='#2d3748', size=12),
+        textfont=dict(color='#2d3748', size=17),
         showlegend=False,
         hoverinfo='skip'
     ))
@@ -754,15 +754,15 @@ def _build_CD_B급제외_chart(x_labels, rows):
 
     fig.update_layout(
         barmode='stack',
-        height=380,
+        height=420,
         margin=dict(l=10, r=20, t=30, b=60),
         legend=dict(
             orientation='h', y=-0.22, x=0.5, xanchor='center',
-            font=dict(size=12), bgcolor='rgba(0,0,0,0)',
+            font=dict(size=12, family='sans-serif'), bgcolor='rgba(0,0,0,0)',
             traceorder='reversed'
         ),
         xaxis=dict(
-            tickfont=dict(size=11, color='#4a5568'),
+            tickfont=dict(size=14, color='#4a5568'),
             showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
         ),
         yaxis=dict(
@@ -770,7 +770,7 @@ def _build_CD_B급제외_chart(x_labels, rows):
             range=[0, max_tot * 1.20],
             showticklabels=False, showline=False, zeroline=False,
         ),
-        plot_bgcolor='white', paper_bgcolor='white',
+        plot_bgcolor='white', paper_bgcolor='white', bargap=0.35,
         font=dict(size=12, family='sans-serif'),
     )
     return fig
@@ -839,7 +839,7 @@ def _build_CD_산업중국재_chart(x_labels, rows):
                 text=[f"{int(v):,}" if v > 0 else '' for v in vals],
                 textposition='inside',
                 insidetextanchor='middle',
-                textfont=dict(color='white', size=11),
+                textfont=dict(color='white', size=16),
             ))
             for i, v in enumerate(vals):
                 totals[i] += v
@@ -850,7 +850,7 @@ def _build_CD_산업중국재_chart(x_labels, rows):
         mode='text',
         text=[f"<b>{int(t):,}</b>" for t in totals],
         textposition='top center',
-        textfont=dict(color='#2d3748', size=12),
+        textfont=dict(color='#2d3748', size=17),
         showlegend=False,
         hoverinfo='skip'
     ))
@@ -859,15 +859,15 @@ def _build_CD_산업중국재_chart(x_labels, rows):
 
     fig.update_layout(
         barmode='stack',
-        height=380,
+        height=420,
         margin=dict(l=10, r=20, t=30, b=60),
         legend=dict(
             orientation='h', y=-0.22, x=0.5, xanchor='center',
-            font=dict(size=12), bgcolor='rgba(0,0,0,0)',
+            font=dict(size=12, family='sans-serif'), bgcolor='rgba(0,0,0,0)',
             traceorder='reversed'
         ),
         xaxis=dict(
-            tickfont=dict(size=11, color='#4a5568'),
+            tickfont=dict(size=14, color='#4a5568'),
             showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
         ),
         yaxis=dict(
@@ -875,7 +875,7 @@ def _build_CD_산업중국재_chart(x_labels, rows):
             range=[0, max_tot * 1.20],
             showticklabels=False, showline=False, zeroline=False,
         ),
-        plot_bgcolor='white', paper_bgcolor='white',
+        plot_bgcolor='white', paper_bgcolor='white', bargap=0.35,
         font=dict(size=12, family='sans-serif'),
     )
     return fig
@@ -966,7 +966,7 @@ def _build_비가공품판매현황_chart(x_labels, rows):
                     text=[f"{int(v):,}" if v > 0 else '' for v in vals],
                     textposition='inside',
                     insidetextanchor='middle',
-                    textfont=dict(color='white', size=11),
+                    textfont=dict(color='white', size=16),
                     yaxis='y'
                 ))
                 for i, v in enumerate(vals):
@@ -982,7 +982,7 @@ def _build_비가공품판매현황_chart(x_labels, rows):
         mode='text',
         text=[f"<b>{int(t):,}</b>" for t in totals],
         textposition='top center',
-        textfont=dict(color='#2d3748', size=12),
+        textfont=dict(color='#2d3748', size=17),
         showlegend=False,
         hoverinfo='skip',
         yaxis='y'
@@ -1002,7 +1002,7 @@ def _build_비가공품판매현황_chart(x_labels, rows):
             line=dict(color=C_ORANGE, width=2),
             text=[f"{int(v):,}개" if v is not None else '' for v in line_y],
             textposition='top center',
-            textfont=dict(color=C_ORANGE, size=11, weight='bold'),
+            textfont=dict(color=C_ORANGE, size=16, weight='bold'),
             yaxis='y2',
             connectgaps=True # 데이터가 비어있어도 앞뒤 선을 자연스럽게 연결
         ))
@@ -1014,31 +1014,31 @@ def _build_비가공품판매현황_chart(x_labels, rows):
 
     fig.update_layout(
         barmode='stack',
-        height=500, 
+        height=540,
         margin=dict(l=10, r=10, t=30, b=60),
         legend=dict(
             orientation='h', y=-0.15, x=0.5, xanchor='center',
-            font=dict(size=12), bgcolor='rgba(0,0,0,0)',
+            font=dict(size=12, family='sans-serif'), bgcolor='rgba(0,0,0,0)',
         ),
         xaxis=dict(
-            tickfont=dict(size=11, color='#4a5568'),
+            tickfont=dict(size=14, color='#4a5568'),
             showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
         ),
-        # 1차 축 (누적 막대용): 차트 하단 60% 영역 (간격 넓힘)[cite: 2]
+        # 1차 축 (누적 막대용): 차트 하단 72% 영역
         yaxis=dict(
-            domain=[0, 0.60],
+            domain=[0, 0.72],
             showgrid=True, gridcolor=C_CHART_GRID, gridwidth=1,
             range=[0, max_tot * 1.20],
             showticklabels=False, showline=False, zeroline=False,
         ),
-        # 2차 축 (거래처 수 꺾은선용): 차트 상단 25% 영역 (완전 분리)[cite: 2]
+        # 2차 축 (거래처 수 꺾은선용): 차트 상단 22% 영역
         yaxis2=dict(
-            domain=[0.75, 1.0],
+            domain=[0.82, 1.0],
             range=[0, max_line * 1.40],
             showgrid=False,
             showticklabels=False, showline=False, zeroline=False,
         ),
-        plot_bgcolor='white', paper_bgcolor='white',
+        plot_bgcolor='white', paper_bgcolor='white', bargap=0.35,
         font=dict(size=12, family='sans-serif'),
     )
     return fig
@@ -1121,7 +1121,7 @@ def _build_동일거래매입매출_chart(x_labels, rows):
                 text=[f"{int(v):,}" if v > 0 else '' for v in vals],
                 textposition='inside',
                 insidetextanchor='middle',
-                textfont=dict(color='white', size=11),
+                textfont=dict(color='white', size=16),
             ))
             color_idx += 1
             for i, v in enumerate(vals):
@@ -1134,7 +1134,7 @@ def _build_동일거래매입매출_chart(x_labels, rows):
         mode='text',
         text=[f"<b>{int(t):,}</b>" for t in totals],
         textposition='top center',
-        textfont=dict(color='#2d3748', size=12),
+        textfont=dict(color='#2d3748', size=17),
         showlegend=False,
         hoverinfo='skip'
     ))
@@ -1143,14 +1143,14 @@ def _build_동일거래매입매출_chart(x_labels, rows):
 
     fig.update_layout(
         barmode='stack',
-        height=380, # 단일 y축 레이아웃에 맞추어 높이 최적화
+        height=420, # 단일 y축 레이아웃에 맞추어 높이 최적화
         margin=dict(l=10, r=20, t=30, b=60),
         legend=dict(
             orientation='h', y=-0.22, x=0.5, xanchor='center',
-            font=dict(size=12), bgcolor='rgba(0,0,0,0)',
+            font=dict(size=12, family='sans-serif'), bgcolor='rgba(0,0,0,0)',
         ),
         xaxis=dict(
-            tickfont=dict(size=11, color='#4a5568'),
+            tickfont=dict(size=14, color='#4a5568'),
             showgrid=False, linecolor='#e2e8f0', linewidth=1, showline=True,
         ),
         yaxis=dict(
@@ -1158,7 +1158,7 @@ def _build_동일거래매입매출_chart(x_labels, rows):
             range=[0, max_tot * 1.20],
             showticklabels=False, showline=False, zeroline=False,
         ),
-        plot_bgcolor='white', paper_bgcolor='white',
+        plot_bgcolor='white', paper_bgcolor='white', bargap=0.35,
         font=dict(size=12, family='sans-serif'),
     )
     return fig
@@ -1401,6 +1401,8 @@ def render_page(app, year_state, month_state):
                 )
             with col4_r:
                 app.markdown(_memo_html(memo_4), unsafe_allow_html=True)
+
+            app.markdown('<div style="height:40px"></div>', unsafe_allow_html=True)
 
             # ── 5) 동일거래 매입매출 현황 ──────────────────────────────────────
             memo_5 = _get_memo(Sheets.동일거래매입매출현황_메모, year, month)

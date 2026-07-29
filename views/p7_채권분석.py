@@ -103,9 +103,9 @@ def _외상매출받을어음_표_to_html(rows, col_hdrs):
         
         cells = f'<td style="{lbl_s}">{label}</td>'
         
-        # ⭕ 실적 값 랜더링 (소수점 첫째자리 표기)
+        # ⭕ 실적 값 랜더링 (정수 표기, 첫째자리에서 반올림)
         for v in vals:
-            cells += f'<td style="{num_s}">{_fmt(v, decimal=1)}</td>'
+            cells += f'<td style="{num_s}">{_fmt(v, decimal=0)}</td>'
             
         # ⭕ 구성비 랜더링 (소수점 첫째자리%)
         cells += f'<td style="{num_s}">{_fmt(ratio, decimal=1)}%</td>'
@@ -316,23 +316,28 @@ def _build_초과채권_내수(year, month):
 
     return rows, col_hdrs
 
+def _fmt_pp(v):
+    if v > 0: return f"↑{v:.1f}%p"
+    if v < 0: return f"↓{abs(v):.1f}%p"
+    return f"{v:.1f}%p"
+
 def _초과채권_내수_to_html(rows, col_hdrs):
     th = ''.join(f'<th style="{_TH}">{h}</th>' for h in ['구분'] + col_hdrs)
     body = ''
-    
+
     for kind, label, vals, diff in rows:
         cells = f'<td style="{ROW_ITEM}">{label}</td>'
-        
+
         if kind == 'pct':
             for v in vals:
                 # 백분율(%) 값 소수점 첫째 자리까지 표시
                 cells += f'<td style="{_TD_NUM}">{_fmt(v, decimal=1)}%</td>'
-            cells += f'<td style="{_TD_NUM}">{_fmt(diff, decimal=1)}%</td>'
+            cells += f'<td style="{_TD_RED if diff < 0 else _TD_NUM}">{_fmt_pp(diff)}</td>'
         else:
             for v in vals:
-                # 일반 수치 데이터 소수점 첫째 자리까지 표시
-                cells += f'<td style="{_TD_NUM}">{_fmt(v, decimal=1)}</td>'
-            cells += f'<td style="{_TD_RED if diff < 0 else _TD_NUM}">{_fmt(diff, decimal=1)}</td>'
+                # 일반 수치 데이터 정수 표기(반올림)
+                cells += f'<td style="{_TD_NUM}">{_fmt(v, decimal=0)}</td>'
+            cells += f'<td style="{_TD_RED if diff < 0 else _TD_NUM}">{_fmt(diff, decimal=0)}</td>'
             
         body += f'<tr>{cells}</tr>'
         
@@ -399,11 +404,11 @@ def _부서별_초과채권_to_html(rows, col_hdrs):
         for idx, v in enumerate(vals):
             # 5번째 인덱스는 '증감' 컬럼이므로 음수일 때 빨간색 처리
             if idx == 5 and v < 0:
-                # 증감(음수) 값 소수점 첫째 자리까지 표시
-                cells += f'<td style="{ROW_HDR_RED if kind == "total" else _TD_RED}">{_fmt(v, decimal=1)}</td>'
+                # 증감(음수) 값 정수 표기(반올림)
+                cells += f'<td style="{ROW_HDR_RED if kind == "total" else _TD_RED}">{_fmt(v, decimal=0)}</td>'
             else:
-                # 나머지 데이터 소수점 첫째 자리까지 표시
-                cells += f'<td style="{num_s}">{_fmt(v, decimal=1)}</td>'
+                # 나머지 데이터 정수 표기(반올림)
+                cells += f'<td style="{num_s}">{_fmt(v, decimal=0)}</td>'
                 
         body += f'<tr>{cells}</tr>'
         

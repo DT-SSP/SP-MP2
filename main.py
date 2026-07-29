@@ -16,7 +16,7 @@ from violit.context import layout_ctx
 from data.config import Sheets
 from data.loader import load_sheet, preload_all, refresh_all
 from views import p1_실적요약 ,p2_손익분석, p3_매출분석, p4_생산분석 
-from views import p5_비용분석, p6_재고자산, p7_채권분석, p8_기타, p9_해외법인, p10_별첨
+from views import p5_비용분석, p6_재고자산, p7_채권분석, p8_인원분석, p9_해외법인, p10_별첨
 
 
 # 데이터 새로고침 버튼을 볼 수 있는 관리자 아이디 목록
@@ -195,7 +195,7 @@ app.navigation([
     vl.Page(_protected(p5_비용분석.render_page),     title="5. 비용분석"),
     vl.Page(_protected(p6_재고자산.render_page),     title="6. 재고자산분석"),
     vl.Page(_protected(p7_채권분석.render_page),     title="7. 채권분석"),
-    vl.Page(_protected(p8_기타.render_page),         title="8. 기타"),
+    vl.Page(_protected(p8_인원분석.render_page),         title="8. 인원분석"),
     vl.Page(_protected(p9_해외법인.render_page),     title="9. 해외법인실적"),
     vl.Page(_protected(p10_별첨.render_page),     title="10. 별첨"),
 ])

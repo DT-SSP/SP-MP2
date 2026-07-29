@@ -221,7 +221,7 @@ def render_page(app, year_state, month_state):
 
     def _render_title():
         app.markdown(
-            f'<h1 style="color:#404448">{int(year_state.value)}년 {int(month_state.value)}월 기타</h1>',
+            f'<h1 style="color:#404448">{int(year_state.value)}년 {int(month_state.value)}월 인원분석</h1>',
             unsafe_allow_html=True,
         )
     app.If(lambda: True, _render_title)

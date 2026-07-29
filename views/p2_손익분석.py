@@ -743,19 +743,14 @@ def _build_포스코_JFE_입고가격_table(year: int, month: int):
     d["item"] = kp.apply(lambda x: x[2])
 
     d = d.sort_values(["연도", "월", "구분3"])
-    
-    # [수정된 부분] groupby(["연도", "월"])를 사용하지 않고 위에서 아래로 빈칸 채우기
-    # 월 값이 NaN인 '월평균' 데이터가 삭제되는 현상을 방지합니다.
     d["kind"] = d["kind"].replace("", np.nan).ffill().fillna("")
 
     frames_dict = {}
     col_order = []
-    # 3년 전, 2년 전, 1년 전 연도 목록으로 수정
     monthly_years = [year - 3, year - 2, year - 1]
     
     d_base = d[d["구분3"] == "월평균"]
     for y in monthly_years:
-        # 월평균 데이터는 연도로만 필터링
         dd = d_base[d_base["연도"] == y]
         cname = f"'{str(y)[-2:]}년 월평균"
         
@@ -784,7 +779,7 @@ def _build_포스코_JFE_입고가격_table(year: int, month: int):
     def make_label(row):
         k, p, i = str(row["kind"]).strip(), str(row["party"]).strip(), str(row["item"]).strip()
         if p == "포스코 할인단가(원)": return "포스코 할인단가(원)"
-        if p == "환율": return "환율"
+        if p == "JFE 입고 환율": return "환율"
         if p == "차이": return "탄소강_차이 ⓐ-ⓑ" if k == "탄소강" else "합금강_차이 ⓒ-ⓓ" if k == "합금강" else ""
         imap = {
             ("탄소강", "SWRCH45FS"): "탄소강_포스코_SWRCH45FS ⓐ",
@@ -803,12 +798,23 @@ def _build_포스코_JFE_입고가격_table(year: int, month: int):
     if not wide.empty:
         wide["구분"] = wide.apply(make_label, axis=1)
         wide = wide.drop_duplicates(subset=["구분"], keep="last") 
+        
+        # [수정] 이미지와 완전히 동일한 배치를 위한 순서 재정의 (환율 위치 상단으로 이동)
         correct_order = [
-            "포스코 할인단가(원)", "탄소강_포스코_SWRCH45FS ⓐ", "탄소강_포스코_SWRCH45FS_변동폭(천원/톤)",
-            "탄소강_JFE_SWRCH45K-M ⓑ", "탄소강_JFE_SWRCH45K-M(USD)", "탄소강_JFE_SWRCH45K-M_변동폭(USD/톤)",
-            "탄소강_차이 ⓐ-ⓑ", "합금강_포스코_SCM435H Y73 ⓒ", "합금강_포스코_SCM435H Y73_변동폭(천원/톤)",
-            "합금강_JFE_SCM435H ⓓ", "합금강_JFE_SCM435H_USD", "합금강_JFE_SCM435H_변동폭(USD/톤)",
-            "합금강_차이 ⓒ-ⓓ", "환율"
+            "포스코 할인단가(원)", 
+            "환율",
+            "탄소강_포스코_SWRCH45FS ⓐ", 
+            "탄소강_포스코_SWRCH45FS_변동폭(천원/톤)",
+            "탄소강_JFE_SWRCH45K-M ⓑ", 
+            "탄소강_JFE_SWRCH45K-M(USD)", 
+            "탄소강_JFE_SWRCH45K-M_변동폭(USD/톤)",
+            "탄소강_차이 ⓐ-ⓑ", 
+            "합금강_포스코_SCM435H Y73 ⓒ", 
+            "합금강_포스코_SCM435H Y73_변동폭(천원/톤)",
+            "합금강_JFE_SCM435H ⓓ", 
+            "합금강_JFE_SCM435H_USD", 
+            "합금강_JFE_SCM435H_변동폭(USD/톤)",
+            "합금강_차이 ⓒ-ⓓ"
         ]
         wide = wide.set_index("구분").reindex(correct_order).reset_index()
 
@@ -820,47 +826,71 @@ def _포스코_JFE_입고가격_to_html(df) -> str:
     th_html = '<tr>' + ''.join(f'<th style="{_TH}; white-space: nowrap;">{c}</th>' for c in cols) + '</tr>'
 
     body_html = ''
-    lv0_items = ["포스코 할인단가(원)", "탄소강_포스코_SWRCH45FS ⓐ", "탄소강_JFE_SWRCH45K-M ⓑ", "탄소강_차이 ⓐ-ⓑ",
-                 "합금강_포스코_SCM435H Y73 ⓒ", "합금강_JFE_SCM435H ⓓ", "합금강_차이 ⓒ-ⓓ", "환율"]
+    
+    # 1. 배경색(연보라/회색)이 들어갈 항목
+    bg_items = [
+        "탄소강_포스코_SWRCH45FS ⓐ", 
+        "탄소강_JFE_SWRCH45K-M ⓑ", 
+        "탄소강_JFE_SWRCH45K-M_변동폭(USD/톤)",
+        "합금강_포스코_SCM435H Y73 ⓒ", 
+        "합금강_JFE_SCM435H ⓓ", 
+        "합금강_JFE_SCM435H_변동폭(USD/톤)"
+    ]
+    
+    # 2. 공백(빈 줄)을 추가할 기준 항목
+    spacer_after = ["환율", "탄소강_차이 ⓐ-ⓑ"]
+    
+    # 3. 블록별 구분을 위해 위/아래 굵은 테두리 선을 추가할 항목
+    thick_top = ["포스코 할인단가(원)", "탄소강_포스코_SWRCH45FS ⓐ", "합금강_포스코_SCM435H Y73 ⓒ"]
+    thick_bottom = ["환율", "탄소강_차이 ⓐ-ⓑ", "합금강_차이 ⓒ-ⓓ"]
 
     for _, row in df.iterrows():
-        body_html += '<tr>'
+        label = str(row['구분']).strip()
+        is_variance_row = "변동폭" in label
         
-        # 현재 행이 '변동폭' 데이터인지 확인
-        is_variance_row = "변동폭" in str(row['구분'])
+        # 교차 배경색 지정
+        bg_color = "#F2F2FA" if label in bg_items else "#FFFFFF"
+        
+        # 테두리 굵기 지정
+        border_top = "2px solid #555" if label in thick_top else "1px solid #d3d3d3"
+        border_bottom = "2px solid #555" if label in thick_bottom else "1px solid #d3d3d3"
+        
+        body_html += f'<tr style="background-color: {bg_color};">'
         
         for c in cols:
             val = row[c]
+            
+            # 셀 기본 테두리 및 여백 설정
+            td_base_style = f'border: 1px solid #d3d3d3; border-top: {border_top}; border-bottom: {border_bottom}; padding: 8px 16px; font-size: 15px; white-space: nowrap;'
+            
             if c == '구분':
-                pad = 0 if str(val).strip() in lv0_items else 16
-                text = f'<span style="padding-left:{pad}px">{val}</span>'
-                body_html += f'<td style="border: 1px solid #aaa; padding: 8px 16px; font-size: 15px; text-align: left; white-space: nowrap;">{text}</td>'
+                td_style = f'{td_base_style} text-align: left;'
+                body_html += f'<td style="{td_style}">{label}</td>'
             else:
-                # 데이터가 비어있는지 확인
                 if pd.isna(val) or str(val).strip() == "":
                     text = ""
                 else:
                     try:
                         f_val = float(val)
-                        
-                        # 변동폭 행일 경우 증감 아이콘 및 색상 처리
                         if is_variance_row:
                             if f_val > 0:
-                                text = f'<span style="color:#1565C0;">▲ {f_val:,.0f}</span>'  # 파란색 상향
+                                text = f'↑{f_val:,.0f}'
                             elif f_val < 0:
-                                text = f'<span style="color:#C62828;">▼ {abs(f_val):,.0f}</span>' # 빨간색 하향
+                                text = f'↓{abs(f_val):,.0f}'
                             else:
-                                text = "0.0"
+                                text = "↑0"
                         else:
-                            # 일반 수치형 데이터 (소수점 1자리, 천 단위 콤마)
                             text = f"{f_val:,.0f}"
-                            
                     except ValueError:
-                        # 숫자로 변환할 수 없는 예외적인 경우(텍스트 등) 그대로 출력
                         text = str(val)
                         
-                body_html += f'<td style="{_TD_NUM}">{text}</td>'
+                num_td_style = f'{_TD_NUM}; {td_base_style} text-align: right;'
+                body_html += f'<td style="{num_td_style}">{text}</td>'
         body_html += '</tr>'
+        
+        # 해당 블록이 끝난 후 공백 행(Spacer) 삽입
+        if label in spacer_after:
+            body_html += f'<tr><td colspan="{len(cols)}" style="height: 18px; border: none; background-color: #ffffff;"></td></tr>'
 
     return _html_table(th_html, body_html)
 
@@ -1601,21 +1631,21 @@ def _build_성과급_table(year, month):
         }
 
     # DB 구분을 이미지의 계층(성과/직원/임원, 격려, 외주)에 맞게 매핑
-    성과_직원_제조 = [('제조', '제조_성과')]
-    성과_직원_판관 = [('판관_직원', '판관_직원_성과')]
+    성과_직원_제조 = [('성과', '직원_제조')]
+    성과_직원_판관 = [('성과', '직원_판관')]
     성과_직원_합 = 성과_직원_제조 + 성과_직원_판관
 
-    성과_임원_제조 = [('제조', '제조_임원')] 
-    성과_임원_판관 = [('판관', '판관_임원')]
+    성과_임원_제조 = [('성과', '임원_제조')] 
+    성과_임원_판관 = [('성과', '임원_판관')]
     성과_임원_합 = 성과_임원_제조 + 성과_임원_판관
 
     성과_합 = 성과_직원_합 + 성과_임원_합
 
-    격려_제조 = [('제조', '제조_격려')]
-    격려_판관 = [('판관_직원', '판관_직원_격려')]
+    격려_제조 = [('격려', '제조')]
+    격려_판관 = [('격려', '판관')]
     격려_합 = 격려_제조 + 격려_판관
 
-    외주_항목 = [('외주', '외주')]
+    외주_항목 = [('외주', '외주')] # 외주 항목은 이미지에 안 보이지만 기존 코드 유지
 
     합계_항목 = 성과_합 + 격려_합 + 외주_항목
 
@@ -1771,7 +1801,7 @@ def _build_포스코지원금_table(year, month):
         for lbl in q_labels:
             v_qty, price, v_amt = calc(lbl, [item])
             row[f'{lbl}_주문량']  = _fmt(v_qty, decimal=0)
-            row[f'{lbl}_단가']    = _fmt(price, decimal=0)
+            row[f'{lbl}_단가']    = _fmt(price/1000, decimal=0)
             row[f'{lbl}_할인금액'] = _fmt(v_amt, decimal=0)
         rows.append(row)
 
@@ -1780,7 +1810,7 @@ def _build_포스코지원금_table(year, month):
     for lbl in q_labels:
         v_qty, price, v_amt = calc(lbl, items)
         total_row[f'{lbl}_주문량']  = _fmt(v_qty, decimal=0)
-        total_row[f'{lbl}_단가']    = _fmt(price, decimal=0)
+        total_row[f'{lbl}_단가']    = _fmt(price/1000, decimal=0)
         total_row[f'{lbl}_할인금액'] = _fmt(v_amt, decimal=0)
     rows.append(total_row)
 

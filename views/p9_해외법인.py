@@ -398,10 +398,15 @@ def _build_중국_table(get, year, month, 사업장='중국'):
             
             # _fmt가 반환하는 문자열에서 기존 '%'를 안전하게 제거한 뒤 적절한 기호를 붙여주는 헬퍼 함수
             def _p(val, is_diff=False):
-                s = str(_fmt(val, is_pct=True, decimal=1)).replace('%', '')
-                # 기존: return s + ('%' if is_diff else '%') if s and s != '-' else s 
-                # 수정: is_diff가 True일 때 '%p'를 반환하도록 변경
-                return s + ('%p' if is_diff else '%') if s and s != '-' else s
+                if is_diff:
+                    if pd.isna(val) or val is None: return ""
+                    v_pct = val * 100
+                    if v_pct > 0: return f"↑{v_pct:.1f}%p"
+                    if v_pct < 0: return f"↓{abs(v_pct):.1f}%p"
+                    return f"{v_pct:.1f}%p"
+                else:
+                    s = str(_fmt(val, is_pct=True, decimal=1)).replace('%', '')
+                    return s + '%' if s and s != '-' else s
 
             rows.append({
                 '구분':          '영업이익률 (%)',
@@ -462,8 +467,15 @@ def _build_태국_table(get, year, month, 사업장='태국'):
             
             # _fmt가 반환하는 문자열에서 기존 '%'를 안전하게 제거한 뒤 적절한 기호를 붙여주는 헬퍼 함수
             def _p(val, is_diff=False):
-                s = str(_fmt(val, is_pct=True, decimal=1)).replace('%', '')
-                return s + ('%p' if is_diff else '%') if s and s != '-' else s
+                if is_diff:
+                    if pd.isna(val) or val is None: return ""
+                    v_pct = val * 100
+                    if v_pct > 0: return f"↑{v_pct:.1f}%p"
+                    if v_pct < 0: return f"↓{abs(v_pct):.1f}%p"
+                    return f"{v_pct:.1f}%p"
+                else:
+                    s = str(_fmt(val, is_pct=True, decimal=1)).replace('%', '')
+                    return s + '%' if s and s != '-' else s
 
             rows.append({
                 '구분':          '영업이익률 (%)',
@@ -836,7 +848,11 @@ def _build_해외판매구성_table(year, month):
             return f"{v*100:.1f}%"
 
         def fmt_pct_val_diff(v):
-            return f"{v*100:.1f}%p"
+            if v is None or pd.isna(v): return ""
+            v_pct = v * 100
+            if v_pct > 0: return f"↑{v_pct:.1f}%p"
+            if v_pct < 0: return f"↓{abs(v_pct):.1f}%p"
+            return f"{v_pct:.1f}%p"
             
         def fmt_row(label, series, is_pct_row=False):
             v_m1 = series[2]
@@ -956,7 +972,11 @@ def _build_세부판매현황_base_table(year, month, sheet_info, g1_name, g3_it
             return f"{v*100:.1f}%"
 
         def fmt_pct_val_diff(v):
-            return f"{v*100:.1f}%p"
+            if v is None or pd.isna(v): return ""
+            v_pct = v * 100
+            if v_pct > 0: return f"↑{v_pct:.1f}%p"
+            if v_pct < 0: return f"↓{abs(v_pct):.1f}%p"
+            return f"{v_pct:.1f}%p"
         
         def fmt_row(label, series, is_pct_row=False, depth=1):
             v_m1 = series[2]
@@ -1292,8 +1312,15 @@ def _해외재고자산_to_html(rows, col_spec):
         n = len(vals)
         for i, v in enumerate(vals):
             s = red_s if v < 0 else num_s
-            if i == n - 1: # 증감률 열 처리 (기존 %에서 %p로 변경)
-                txt = f'-{abs(round(v, 1))}%' if v < 0 else f'{round(v, 1)}%'
+            if i == n - 1: # 증감률(%p) 열 처리 적용
+                if v is None or pd.isna(v):
+                    txt = ""
+                elif v > 0:
+                    txt = f"{v:.1f}%"
+                elif v < 0:
+                    txt = f"{abs(v):.1f}%"
+                else:
+                    txt = f"{v:.1f}%p"
             else:
                 txt = _fmt(v, decimal=decimal)
                 s = num_s if i < n - 2 else s
@@ -1372,11 +1399,16 @@ def _build_해외부적합장기재고_flow_table(year, month, corp):
         return vm.get((g1, g2, g3, y, m), 0.0)
 
     # 증감률 계산 헬퍼 함수 - %p 추가 및 0 처리 간소화
+    # _build_해외부적합장기재고_flow_table 함수 내부
     def calc_pct_str(curr, prev):
         if prev == 0:
-            return "0.0%" # %p 로 변경
+            return "0.0%" 
+        
         val = (curr - prev) / abs(prev) * 100
-        return f"{val:.1f}%" # %p 로 변경
+        
+        if val > 0: return f"{val:.1f}%"
+        if val < 0: return f"{abs(val):.1f}%"
+        return f"{val:.1f}%"
 
     items_in_db = list(dict.fromkeys(df['구분1'].tolist()))
     g1_list = [it for it in _해외부적합장기재고_ITEM_ORDER if it in items_in_db]
@@ -1525,12 +1557,16 @@ def _build_해외연령별재고_table(year, month, corp):
     def get_v(g1, g2, g3, y, m):
         return vm.get((g1, g2, g3, y, m), 0.0)
 
-    def calc_pct_str(curr, prev):
-        if prev == 0:
+    def calc_pct_str(curr, prev, dec):
+        c_val = round(curr, dec) if dec > 0 else round(curr)
+        p_val = round(prev, dec) if dec > 0 else round(prev)
+        
+        if p_val == 0:
             return "0.0%"
-        val = (curr - prev) / abs(prev) * 100
-        return f"{val:.1f}%"
+        val = (c_val - p_val) / abs(p_val) * 100
 
+        return f"{val:.1f}%"
+    
     items_in_db = list(dict.fromkeys(df['구분1'].tolist()))
     g1_list = [it for it in _해외연령별_ITEM_ORDER if it in items_in_db]
     g1_list += [it for it in items_in_db if it not in _해외연령별_ITEM_ORDER]
@@ -1581,7 +1617,7 @@ def _build_해외연령별재고_table(year, month, corp):
                     c_p2: _fmt(v_p2, decimal=dec),
                     c_p1: _fmt(v_p1, decimal=dec),
                     c_c: _fmt(v_c, decimal=dec),
-                    c_diff: calc_pct_str(v_c, v_p1)
+                    c_diff: calc_pct_str(v_c, v_p1, dec)
                 })
                 
             dec = 1 if '중량' in g3 else 0
@@ -1594,7 +1630,7 @@ def _build_해외연령별재고_table(year, month, corp):
                 c_p2: _fmt(g3_totals[c_p2], decimal=dec),
                 c_p1: _fmt(g3_totals[c_p1], decimal=dec),
                 c_c: _fmt(g3_totals[c_c], decimal=dec),
-                c_diff: calc_pct_str(g3_totals[c_c], g3_totals[c_p1])
+                c_diff: calc_pct_str(g3_totals[c_c], g3_totals[c_p1], dec) 
             })
             
             # 세부 연령 항목들을 단위 소계 아래에 일괄 추가[cite: 4]
@@ -1621,7 +1657,7 @@ def _build_해외연령별재고_table(year, month, corp):
                     c_p2: _fmt(grand_totals[g3][c_p2], decimal=dec),
                     c_p1: _fmt(grand_totals[g3][c_p1], decimal=dec),
                     c_c: _fmt(grand_totals[g3][c_c], decimal=dec),
-                    c_diff: calc_pct_str(grand_totals[g3][c_c], grand_totals[g3][c_p1])
+                    c_diff: calc_pct_str(grand_totals[g3][c_c], grand_totals[g3][c_p1], dec)
                 })
 
     return pd.DataFrame(rows, columns=columns)
@@ -1668,19 +1704,17 @@ _해외채권_ITEM_ORDER = ['정상채권', '부실채권']
 _해외채권_AGE_ORDER = ['3개월 이하', '3개월 초과', '6개월 초과']
 
 def _build_해외채권현황_table(year, month, corp):
-    # 과거 연도 및 전월 계산[cite: 3]
-    y4, y3, y2, y1 = year - 4, year - 3, year - 2, year - 1
+    # 과거 연도 및 전월 계산 (y4, y3 제외)
+    y2, y1 = year - 2, year - 1
     prev_yr, prev_mo = _prev(year, month, 1)
     
-    # 동적 컬럼명 생성 (과거 4개년말, 전월, 당월)[cite: 3]
-    c_y4 = f"'{str(y4)[2:]}년말"
-    c_y3 = f"'{str(y3)[2:]}년말"
+    # 동적 컬럼명 생성 (과거 2개년말, 전월, 당월)
     c_y2 = f"'{str(y2)[2:]}년말"
     c_y1 = f"'{str(y1)[2:]}년말"
     c_p1 = f"'{str(prev_yr)[2:]}년 {prev_mo}월"
     c_c  = f"'{str(year)[2:]}년 {month}월"
 
-    columns = ['구분', '_depth', c_y4, c_y3, c_y2, c_y1, c_p1, c_c]
+    columns = ['구분', '_depth', c_y2, c_y1, c_p1, c_c]
 
     df = load_sheet(Sheets.해외채권_DB)
     
@@ -1691,23 +1725,22 @@ def _build_해외채권현황_table(year, month, corp):
     df = _drop_empty(df, '연도', '월')
     df['_v'] = df['값'].apply(_parse)
     
-    # 해당 사업장 필터링[cite: 3]
+    # 해당 사업장 필터링[cite: 1]
     df = df[df['사업장'] == corp]
     
-    # 구분1, 구분2 컬럼 정제[cite: 3]
+    # 구분1, 구분2 컬럼 정제[cite: 1]
     df['구분1'] = df['구분1'].fillna('').astype(str).str.strip()
     df['구분2'] = df['구분2'].fillna('').astype(str).str.strip()
     
-    # (구분1, 구분2, 연도, 월) 기준 해시맵 생성[cite: 3]
+    # (구분1, 구분2, 연도, 월) 기준 해시맵 생성[cite: 1]
     vm = df.groupby(['구분1', '구분2', '연도', '월'])['_v'].sum().to_dict()
 
-    # DB 값 조회 헬퍼 함수[cite: 3]
+    # DB 값 조회 헬퍼 함수[cite: 1]
     def get_raw(g1, g2, y, m):
         return vm.get((g1, g2, y, m), 0.0)
 
-    # 시점별 계산 로직 정의[cite: 3]
+    # 시점별 계산 로직 정의[cite: 1]
     def val_jongsang_total(y, m):
-        # 구분1이 '정상채권'이고 구분2가 비어있는 값
         return get_raw('정상채권', '', y, m)
 
     def val_age_3m_under(y, m):
@@ -1723,18 +1756,15 @@ def _build_해외채권현황_table(year, month, corp):
         return get_raw('정상채권', '회수불능', y, m)
 
     def val_gijun_chogwa(y, m):
-        # 기준초과채권 = 3개월이하 + 3개월초과 + 6개월초과 + 회수불능 합계[cite: 3]
         return (val_age_3m_under(y, m) + 
                 val_age_3m_over(y, m) + 
                 val_age_6m_over(y, m) + 
                 val_bad_debt(y, m))
 
     def val_maechul_chaekwon(y, m):
-        # 매출채권 계 = 정상채권 + 기준초과채권[cite: 3]
         return val_jongsang_total(y, m) + val_gijun_chogwa(y, m)
 
     def val_chogwa_rate(y, m):
-        # 초과채권 비율(%) = (기준초과채권 / 매출채권 계) * 100
         v = get_raw('초과채권 비율(%)', '', y, m)
         if v == 0:
             mc = val_maechul_chaekwon(y, m)
@@ -1742,8 +1772,6 @@ def _build_해외채권현황_table(year, month, corp):
         return v
 
     def val_chogwa_loss(y, m):
-        # 💡 초과채권 이자손실 계산식: (기준초과채권 * 연 이자율 5%) / 12개월
-        # DB에 등록된 값이 없거나 0인 경우, 연 5% 기준 월간 기회비용 손실액을 자동 계산함
         v = get_raw('초과채권 이자손실', '', y, m)
         if v == 0:
             chogwa_val = val_gijun_chogwa(y, m)
@@ -1757,10 +1785,9 @@ def _build_해외채권현황_table(year, month, corp):
         return get_raw('정상채권기일', '', y, m)
 
     def val_giil_diff(y, m):
-        # 차이 = 매출채권기일 - 정상채권기일[cite: 3]
         return val_maechul_giil(y, m) - val_jongsang_giil(y, m)
 
-    # 행 구성을 위한 설정 리스트: (표시명, depth, 수치계산함수)[cite: 3]
+    # 행 구성을 위한 설정 리스트: (표시명, depth, 수치계산함수)[cite: 1]
     row_configs = [
         ('매출액', 0, lambda y, m: get_raw('매출액', '', y, m)),
         ('정상채권', 0, val_jongsang_total),
@@ -1777,23 +1804,31 @@ def _build_해외채권현황_table(year, month, corp):
         ('차이', 0, val_giil_diff)
     ]
 
-    # 각 항목별 시점별 6개 수치 리스트 세팅[cite: 3]
-    periods = [(y4, 12), (y3, 12), (y2, 12), (y1, 12), (prev_yr, prev_mo), (year, month)]
+    # 각 항목별 시점별 수치 리스트 세팅 (과거 4년, 3년 데이터를 제외하고 총 4개 열만 사용)[cite: 1]
+    periods = [(y2, 12), (y1, 12), (prev_yr, prev_mo), (year, month)]
 
     rows = []
     for label, depth, calc_fn in row_configs:
         vals = [calc_fn(y, m) for y, m in periods]
-        dec = 1 if '(%)' in label else 0
+        
+        # 비율(%) 관련 행인지 확인하고 서식 지정
+        is_pct = '(%)' in label
+        dec = 1 if is_pct else 0
+        
+        def format_val(v):
+            s = _fmt(v, decimal=dec)
+            # 수치가 존재하고 대시('-')가 아닐 경우에만 '%' 기호 부착
+            if is_pct and s and s != '-':
+                return s + '%'
+            return s
         
         rows.append({
             '구분': label,
             '_depth': depth,
-            c_y4: _fmt(vals[0], decimal=dec),
-            c_y3: _fmt(vals[1], decimal=dec),
-            c_y2: _fmt(vals[2], decimal=dec),
-            c_y1: _fmt(vals[3], decimal=dec),
-            c_p1: _fmt(vals[4], decimal=dec),
-            c_c:  _fmt(vals[5], decimal=dec)
+            c_y2: format_val(vals[0]),
+            c_y1: format_val(vals[1]),
+            c_p1: format_val(vals[2]),
+            c_c:  format_val(vals[3])
         })
 
     return pd.DataFrame(rows, columns=columns)
@@ -1900,7 +1935,7 @@ def _build_해외인원현황_table(year, month):
                 c_p1: _fmt(v_p1, decimal=0),
                 c_c:  _fmt(v_c,  decimal=0),
                 '전월비': _fmt(diff, decimal=0),
-                '%': _fmt(pct, is_pct=True, decimal=1)
+                '%': f"{_fmt(pct, is_pct=True, decimal=1)}%"
             }
 
         rows.append(make_row_dict('사무직', 1, samu))
