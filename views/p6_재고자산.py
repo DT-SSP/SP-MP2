@@ -463,19 +463,11 @@ def _build_단품_chart_data(g1, df, col_spec):
     for i, k in enumerate(cols):
         계_val = agg_계.get(k, 0.0)
         매입_val = 매입_vals[i]
-        
+
         # ⭕ 정상재 = 계 - 매입매출
         정상_vals.append(계_val - 매입_val)
-    
-    # 5. 기타 (회색 바: 전체 데이터에서 '계'를 제외한 나머지)
-    agg_all  = df1.groupby(['연도', '월'])['값'].sum().to_dict()
-    기타_vals = []
-    for k in cols:
-        # 정상재 + 매입매출 = 계 이므로 전체에서 계를 차감
-        val = agg_all.get(k, 0.0) - agg_계.get(k, 0.0)
-        기타_vals.append(max(0, val))  # 음수 방지
 
-    return 정상_vals, 매입_vals, 기타_vals, 장기_vals
+    return 정상_vals, 매입_vals, 장기_vals
 
 def _build_종합_chart_data(df, col_spec):
     past_years  = col_spec['past_years']
@@ -507,9 +499,17 @@ def _build_종합_chart_data(df, col_spec):
 
     return 제품_v, 재공품_v, 원재료_v, 장기_v, pct_v
 
-def _chart_단품(x_labels, 정상_vals, 매입_vals, 기타_vals, 장기_vals, decimal=0, g1_label=''):
+def _chart_단품(x_labels, 정상_vals, 매입_vals, 장기_vals, decimal=0, g1_label=''):
     fig = go.Figure()
     fmt_v = lambda v: _fmt(v, decimal=decimal)
+
+    # 매입매출이 정상재 대비 너무 작아 막대에서 안 보이는 문제 보정:
+    # 실제 값은 그대로 유지하되, 화면에 쌓이는 두께만 최소치를 보장한다.
+    # (막대 높이가 실제 비율과 다를 수 있음 - 정확한 값은 표/hover로 확인)
+    real_total_vals = [a + b for a, b in zip(정상_vals, 매입_vals)]
+    floor = max(real_total_vals, default=1) * 0.08
+    매입_display = [max(v, floor) if v > 0 else 0 for v in 매입_vals]
+    display_total_vals = [a + b for a, b in zip(정상_vals, 매입_display)]
 
     # 1. 정상재 (진한 회색 막대)
     fig.add_trace(go.Bar(
@@ -519,22 +519,20 @@ def _chart_단품(x_labels, 정상_vals, 매입_vals, 기타_vals, 장기_vals, 
         textposition='inside', insidetextanchor='end',
         textfont=dict(color='white', size=16), # 폰트 16으로 통일
     ))
-    
-    # 2. 매입매출 (빨간색 막대)
+
+    # 2. 매입매출 (빨간색 막대, 시각적 최소 두께 보정) - 정상재 + 매입매출 = {g1} 합계
+    #    표시 두께는 보정값이지만, 텍스트는 실제 값을 그대로 표기
     fig.add_trace(go.Bar(
-        name='매입매출', x=x_labels, y=매입_vals,
+        name='매입매출', x=x_labels, y=매입_display,
         marker_color='#e74c3c', marker_line_width=0,
-        hoverinfo='y+name'
+        text=[fmt_v(v) if v > 0 else '' for v in 매입_vals],
+        textposition='inside', insidetextanchor='middle',
+        textfont=dict(color='white', size=12),
+        customdata=매입_vals,
+        hovertemplate='매입매출: %{customdata:,.0f}<extra></extra>',
     ))
-    
-    # 3. [구분] 합계 (연한 회색 막대)
-    fig.add_trace(go.Bar(
-        name=f'{g1_label} 합계', x=x_labels, y=기타_vals,
-        marker_color='#a6a6a6', marker_line_width=0,
-        hoverinfo='y+name'
-    ))
-    
-    # 4. 장기재고 (노란색 선 그래프) - 단일 축에 렌더링
+
+    # 3. 장기재고 (노란색 선 그래프) - 단일 축에 렌더링
     fig.add_trace(go.Scatter(
         name='장기재고', x=x_labels, y=장기_vals,
         mode='lines+markers+text',
@@ -545,8 +543,19 @@ def _chart_단품(x_labels, 정상_vals, 매입_vals, 기타_vals, 장기_vals, 
         textfont=dict(size=16, color='#FFC000'), # 폰트 16으로 통일
     ))
 
-    # 최대값 계산하여 여백 확보
-    max_total = max([a + b + c for a, b, c in zip(정상_vals, 매입_vals, 기타_vals)], default=1)
+    # 4. 막대 꼭대기 총합계 (정상재 + 매입매출) - 검은색 텍스트, 실제 합계값 표시
+    fig.add_trace(go.Scatter(
+        name=f'{g1_label} 합계', x=x_labels, y=display_total_vals,
+        mode='text',
+        text=[f"<b>{fmt_v(v)}</b>" if v > 0 else '' for v in real_total_vals],
+        textposition='top center',
+        textfont=dict(size=15, color='#1a1a1a'),
+        showlegend=False,
+        hoverinfo='skip',
+    ))
+
+    # 최대값 계산하여 여백 확보 (표시용 두께 보정값 기준)
+    max_total = max(display_total_vals, default=1)
 
     fig.update_layout(
         barmode='stack', height=340,
@@ -558,7 +567,7 @@ def _chart_단품(x_labels, 정상_vals, 매입_vals, 기타_vals, 장기_vals, 
                     font=dict(size=11), bgcolor='rgba(0,0,0,0)'),
         xaxis=dict(showgrid=False, tickfont=dict(size=14, color=C_NAVY)), # 색상 통일
         yaxis=dict(showgrid=True, gridcolor='#eee',
-                   range=[0, max_total * 1.15], 
+                   range=[0, max_total * 1.2],
                    showticklabels=True, tickfont=dict(size=11, color='#555')),
         plot_bgcolor='white', paper_bgcolor='white', bargap=0.52,
     )
@@ -784,22 +793,10 @@ def _chart_등급별(x_labels, grade_data, rework_data):
             yaxis='y1'  # 기본 Y축에 매핑
         ))
 
-    # 2. 막대그래프(제품) 합계 텍스트 추가 (가장 위 막대 위에 위치)
+    # 2. 막대그래프(제품) 합계 (y축 여백 계산용으로만 사용, 텍스트 표시는 안 함)
     totals = []
     for i in range(len(x_labels)):
         totals.append(sum(grade_data[g][i] for g in order))
-        
-    fig.add_trace(go.Scatter(
-        name='제품 합계', x=x_labels, y=totals,
-        mode='text',
-        # 텍스트를 볼드 처리하여 잘 보이게 설정
-        text=[f"<b>{_fmt(v, decimal=0)}</b>" if v > 0 else '' for v in totals],
-        textposition='top center',
-        textfont=dict(size=11, color='#333333'),
-        showlegend=False, # 범례에서는 숨김 처리
-        yaxis='y1',
-        hoverinfo='skip'
-    ))
 
     # 3. 재공품 스택 -> 꺾은선 그래프 (보조 Y축 사용)
     fig.add_trace(go.Scatter(
@@ -828,20 +825,20 @@ def _chart_등급별(x_labels, grade_data, rework_data):
                     borderwidth=0),
         xaxis=dict(showgrid=False, tickfont=dict(size=14, color=C_NAVY)),
         
-        # 기본 Y축 (막대그래프 - 제품)
+        # 기본 Y축 (막대그래프 - 제품): 차트 하단 75% 영역
         yaxis=dict(
-            showgrid=True, gridcolor=C_CHART_GRID, 
-            showticklabels=False, 
-            range=[0, max_bar * 1.25] # 합계 텍스트가 잘리지 않도록 25% 여유
+            domain=[0, 0.75],
+            showgrid=True, gridcolor=C_CHART_GRID,
+            showticklabels=False,
+            range=[0, max_bar * 1.02]
         ),
-        
-        # 보조 Y축 (꺾은선그래프 - 재공품)
+
+        # 보조 Y축 (꺾은선그래프 - 재공품): 차트 상단 20% 영역 (막대와 간격 축소, 위쪽 여백 확대)
         yaxis2=dict(
+            domain=[0.80, 1.0],
             showgrid=False, # 그리드 선 겹침 방지
             showticklabels=False, # Y축 라벨 숨김
-            overlaying='y',       # 기본 y축과 겹치게 설정
-            side='right',         # 축 위치를 우측으로 배치
-            range=[0, max_line * 1.3] # 텍스트가 잘리지 않도록 30% 여유
+            range=[0, max_line * 2.4] # 위쪽 여백을 더 넉넉히 확보
         ),
         
         plot_bgcolor='white', paper_bgcolor='white', bargap=0.44,
@@ -912,7 +909,7 @@ def render_page(app, year_state, month_state):
          
             # 1) 원재료 현황
             rows_원재료 = _build_단품_rows('원재료', df, col_spec)
-            정상_1, 매입_1, 기타_1, 장기_1 = _build_단품_chart_data('원재료', df, col_spec)
+            정상_1, 매입_1, 장기_1 = _build_단품_chart_data('원재료', df, col_spec)
             memo_원재료 = _get_memo(Sheets.연령별재고현황_메모, year, month, gubun='원재료')
 
             col_l, col_r = app.columns([6, 4])
@@ -924,7 +921,7 @@ def render_page(app, year_state, month_state):
                 # 차트 (표 하단에 배치되나 표 너비만큼 제한됨)
                 app.markdown(
                     chart_wrapper 
-                    + _fig_to_iframe(_chart_단품(x_labels, 정상_1, 매입_1, 기타_1, 장기_1, decimal=0, g1_label='원재료'))
+                    + _fig_to_iframe(_chart_단품(x_labels, 정상_1, 매입_1, 장기_1, decimal=0, g1_label='원재료'))
                     + '</div>', 
                     unsafe_allow_html=True)
             with col_r: # 4: 메모
@@ -934,7 +931,7 @@ def render_page(app, year_state, month_state):
 
             # 2) 재공품 현황
             rows_재공품 = _build_단품_rows('재공품', df, col_spec)
-            정상_2, 매입_2, 기타_2, 장기_2 = _build_단품_chart_data('재공품', df, col_spec)
+            정상_2, 매입_2, 장기_2 = _build_단품_chart_data('재공품', df, col_spec)
             memo_재공품 = _get_memo(Sheets.연령별재고현황_메모, year, month, gubun='재공품')
 
             col_l2, col_r2 = app.columns([6, 4])
@@ -946,7 +943,7 @@ def render_page(app, year_state, month_state):
                 # 차트
                 app.markdown(
                     chart_wrapper
-                    + _fig_to_iframe(_chart_단품(x_labels, 정상_2, 매입_2, 기타_2, 장기_2, decimal=0, g1_label='재공품'))
+                    + _fig_to_iframe(_chart_단품(x_labels, 정상_2, 매입_2, 장기_2, decimal=0, g1_label='재공품'))
                     + '</div>', 
                     unsafe_allow_html=True)
             with col_r2: # 4: 메모
@@ -956,7 +953,7 @@ def render_page(app, year_state, month_state):
 
             # 3) 제품 현황
             rows_제품 = _build_단품_rows('제품', df, col_spec)
-            정상_3, 매입_3, 기타_3, 장기_3 = _build_단품_chart_data('제품', df, col_spec)
+            정상_3, 매입_3, 장기_3 = _build_단품_chart_data('제품', df, col_spec)
             memo_제품 = _get_memo(Sheets.연령별재고현황_메모, year, month, gubun='제품')
 
             col_l3, col_r3 = app.columns([6, 4])
@@ -968,7 +965,7 @@ def render_page(app, year_state, month_state):
                 # 차트
                 app.markdown(
                     chart_wrapper
-                    + _fig_to_iframe(_chart_단품(x_labels, 정상_3, 매입_3, 기타_3, 장기_3, decimal=0, g1_label='제품'))
+                    + _fig_to_iframe(_chart_단품(x_labels, 정상_3, 매입_3, 장기_3, decimal=0, g1_label='제품'))
                     + '</div>', 
                     unsafe_allow_html=True)
             with col_r3: # 4: 메모

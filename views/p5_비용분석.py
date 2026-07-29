@@ -144,7 +144,7 @@ def _build_부재료_chart(사업장, rows, col_hdrs):
             mode='lines+markers+text',
             text=[f"{v:.1f}" if v else '' for v in vals],
             textposition='top center',
-            textfont=dict(size=10, color='#4a5568'),
+            textfont=dict(size=14, color='#4a5568'),
             marker=dict(size=6, color=colors[idx % len(colors)]),
             line=dict(width=2, color=colors[idx % len(colors)]),
             showlegend=False  # 서브플롯 분리로 범례 숨김
@@ -152,10 +152,10 @@ def _build_부재료_chart(사업장, rows, col_hdrs):
 
     # 2행일 경우 높이를 500, 1행일 경우 350으로 동적 설정
     fig.update_layout(
-        height=500 if num_rows == 2 else 350,
+        height=600 if num_rows == 2 else 350,
         margin=dict(l=10, r=10, t=60, b=40),
         plot_bgcolor='white', paper_bgcolor='white',
-        font=dict(size=11, family='sans-serif'),
+        font=dict(size=14, family='sans-serif'),
     )
     
     fig.update_xaxes(
@@ -170,7 +170,7 @@ def _build_부재료_chart(사업장, rows, col_hdrs):
 
     # 서브플롯 타이틀 폰트 스타일
     for annotation in (fig.layout.annotations or []):
-        annotation.font = dict(size=12, color='#333333', weight='bold')
+        annotation.font = dict(size=14, color='#333333', weight='bold')
 
     return fig
 
@@ -278,7 +278,7 @@ def _build_단가추이_chart(사업장, rows, col_hdrs):
             # 단가이므로 천 단위 콤마(,) 포맷 적용
             text=[f"{v:,.0f}" if v else '' for v in vals],
             textposition='top center',
-            textfont=dict(size=10, color='#4a5568'),
+            textfont=dict(size=14, color='#4a5568'),
             marker=dict(size=6, color=colors[idx % len(colors)]),
             line=dict(width=2, color=colors[idx % len(colors)]),
             showlegend=False  # 개별 서브플롯이므로 범례 숨김
@@ -294,7 +294,7 @@ def _build_단가추이_chart(사업장, rows, col_hdrs):
         margin=dict(l=10, r=10, t=60, b=40),
         plot_bgcolor='white', 
         paper_bgcolor='white',
-        font=dict(size=11, family='sans-serif'),
+        font=dict(size=14, family='sans-serif'),
     )
     
     # X축, Y축 스타일 적용
@@ -310,7 +310,7 @@ def _build_단가추이_chart(사업장, rows, col_hdrs):
 
     # 서브플롯 타이틀 폰트 스타일
     for annotation in (fig.layout.annotations or []):
-        annotation.font = dict(size=12, color='#333333', weight='bold')
+        annotation.font = dict(size=14, color='#333333', weight='bold')
 
     return fig
 

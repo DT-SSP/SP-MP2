@@ -408,16 +408,24 @@ def _build_중국_table(get, year, month, 사업장='중국'):
                     s = str(_fmt(val, is_pct=True, decimal=1)).replace('%', '')
                     return s + '%' if s and s != '-' else s
 
+            def _fmt_pct_diff(v):
+                v = round(v, 1)
+                if v > 0:
+                    return f"↑{v:.1f}%p"
+                if v < 0:
+                    return f"↓{abs(v):.1f}%p"
+                return f"{v:.1f}%p"
+
             rows.append({
-                '구분':          '영업이익률 (%)',
+                '구분':          '%',
                 전월_col:        _p(전월_p),
                 '당월_계획':     _p(당월계획_p),
                 '당월_실적':     _p(당월실적_p),
-                '당월_계획대비': _p(당월실적_p - 당월계획_p, True),
-                '당월_전월대비': _p(당월실적_p - 전월_p, True),
+                '당월_계획대비': _fmt_pct_diff((당월실적_p - 당월계획_p)),
+                '당월_전월대비': _fmt_pct_diff((당월실적_p - 전월_p)),
                 '누적_계획':     _p(누적계획_p),
                 '누적_실적':     _p(누적실적_p),
-                '누적_계획대비': _p(누적실적_p - 누적계획_p, True),
+                '누적_계획대비': _fmt_pct_diff((누적실적_p - 누적계획_p)),
             })
 
     return pd.DataFrame({col: [r.get(col, '') for r in rows] for col in columns})
@@ -476,17 +484,25 @@ def _build_태국_table(get, year, month, 사업장='태국'):
                 else:
                     s = str(_fmt(val, is_pct=True, decimal=1)).replace('%', '')
                     return s + '%' if s and s != '-' else s
-
+                
+            def _fmt_pct_diff(v):
+                v = round(v, 1)
+                if v > 0:
+                    return f"↑{v:.1f}%p"
+                if v < 0:
+                    return f"↓{abs(v):.1f}%p"
+                return f"{v:.1f}%p"
+            
             rows.append({
-                '구분':          '영업이익률 (%)',
+                '구분':          '%',
                 전월_col:        _p(전월_p),
                 '당월_계획':     _p(당월계획_p),
                 '당월_실적':     _p(당월실적_p),
-                '당월_계획대비': _p(당월실적_p - 당월계획_p, True),
-                '당월_전월대비': _p(당월실적_p - 전월_p, True),
+                '당월_계획대비': _fmt_pct_diff((당월실적_p - 당월계획_p)),
+                '당월_전월대비': _fmt_pct_diff((당월실적_p - 전월_p)),
                 '누적_계획':     _p(누적계획_p),
                 '누적_실적':     _p(누적실적_p),
-                '누적_계획대비': _p(누적실적_p - 누적계획_p, True),
+                '누적_계획대비': _fmt_pct_diff((누적실적_p - 누적계획_p)),
             })
 
     return pd.DataFrame({col: [r.get(col, '') for r in rows] for col in columns})
@@ -808,7 +824,7 @@ def _build_해외판매구성_table(year, month):
     c3 = f"'{str(yr_m1)[2:]}년 {mo_m1}월"
     c4 = f"'{str(year)[2:]}년 {month}월"
     c5 = "전월대비 증감"
-    c6 = "전월대비 증감률 %"
+    c6 = "전월대비 증감률"
     
     columns = ['구분', c1, c2, c3, c4, c5, c6]
     all_rows = []

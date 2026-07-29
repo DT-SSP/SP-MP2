@@ -185,6 +185,9 @@ def _sidebar_controls():
         # 관리자 전용: 각 페이지 버튼 옆에 작은 새로고침 버튼
         user = app.auth.current_user()
         if user and user.username in _ADMIN_USERS:
+            # 관리자는 위쪽 페이지 버튼 목록으로 이동이 가능하므로,
+            # 프레임워크가 자동으로 그리는 하단 기본 네비게이션 메뉴는 중복이라 숨긴다.
+            app.markdown('<style>.nav-container{display:none}</style>', unsafe_allow_html=True)
             app.divider()
 
             # 파이썬 반복문 내에서 콜백 함수 꼬임을 방지하기 위한 클로저 헬퍼
@@ -315,7 +318,7 @@ app.navigation([
     vl.Page(_protected(p5_비용분석.render_page),     title="5. 비용분석"),
     vl.Page(_protected(p6_재고자산.render_page),     title="6. 재고자산분석"),
     vl.Page(_protected(p7_채권분석.render_page),     title="7. 채권분석"),
-    vl.Page(_protected(p8_인원분석.render_page),         title="8. 기타"),
+    vl.Page(_protected(p8_인원분석.render_page),         title="8. 인원분석"),
     vl.Page(_protected(p9_해외법인.render_page),     title="9. 해외법인실적"),
     vl.Page(_protected(p10_별첨.render_page),     title="10. 별첨"),
 ])

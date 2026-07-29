@@ -1575,31 +1575,39 @@ def _판관비_to_html(df) -> str:
     return _html_table(th_html, body_html)
 
 def _build_성과급_table(year, month):
-    df = load_sheet(Sheets.성과급및격려금_DB)
-    df['값'] = df['값'].apply(_parse)
-    df = _drop_empty(df, '연도', '월')
+    df_raw = load_sheet(Sheets.성과급및격려금_DB)
+    df_raw['값'] = df_raw['값'].apply(_parse)
+    
+    # ── [핵심 수정] 100% (자사) 데이터 사전 추출 ──
+    # _drop_empty가 '연간', '월별' 등 숫자가 아닌 문자열 월(Month) 데이터를 비정상 값으로 
+    # 간주해 삭제할 가능성이 있으므로, 필터링을 거치기 전 원본에서 먼저 추출합니다.
+    df_100 = df_raw.copy()
+    df_100['연도'] = df_100['연도'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+    df_100['월'] = df_100['월'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+    
+    for c in ['구분1', '구분2']:
+        if c in df_100.columns:
+            df_100[c] = df_100[c].fillna('').astype(str).str.strip()
+            
+    val_100_map = df_100.groupby(['구분1', '구분2', '연도', '월'])['값'].sum().to_dict()
 
-    # '계획/실적'이 %서식 셀(100%)인 경우 UNFORMATTED_VALUE로 숫자 1(=100%)이 들어오므로 문자열로 정규화
-    def _norm_mode(v):
-        if isinstance(v, str):
-            return v.strip()
-        try:
-            return '100%' if float(v) == 1.0 else str(v)
-        except (TypeError, ValueError):
-            return str(v)
-    df['계획/실적'] = df['계획/실적'].apply(_norm_mode)
+    def get_100_val(g1, g2, time_label):
+        return val_100_map.get((str(g1), str(g2), str(year), str(time_label)), 0.0)
 
-    # '구분3'가 아직 캐시에 반영되지 않은 경우를 대비해 계획/실적 값으로 추정
-    if '구분3' not in df.columns:
-        df['구분3'] = df['계획/실적'].map({'실적': '당월', '100%': '연간'}).fillna('')
+    # ── 기존 실적 데이터 처리 ──
+    df = _drop_empty(df_raw, '연도', '월')
 
-    for c in ['구분1', '구분2', '구분3']:
-        df[c] = df[c].fillna('').astype(str).str.strip()
+    for c in ['구분1', '구분2', '계획/실적', '구분3']:
+        if c in df.columns:
+            df[c] = df[c].fillna('').astype(str).str.strip()
+
+    df['연도'] = df['연도'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+    df['월'] = df['월'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
 
     val_map = df.groupby(['구분1', '구분2', '계획/실적', '구분3', '연도', '월'])['값'].sum().to_dict()
 
     def get_val(g1, g2, mode, g3, yr, mo):
-        return val_map.get((g1, g2, mode, g3, yr, mo), 0.0)
+        return val_map.get((str(g1), str(g2), str(mode), str(g3), str(yr), str(mo)), 0.0)
 
     def 당월_v(g1, g2):
         return get_val(g1, g2, '실적', '당월', year, month)
@@ -1610,15 +1618,19 @@ def _build_성과급_table(year, month):
     def 누적_v(g1, g2):
         return sum(get_val(g1, g2, '실적', '당월', year, m) for m in range(1, month + 1))
 
+    # 앞서 추출해둔 안전한 map에서 데이터 호출
     def 연간_v(g1, g2):
-        return get_val(g1, g2, '100%', '연간', year, 12)
+        return get_100_val(g1, g2, '연간')
+
+    def 월별_v(g1, g2):
+        return get_100_val(g1, g2, '월별')
 
     def metrics(items):
         연간 = sum(연간_v(g1, g2) for g1, g2 in items)
+        월 = sum(월별_v(g1, g2) for g1, g2 in items)
         전년 = sum(전년_v(g1, g2) for g1, g2 in items)
         당월 = sum(당월_v(g1, g2) for g1, g2 in items)
         누적 = sum(누적_v(g1, g2) for g1, g2 in items)
-        월 = 연간 / 12
         퍼센트 = (누적 / 전년 * 100) if 전년 != 0 else np.nan
         
         return {
@@ -1630,7 +1642,7 @@ def _build_성과급_table(year, month):
             '월': 월,
         }
 
-    # DB 구분을 이미지의 계층(성과/직원/임원, 격려, 외주)에 맞게 매핑
+    # 계층 매핑 구조
     성과_직원_제조 = [('성과', '직원_제조')]
     성과_직원_판관 = [('성과', '직원_판관')]
     성과_직원_합 = 성과_직원_제조 + 성과_직원_판관
@@ -1645,11 +1657,10 @@ def _build_성과급_table(year, month):
     격려_판관 = [('격려', '판관')]
     격려_합 = 격려_제조 + 격려_판관
 
-    외주_항목 = [('외주', '외주')] # 외주 항목은 이미지에 안 보이지만 기존 코드 유지
+    외주_항목 = [('외주', '외주')]
 
     합계_항목 = 성과_합 + 격려_합 + 외주_항목
 
-    # (라벨, depth, bold, 합산대상, 최상단 구분선 여부)
     rows_info = [
         ('성과', 0, True, 성과_합, False),
         ('직원', 1, True, 성과_직원_합, False),
@@ -1676,7 +1687,6 @@ def _build_성과급_table(year, month):
         
         m = metrics(items)
         
-        # % 값 포맷팅
         pct_val = m['%']
         if pd.isna(pct_val):
             pct_str = ""
@@ -1698,7 +1708,6 @@ def _build_성과급_table(year, month):
         })
 
     return rows
-
 
 def _성과급_to_html(rows) -> str:
     col_keys = ['전년', '당월', '누적', '%', '연간', '월']

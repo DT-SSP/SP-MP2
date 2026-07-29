@@ -182,8 +182,8 @@ def _build_부서별_채권기일_현황(year, month):
                 # 26년 5월 이후 여부 확인
                 is_after_2605 = (py > 2026) or (py == 2026 and pm >= 5)
                 
-                # 내수 데이터 산출 로직 적용
-                if db_key == '내수' and is_after_2605:
+                # 내수 데이터 산출 로직 적용 (매출/채권은 4개 팀 합산, 일수는 시트 원본값 그대로 사용)
+                if db_key == '내수' and is_after_2605 and metric in ['매출', '채권']:
                     val = sum(raw(k, metric, py, pm) for k in ['선재', '봉강', '부산', '대구'])
                 else:
                     val = raw(db_key, metric, py, pm)

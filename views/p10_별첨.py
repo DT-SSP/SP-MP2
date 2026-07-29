@@ -118,7 +118,7 @@ def _build_실적요약_chart(x_labels, sales_list, volume_list, op_profit_list,
         marker_color='#334155', marker_line_width=0,
         text=[f"{int(v):,}" if v > 0 else '' for v in sales_list],
         textposition='inside', insidetextanchor='middle',
-        textfont=dict(color='white', size=10), yaxis='y'
+        textfont=dict(color='white', size=16), yaxis='y'
     ))
 
     fig.add_trace(go.Bar(
@@ -126,7 +126,7 @@ def _build_실적요약_chart(x_labels, sales_list, volume_list, op_profit_list,
         marker_color='#E05638', marker_line_width=0,
         text=[f"{int(v):,}" if v > 0 else '' for v in volume_list],
         textposition='inside', insidetextanchor='middle',
-        textfont=dict(color='white', size=10), yaxis='y'
+        textfont=dict(color='white', size=16), yaxis='y'
     ))
 
     line_text = [
@@ -140,7 +140,7 @@ def _build_실적요약_chart(x_labels, sales_list, volume_list, op_profit_list,
         marker=dict(color='#64748B', size=7),
         line=dict(color='#64748B', width=2.5),
         text=line_text, textposition='top center',
-        textfont=dict(color='#1E293B', size=10),
+        textfont=dict(color='#1E293B', size=16),
         yaxis='y2', connectgaps=True
     ))
 
@@ -154,7 +154,7 @@ def _build_실적요약_chart(x_labels, sales_list, volume_list, op_profit_list,
         autosize=True,
         legend=dict(
             orientation='h', y=-0.15, x=0.5, xanchor='center',
-            font=dict(size=11, color='#334155'), bgcolor='rgba(0,0,0,0)',
+            font=dict(size=12, color='#334155'), bgcolor='rgba(0,0,0,0)',
         ),
         xaxis=dict(
             tickfont=dict(size=10, color='#64748B'),
@@ -176,6 +176,8 @@ def _build_실적요약_chart(x_labels, sales_list, volume_list, op_profit_list,
     )
     return fig
 
+
+# ── 2) 환율 추이 데이터 및 그래프 빌더 ───────────────────────────────────────────
 
 # ── 2) 환율 추이 데이터 및 그래프 빌더 ───────────────────────────────────────────
 
@@ -202,30 +204,34 @@ def _build_환율추이_data(year, month):
         last_yr = yr_c
 
     x_labels = [slot[2] for slot in time_slots]
-    rates = {'USD': [], 'CNH': [], 'THB': []}
+    # MXN 추가
+    rates = {'USD': [], 'CNH': [], 'THB': [], 'MXN': []}
     for yr_c, mo_c, _ in time_slots:
-        for currency in ['USD', 'CNH', 'THB']:
+        for currency in ['USD', 'CNH', 'THB', 'MXN']:
             val = vm.get((currency, yr_c, mo_c), 0.0)
             rates[currency].append(val)
 
     return x_labels, rates
 
 
-# ── 2) 환율 추이 데이터 및 그래프 빌더 ───────────────────────────────────────────
-
-
 def _build_환율추이_chart(x_labels, rates):
-    currencies = ['USD', 'CNH', 'THB']
-    color_map = {'USD': '#334155', 'CNH': '#E05638', 'THB': '#0284C7'}
+    # 통화 목록에 MXN 추가 및 색상 지정
+    currencies = ['USD', 'CNH', 'THB', 'MXN']
+    color_map = {'USD': '#334155', 'CNH': '#E05638', 'THB': '#0284C7', 'MXN': '#10B981'}
     
-    # 1행 3열 서브플롯 생성
+    # 2행 2열 서브플롯 생성
     fig = make_subplots(
-        rows=1, cols=3,
+        rows=2, cols=2,
         subplot_titles=[f"{c} 환율" for c in currencies],
-        horizontal_spacing=0.05
+        horizontal_spacing=0.05,
+        vertical_spacing=0.15 # 상하 간격 추가
     )
 
     for idx, currency in enumerate(currencies):
+        # 2x2 그리드 위치 계산 (1부터 시작)
+        row_idx = (idx // 2) + 1
+        col_idx = (idx % 2) + 1
+
         vals = rates.get(currency, [])
         color = color_map.get(currency, '#334155')
         text_labels = [f"<b>{v:,.1f}</b>" if v > 0 else '' for v in vals]
@@ -236,9 +242,9 @@ def _build_환율추이_chart(x_labels, rates):
             marker=dict(color=color, size=7),
             line=dict(color=color, width=2.5),
             text=text_labels, textposition='top center',
-            textfont=dict(color='#1E293B', size=10), connectgaps=True,
+            textfont=dict(color='#1E293B', size=16), connectgaps=True,
             showlegend=False
-        ), row=1, col=idx + 1)
+        ), row=row_idx, col=col_idx)
 
         # 통화별 최저/최고 수치 기준 동적 Y축 스케일링을 각 서브플롯에 개별 적용
         valid_vals = [v for v in vals if v > 0]
@@ -250,27 +256,28 @@ def _build_환율추이_chart(x_labels, rates):
         else:
             y_min, y_max = 0, 100
 
-        fig.update_yaxes(range=[y_min, y_max], row=1, col=idx + 1)
+        fig.update_yaxes(range=[y_min, y_max], row=row_idx, col=col_idx)
 
     fig.update_layout(
-        height=320, 
-        margin=dict(l=20, r=20, t=50, b=30),  # 서브플롯 타이틀을 위해 상단(t) 여백 확보
+        height=600, # 2행이므로 기존 320에서 600으로 높이 조정
+        margin=dict(l=20, r=20, t=50, b=30),
         autosize=True,
         plot_bgcolor='white', paper_bgcolor='white',
         font=dict(size=11, family='sans-serif'),
     )
 
-    # 모든 서브플롯의 축 디자인 일괄 적용
-    for i in range(1, 4):
-        fig.update_xaxes(
-            tickfont=dict(size=10, color='#64748B'),
-            showgrid=False, linecolor='#CBD5E1', linewidth=1, showline=True,
-            automargin=True, row=1, col=i
-        )
-        fig.update_yaxes(
-            showgrid=False, showticklabels=False, showline=False, zeroline=False,
-            automargin=True, row=1, col=i
-        )
+    # 2x2 서브플롯 축 디자인 일괄 적용
+    for r in range(1, 3):
+        for c in range(1, 3):
+            fig.update_xaxes(
+                tickfont=dict(size=10, color='#64748B'),
+                showgrid=False, linecolor='#CBD5E1', linewidth=1, showline=True,
+                automargin=True, row=r, col=c
+            )
+            fig.update_yaxes(
+                showgrid=False, showticklabels=False, showline=False, zeroline=False,
+                automargin=True, row=r, col=c
+            )
 
     return fig
 

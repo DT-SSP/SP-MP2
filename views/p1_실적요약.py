@@ -1661,18 +1661,21 @@ def _build_이익계획실적_table(year, month):
                 pr_연간   = (연간계획 / m_연간계획 * 100) if m_연간계획 else 0
                 pr_누적계획 = (누적계획 / m_누적계획 * 100) if m_누적계획 else 0
                 pr_누적실적 = (누적실적 / m_누적실적 * 100) if m_누적실적 else 0
+                
+                # 수정된 부분: f-string을 사용하여 뒤에 '%' 기호 추가
                 rows.append({
                     '사업장': label,
                     '_first': False,
                     '_bold':  bold,
                     '_dark':  dark,
                     '구분':   '(%)',
-                    columns[0]: _fmt(pr_연간,   decimal=1),
-                    columns[1]: _fmt(pr_누적계획, decimal=1),
-                    columns[2]: _fmt(pr_누적실적, decimal=1),
-                    columns[3]: _fmt(pr_누적실적 - pr_누적계획, decimal=1),
+                    columns[0]: f'{_fmt(pr_연간,   decimal=1)}%',
+                    columns[1]: f'{_fmt(pr_누적계획, decimal=1)}%',
+                    columns[2]: f'{_fmt(pr_누적실적, decimal=1)}%',
+                    columns[3]: f'{_fmt(pr_누적실적 - pr_누적계획, decimal=1)}%',
                     columns[4]: '',
                 })
+
         return rows
 
     총계_groups = [
@@ -1854,9 +1857,9 @@ def render_page(app, year_state, month_state):
             app.markdown('<div style="font-size:0.85em;color:gray;margin:2px 0 12px 0">※ 산출기준 : 대구분/내외자/강종류/강종/메이커</div>',
                          unsafe_allow_html=True)
 
-            app.markdown(_원재료_section("5) 원재료 입고-기초 단가 차이 거래처 기준", _build_원재료입고단가차이_거래처기준_table(year, month), "", '[단위: 톤, 백만원]'),
+            app.markdown(_원재료_section("5) 원재료 입고 단가 전월대비 차이", _build_원재료입고단가차이_거래처기준_table(year, month), "", '[단위: 톤, 백만원]'),
                          unsafe_allow_html=True)
-            app.markdown('<div style="font-size:0.85em;color:gray;margin:2px 0 12px 0">※ 산출기준 : 메이커/산업재/강종</div>',
+            app.markdown('<div style="font-size:0.85em;color:gray;margin:2px 0 12px 0">※ 산출기준 : 거래처/메이커/산업재/강종</div>',
                          unsafe_allow_html=True)
 
             app.markdown(_section("6) 제품수불표 (별도)", _build_제품수불표_table(year, month), "", '[단위: 원, 백만원]'),
