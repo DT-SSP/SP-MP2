@@ -116,9 +116,9 @@ def _build_인원변동내역(year, month):
     col_headers = [
         f"'{str(year-1)[2:]}년 연평균",
         f"{str(year)[2:]}년 계획",
-        f"'{str(year-1)[2:]}년 12월 실적",
-        f"'{str(prev_mo_yr)[2:]}년 {prev_mo}월 실적",
-        f"'{str(year)[2:]}년 {month}월 실적",
+        f"'{str(year-1)[2:]}년 12월",
+        f"'{str(prev_mo_yr)[2:]}년 {prev_mo}월",
+        f"'{str(year)[2:]}년 {month}월",
         f"'{str(year)[2:]}년 연평균",
         "전월대비",
         "계획대비"

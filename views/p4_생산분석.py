@@ -45,7 +45,10 @@ def _build_생산실적(year, month):
         return vm.get((g1, g2, yr, mo), 0.0)
 
     def yr_avg(g1, g2, yr):
-        vals = [raw(g1, g2, yr, m) for m in range(1, 13) if (g1, g2, yr, m) in vm]
+        # 당해년도(조회 중인 연도)는 아직 발생하지 않은 미래월(빈 값이 0으로 채워진 행 포함)이
+        # 평균에 섞이지 않도록 조회월까지만 집계한다. 과거 연도는 12개월 전체를 집계.
+        last_mo = month if yr == year else 12
+        vals = [raw(g1, g2, yr, m) for m in range(1, last_mo + 1) if (g1, g2, yr, m) in vm]
         return sum(vals) / len(vals) if vals else 0.0
 
     연도_in_db = sorted(df['연도'].unique().tolist())

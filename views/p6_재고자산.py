@@ -606,7 +606,18 @@ def _chart_종합(x_labels, 제품_v, 재공품_v, 원재료_v, 장기_v, pct_v)
         textfont=dict(size=16, color='#FFC000'),
     ))
 
-    max_total = max(a + b + c for a, b, c in zip(원재료_v, 재공품_v, 제품_v)) if 원재료_v else 1
+    총합_v = [a + b + c for a, b, c in zip(원재료_v, 재공품_v, 제품_v)]
+    fig.add_trace(go.Scatter(
+        name='총 재고 계', x=x_labels, y=총합_v,
+        mode='text',
+        text=[f"<b>{_fmt(v, decimal=0)}</b>" if v > 0 else '' for v in 총합_v],
+        textposition='top center',
+        textfont=dict(size=15, color='#1a1a1a'),
+        showlegend=False,
+        hoverinfo='skip',
+    ))
+
+    max_total = max(총합_v) if 총합_v else 1
 
     fig.update_layout(
         barmode='stack', height=340,
@@ -619,7 +630,7 @@ def _chart_종합(x_labels, 제품_v, 재공품_v, 원재료_v, 장기_v, pct_v)
                     font=dict(size=11), bgcolor='rgba(0,0,0,0)'),
         xaxis=dict(showgrid=False, tickfont=dict(size=14, color=C_NAVY)),
         yaxis=dict(showgrid=True, gridcolor='#eee',
-                   range=[0, max_total * 1.15], 
+                   range=[0, max_total * 1.2],
                    showticklabels=True, tickfont=dict(size=11, color='#555')),
         plot_bgcolor='white', paper_bgcolor='white', bargap=0.52,
     )
@@ -793,10 +804,21 @@ def _chart_등급별(x_labels, grade_data, rework_data):
             yaxis='y1'  # 기본 Y축에 매핑
         ))
 
-    # 2. 막대그래프(제품) 합계 (y축 여백 계산용으로만 사용, 텍스트 표시는 안 함)
+    # 2. 막대그래프(제품) 합계 텍스트 추가 (가장 위 막대 위에 위치)
     totals = []
     for i in range(len(x_labels)):
         totals.append(sum(grade_data[g][i] for g in order))
+
+    fig.add_trace(go.Scatter(
+        name='제품 합계', x=x_labels, y=totals,
+        mode='text',
+        text=[f"<b>{_fmt(v, decimal=0)}</b>" if v > 0 else '' for v in totals],
+        textposition='top center',
+        textfont=dict(size=15, color='#1a1a1a'),
+        showlegend=False, # 범례에서는 숨김 처리
+        yaxis='y1',
+        hoverinfo='skip'
+    ))
 
     # 3. 재공품 스택 -> 꺾은선 그래프 (보조 Y축 사용)
     fig.add_trace(go.Scatter(
@@ -830,7 +852,7 @@ def _chart_등급별(x_labels, grade_data, rework_data):
             domain=[0, 0.75],
             showgrid=True, gridcolor=C_CHART_GRID,
             showticklabels=False,
-            range=[0, max_bar * 1.02]
+            range=[0, max_bar * 1.12] # 합계 텍스트가 잘리지 않도록 여유 확보
         ),
 
         # 보조 Y축 (꺾은선그래프 - 재공품): 차트 상단 20% 영역 (막대와 간격 축소, 위쪽 여백 확대)
