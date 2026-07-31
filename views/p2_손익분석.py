@@ -489,11 +489,15 @@ def _build_손익차이_table(year, month):
     qty_vals     = [get_val('매출이익차이', '제품수불차이', '수량차이', g4) for g4 in g4_cols]
     price_vals   = [get_val('매출이익차이', '제품수불차이', '판가차이', g4) for g4 in g4_cols]
     cost_vals    = [get_val('매출이익차이', '제품수불차이', '원가차이', g4) for g4 in g4_cols]
+
     supply_vals  = [q + p + c for q, p, c in zip(qty_vals, price_vals, cost_vals)]
     etc_vals     = [get_val('매출이익차이', '기타차이',   '',     g4) for g4 in g4_cols]
 
+    # 매출이익차이 = 제품수불차이 + 기타차이
+    gross_vals   = [s + e for s, e in zip(supply_vals, etc_vals)] 
+
     sgna_vals = [get_val('판매비와관리비차이', '', '', g4) for g4 in g4_cols]
-    # DB에 '영업이익차이' 행이 별도로 없어 매출이익차이 + 판매비와관리비차이로 계산
+    # 영업이익차이 = 매출이익차이 + 판매비와관리비차이
     op_diff_vals = [g + s for g, s in zip(gross_vals, sgna_vals)]
 
     def format_row(label, depth, vals):
@@ -1578,7 +1582,6 @@ def _build_성과급_table(year, month):
     df_raw = load_sheet(Sheets.성과급및격려금_DB)
     df_raw['값'] = df_raw['값'].apply(_parse)
     
-    # ── [핵심 수정] 100% (자사) 데이터 사전 추출 ──
     # _drop_empty가 '연간', '월별' 등 숫자가 아닌 문자열 월(Month) 데이터를 비정상 값으로 
     # 간주해 삭제할 가능성이 있으므로, 필터링을 거치기 전 원본에서 먼저 추출합니다.
     df_100 = df_raw.copy()
@@ -1779,7 +1782,6 @@ def _build_포스코지원금_table(year, month):
         prev_y = year - 1 if cur_q == 1 else year
         q_labels = [f"{str(prev_y)[2:]}.{prev_q}Q", f"{str(year)[2:]}.{cur_q}Q"]
 
-    # [수정1] 값이 3배로 튀는 오류 해결
     # 동일 분기에 대해 매월 동일한 값이 들어있으므로, 중복을 제거하고 최신(last) 데이터만 남겨 합산 방지
     df_unique = df.sort_values(['연도', '월']).drop_duplicates(subset=['구분1', '구분2', '구분3'], keep='last')
     val_map = df_unique.groupby(['구분1', '구분2', '구분3'])['값'].sum().to_dict()
@@ -1787,26 +1789,23 @@ def _build_포스코지원금_table(year, month):
     def get_val(q_label, g2, g3):
         return val_map.get((q_label, g2, g3), 0.0)
 
-    items = ['수출지원(ES)', '일반재', '특가지원(SP)']
-
     def calc(lbl, target_items):
         v_qty_raw = sum(get_val(lbl, it, '주문량') for it in target_items)
         v_amt_raw = sum(get_val(lbl, it, '할인금액') for it in target_items)
         
-        # [수정2] 단위 맞추기
-        # 중량(주문량)은 톤단위로 변환 (kg -> ton : / 1000)
+        # 단위 맞추기
         v_qty = v_qty_raw / 1000.0 if v_qty_raw else 0.0
-        # 금액(할인금액)은 백만원 단위로 변환 (/ 1,000,000)
         v_amt = v_amt_raw / 1000000.0 if v_amt_raw else 0.0
-        
-        # 단가(원/톤) = 원본 금액 / 톤단위 중량 
         price = (v_amt_raw / v_qty) if v_qty else 0.0
         
         return v_qty, price, v_amt
 
     rows = []
-    for item in items:
-        row = {'구분': item, '_bold': False}
+    
+    # 3. 기존 항목 (단가, 할인금액 포함)
+    items_vol = ['수출지원(ES)', '일반재', '특가지원(SP)']
+    for item in items_vol:
+        row = {'구분': item, '_bold': False, '_type': 'normal'}
         for lbl in q_labels:
             v_qty, price, v_amt = calc(lbl, [item])
             row[f'{lbl}_주문량']  = _fmt(v_qty, decimal=0)
@@ -1815,13 +1814,34 @@ def _build_포스코지원금_table(year, month):
         rows.append(row)
 
     # 물량 할인 = 수출지원(ES) + 일반재 + 특가지원(SP)
-    total_row = {'구분': '물량 할인', '_bold': True}
+    total_vol_row = {'구분': '물량 할인', '_bold': True, '_type': 'normal'}
     for lbl in q_labels:
-        v_qty, price, v_amt = calc(lbl, items)
-        total_row[f'{lbl}_주문량']  = _fmt(v_qty, decimal=0)
-        total_row[f'{lbl}_단가']    = _fmt(price/1000, decimal=0)
-        total_row[f'{lbl}_할인금액'] = _fmt(v_amt, decimal=0)
-    rows.append(total_row)
+        v_qty, price, v_amt = calc(lbl, items_vol)
+        total_vol_row[f'{lbl}_주문량']  = _fmt(v_qty, decimal=0)
+        total_vol_row[f'{lbl}_단가']    = _fmt(price/1000, decimal=0)
+        total_vol_row[f'{lbl}_할인금액'] = _fmt(v_amt, decimal=0)
+    rows.append(total_vol_row)
+
+    # 4. 신규 추가 항목 (주문량만 산출, 단가/할인금액 제외)
+    items_other = ['연계 할인', '중국 대응재']
+    for item in items_other:
+        row = {'구분': item, '_bold': False, '_type': 'qty_only'}
+        for lbl in q_labels:
+            v_qty, _, _ = calc(lbl, [item])
+            row[f'{lbl}_주문량']  = _fmt(v_qty, decimal=0)
+            row[f'{lbl}_단가']    = ''
+            row[f'{lbl}_할인금액'] = ''
+        rows.append(row)
+
+    # 총계 = 물량할인 + 연계할인 + 중국대응재 (주문량 합산)
+    all_items = items_vol + items_other
+    total_all_row = {'구분': '총계', '_bold': True, '_type': 'qty_only'}
+    for lbl in q_labels:
+        v_qty, _, _ = calc(lbl, all_items)
+        total_all_row[f'{lbl}_주문량']  = _fmt(v_qty, decimal=0)
+        total_all_row[f'{lbl}_단가']    = ''
+        total_all_row[f'{lbl}_할인금액'] = ''
+    rows.append(total_all_row)
 
     return rows, q_labels
 
@@ -1840,19 +1860,27 @@ def _포스코지원금_to_html(rows, q_labels) -> str:
     body_html = ''
     for row in rows:
         is_bold = row.get('_bold', False)
+        row_type = row.get('_type', 'normal')
+        
         style_label = ROW_HDR_LBL if is_bold else ROW_ITEM
         style_num   = ROW_HDR_NUM if is_bold else _TD_NUM
         style_red   = ROW_HDR_RED if is_bold else _TD_RED
+        
+        # 주문량 외 빈칸(연계할인, 중국대응재, 총계)을 위한 짙은 회색 배경 스타일
+        style_empty = 'border: 1px solid #aaa; background-color: #595959;'
 
         cells = f'<td style="{style_label}">{row["구분"]}</td>'
         for lbl in q_labels:
             for sc in sub_cols:
-                s = str(row[f'{lbl}_{sc}'])
-                cells += f'<td style="{style_red if s.startswith("-") else style_num}">{s}</td>'
+                if row_type == 'qty_only' and sc in ['단가', '할인금액']:
+                    # 빈 셀은 회색 배경 처리
+                    cells += f'<td style="{style_empty}"></td>'
+                else:
+                    s = str(row[f'{lbl}_{sc}'])
+                    cells += f'<td style="{style_red if s.startswith("-") else style_num}">{s}</td>'
         body_html += f'<tr>{cells}</tr>'
 
     return _html_table(th_html, body_html)
-
 
 # ── render_page ───────────────────────────────────────────────────────────
 

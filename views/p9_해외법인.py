@@ -1805,7 +1805,7 @@ def _build_해외채권현황_table(year, month, corp):
 
     # 행 구성을 위한 설정 리스트: (표시명, depth, 수치계산함수)[cite: 1]
     row_configs = [
-        ('매출액', 0, lambda y, m: get_raw('매출액', '', y, m)),
+        ('매출액', 0, lambda y, m: get_raw('매출액(세금포함)', '', y, m)),
         ('정상채권', 0, val_jongsang_total),
         ('3개월 이하', 1, val_age_3m_under),
         ('3개월 초과', 1, val_age_3m_over),

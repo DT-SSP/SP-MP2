@@ -19,6 +19,8 @@ from views.common import (
     html_table as _html_table, memo_html as _memo_html, layout64 as _layout64, layout100 as _layout100,
 )
 
+from views.common import TH_STICKY, TH_CORNER_STICKY, TD_LBL_STICKY, ROW_HDR_LBL_STICKY
+
 _기호 = ['①', '②', '③', '④', '⑤', '⑥']
 
 
@@ -126,7 +128,7 @@ def _재무_section(title, per_corp_dfs, 소계행, 헤더행, corp_labels, memo
 
     inputs = ''.join(
         f'<input type="radio" id="ft_{prefix}_{s}" name="ftab_{prefix}" {"checked" if i == 0 else ""} '
-        f'style="position:absolute;opacity:0;pointer-events:none">'
+        f'style="display:none;">'
         for i, s in enumerate(safe)
     )
 
@@ -147,6 +149,7 @@ def _재무_section(title, per_corp_dfs, 소계행, 헤더행, corp_labels, memo
 
     tab_html = f'<style>{css}</style>' + inputs + tab_bar + panels
     return _layout64(title, tab_html, memo, unit)
+
 
 def _현금흐름표_연결_to_html_table(df, 소계행, 헤더행):
     depths    = df['_depth'].tolist() if '_depth' in df.columns else [1] * len(df)
@@ -194,7 +197,6 @@ def _현금흐름표_연결_to_html_table(df, 소계행, 헤더행):
     headers = ''.join(f'<th style="{_TH}; white-space: nowrap;">{c}</th>' for c in render_df.columns)
     return _html_table(f'<tr>{headers}</tr>', rows_html)
 
-
 def _현금흐름표_연결_section(title, per_corp_dfs, 소계행, 헤더행, corp_labels, memo='', unit='[단위: 백만원]'):
     # CSS id 선택자에 쓰이므로 공백/괄호 등 특수문자는 제거해야 함 (안 그러면 선택자가 깨져서 탭 전환이 무력화됨)
     safe = [c.replace(' ', '_').replace('(', '').replace(')', '') for c in corp_labels]
@@ -209,7 +211,7 @@ def _현금흐름표_연결_section(title, per_corp_dfs, 소계행, 헤더행, c
 
     inputs = ''.join(
         f'<input type="radio" id="ft_{prefix}_{s}" name="ftab_{prefix}" {"checked" if i == 0 else ""} '
-        f'style="position:absolute;opacity:0;pointer-events:none">'
+        f'style="display:none;">'
         for i, s in enumerate(safe)
     )
 
@@ -223,6 +225,7 @@ def _현금흐름표_연결_section(title, per_corp_dfs, 소계행, 헤더행, c
     )
     tab_bar += '</div>'
 
+
     panels = ''.join(
         f'<div id="fp_{prefix}_{s}">{_현금흐름표_연결_to_html_table(per_corp_dfs[corp], 소계행, 헤더행)}</div>'
         for corp, s in zip(corp_labels, safe)
@@ -230,7 +233,6 @@ def _현금흐름표_연결_section(title, per_corp_dfs, 소계행, 헤더행, c
 
     tab_html = f'<style>{css}</style>' + inputs + tab_bar + panels
     return _layout64(title, tab_html, memo, unit)
-
 
 
 def _build_회전일_table(year, month):
@@ -1764,7 +1766,7 @@ def _이익계획실적_section(title, tabs_data, memo='', unit='[단위: 억원
 
     inputs = ''.join(
         f'<input type="radio" id="ft_{prefix}_{s}" name="ftab_{prefix}" {"checked" if i == 0 else ""} '
-        f'style="position:absolute;opacity:0;pointer-events:none">'
+        f'style="display:none;">'
         for i, s in enumerate(safe)
     )
 

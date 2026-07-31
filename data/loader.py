@@ -95,7 +95,10 @@ def load_sheet(sheet_info: tuple, force_refresh: bool = False) -> pd.DataFrame:
     if not force_refresh and sheet_info in _cache:
         df, ts = _cache[sheet_info]
         if now - ts < _MEM_TTL:
-            return df
+            # 호출부(views/*.py)가 반환된 df를 in-place로 변형(컬럼 정리, 파싱 등)하는
+            # 경우가 많아, 캐시 원본을 그대로 내주면 그 변형이 캐시에 누적되어
+            # 이후 호출자(다른 사용자/페이지)가 오염된 데이터를 받게 된다. 항상 복사본을 반환.
+            return df.copy()
 
     # 2. 디스크 캐시
     if not force_refresh:
@@ -104,7 +107,7 @@ def load_sheet(sheet_info: tuple, force_refresh: bool = False) -> pd.DataFrame:
             logger.info(f"[loader] 디스크 캐시: {sheet_info[1]}")
             df = pd.read_pickle(path)
             _cache[sheet_info] = (df, now)
-            return df
+            return df.copy()
 
     # 3. Google Sheets API 호출
     logger.info(f"[loader] API 읽기: {sheet_info[1]}")
@@ -117,7 +120,7 @@ def load_sheet(sheet_info: tuple, force_refresh: bool = False) -> pd.DataFrame:
         logger.warning(f"[loader] 디스크 저장 실패 (메모리 캐시로 동작): {sheet_info[1]} — {e}")
 
     _cache[sheet_info] = (df, now)
-    return df
+    return df.copy()
 
 
 def refresh_all(sheet_infos: list, max_workers: int = 2):

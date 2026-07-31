@@ -612,44 +612,70 @@ def render_page(app, year_state, month_state):
             year, month = int(year_state.value), int(month_state.value)
             unit_text = '※ 사용량원단위 : 부재료사용량/공정처리량'
             
-            # 1~3번 항목 (사업장별 부재료 사용량)
-            locations = [
-                ('1) 부재료 사용량 원단위 (포항)', '포항'),
-                ('2) 부재료 사용량 원단위 (충주)', '충주'),
-                ('3) 부재료 사용량 원단위 (충주2)', '충주2')
-            ]
-            memo1 = _get_memo(Sheets.부재료사용량_메모, year, month)
+            memo1 = _get_memo(Sheets.부재료사용량_포항_메모, year, month)
+            memo2 = _get_memo(Sheets.부재료사용량_충주_메모, year, month)
+            memo3 = _get_memo(Sheets.부재료사용량_충주2_메모, year, month)
+            
+            # --- 1) 포항 ---
+            rows, hdrs = _build_부재료_data('포항', year, month)
+            app.markdown(
+                _layout100('1) 부재료 사용량 원단위 (포항)',
+                            _build_부재료_table_html('포항', rows, hdrs),
+                            memo1,  
+                            unit=unit_text),
+                unsafe_allow_html=True,
+            )
+            fig = _build_부재료_chart('포항', rows, hdrs)
+            app.plotly_chart(fig, use_container_width=True)
 
-            for title, loc in locations:
-                rows, hdrs = _build_부재료_data(loc, year, month)
-                
-                app.markdown(
-                    _layout100(title,
-                              _build_부재료_table_html(loc, rows, hdrs),
-                              memo1,
-                              unit=unit_text),
-                    unsafe_allow_html=True,
-                )
-                
-                fig = _build_부재료_chart(loc, rows, hdrs)
-                app.plotly_chart(fig, use_container_width=True)
-                
+            # 포항 차트와 충주 표 사이 간격 추가
+            app.markdown('<div style="clear:both; margin-top:130px;"></div>', unsafe_allow_html=True)
 
-                app.markdown('<div style="margin-top:48px;"></div>', unsafe_allow_html=True)
+            # --- 2) 충주 ---
+            rows, hdrs = _build_부재료_data('충주', year, month)
+            app.markdown(
+                _layout100('2) 부재료 사용량 원단위 (충주)',
+                            _build_부재료_table_html('충주', rows, hdrs),
+                            memo2,  
+                            unit=unit_text),
+                unsafe_allow_html=True,
+            )
+            fig = _build_부재료_chart('충주', rows, hdrs)
+            app.plotly_chart(fig, use_container_width=True)
 
+            # 충주 차트와 충주2 표 사이 간격 추가
+            app.markdown('<div style="clear:both; margin-top:130px;"></div>', unsafe_allow_html=True)
+
+            # --- 3) 충주2 ---
+            rows, hdrs = _build_부재료_data('충주2', year, month)
+            app.markdown(
+                _layout100('3) 부재료 사용량 원단위 (충주2)',
+                            _build_부재료_table_html('충주2', rows, hdrs),
+                            memo3,  
+                            unit=unit_text),
+                unsafe_allow_html=True,
+            )
+            fig = _build_부재료_chart('충주2', rows, hdrs)
+            app.plotly_chart(fig, use_container_width=True)
+
+            # 기존에 있던 충주2와 단가 추이 사이의 간격
+            app.markdown('<div style="clear:both; margin-top:48px;"></div>', unsafe_allow_html=True)
+
+            # --- 4) 단가 추이 영역 ---
             rows_단가, hdrs_단가 = _build_단가추이_data(year, month)
-            memo2 = _get_memo(Sheets.부재료단가추이_메모, year, month)
+            
+            # 변수명이 겹치지 않도록 memo_단가 로 변경하는 것을 권장합니다.
+            memo_단가 = _get_memo(Sheets.부재료단가추이_메모, year, month) 
             
             app.markdown(
                 _layout100('4) 단가 추이',
                           _build_단가추이_table_html(rows_단가, hdrs_단가),
-                          memo2),
+                          memo_단가), 
                 unsafe_allow_html=True,
             )
 
             fig_단가 = _build_단가추이_chart('주요 부재료', rows_단가, hdrs_단가) 
             app.plotly_chart(fig_단가, use_container_width=True)
-
 
         app.If(lambda: True, _render_사용량)
 

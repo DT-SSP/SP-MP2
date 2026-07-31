@@ -144,40 +144,46 @@ def _build_실적요약_chart(x_labels, sales_list, volume_list, op_profit_list,
         yaxis='y2', connectgaps=True
     ))
 
+    # 꺾은선 그래프 상/하단 여백 확장을 위한 동적 계산
     max_bar = max(max(sales_list or [1]), max(volume_list or [1]))
     max_line = max(op_profit_list) if op_profit_list else 100
     min_line = min(op_profit_list) if op_profit_list else 0
+    line_diff = max_line - min_line if max_line != min_line else max_line * 0.1
 
     fig.update_layout(
         barmode='group',
-        margin=dict(l=40, r=40, t=40, b=40),
-        autosize=True,
+        height=380, 
+        # t(상단) 여백을 늘려 텍스트 잘림을 방지하고 b(하단) 여백을 20으로 최소화
+        margin=dict(l=40, r=40, t=50, b=20), 
         legend=dict(
-            orientation='h', y=-0.15, x=0.5, xanchor='center',
-            font=dict(size=12, color='#334155'), bgcolor='rgba(0,0,0,0)',
+            orientation='h', 
+            y=-0.1,  # x축 레이블이 수평이 되었으므로 범례 위치를 좀 더 위로 당김
+            x=0.5, 
+            xanchor='center', 
+            yanchor='top',
+            font=dict(size=12, color='#334155'), 
+            bgcolor='rgba(0,0,0,0)',
         ),
         xaxis=dict(
-            tickfont=dict(size=10, color='#64748B'),
-            showgrid=False, linecolor='#CBD5E1', linewidth=1, showline=True,
-            automargin=True
+            tickangle=0,    # x축 레이블(범례)을 수평으로 변경
+            tickfont=dict(size=12, color='#64748B'),
+            showgrid=False, linecolor='#CBD5E1', linewidth=1, showline=True
         ),
         yaxis=dict(
             domain=[0, 0.60], showgrid=True, gridcolor=C_CHART_GRID, gridwidth=1,
-            range=[0, max_bar * 1.25], showticklabels=False, showline=False, zeroline=False,
-            automargin=True
+            range=[0, max_bar * 1.25], showticklabels=False, showline=False, zeroline=False
         ),
         yaxis2=dict(
-            domain=[0.65, 1.0], range=[min_line * 1.2 if min_line < 0 else 0, max_line * 1.45],
-            showgrid=False, showticklabels=False, showline=False, zeroline=False,
-            automargin=True
+            domain=[0.60, 1.0], 
+            # 꺾은선 그래프 영역의 위(+60%)와 아래(-30%)를 더 확보하여 숫자가 모두 보이게 처리
+            range=[min_line - line_diff * 0.3, max_line + line_diff * 0.6],
+            showgrid=False, showticklabels=False, showline=False, zeroline=False
         ),
         plot_bgcolor='white', paper_bgcolor='white',
         font=dict(size=11, family='sans-serif'),
     )
+
     return fig
-
-
-# ── 2) 환율 추이 데이터 및 그래프 빌더 ───────────────────────────────────────────
 
 # ── 2) 환율 추이 데이터 및 그래프 빌더 ───────────────────────────────────────────
 
@@ -192,7 +198,6 @@ def _build_환율추이_data(year, month):
 
     vm = df.groupby(['구분1', '연도', '월'])['값'].sum().to_dict()
 
-    # 💡 [Fix] '~년말' 하드코딩 제거 및 13개월 데이터 추출로 변경
     recent_13 = _recent_months(year, month, n_months=13)
 
     time_slots = []
@@ -224,7 +229,7 @@ def _build_환율추이_chart(x_labels, rates):
         rows=2, cols=2,
         subplot_titles=[f"{c} 환율" for c in currencies],
         horizontal_spacing=0.05,
-        vertical_spacing=0.15 # 상하 간격 추가
+        vertical_spacing=0.20 
     )
 
     for idx, currency in enumerate(currencies):
@@ -259,9 +264,8 @@ def _build_환율추이_chart(x_labels, rates):
         fig.update_yaxes(range=[y_min, y_max], row=row_idx, col=col_idx)
 
     fig.update_layout(
-        height=600, # 2행이므로 기존 320에서 600으로 높이 조정
-        margin=dict(l=20, r=20, t=50, b=30),
-        autosize=True,
+        height=550, # 기존 600에서 550으로 축소
+        margin=dict(l=20, r=20, t=50, b=30),  # 하단 여백(b)을 80에서 30으로 축소
         plot_bgcolor='white', paper_bgcolor='white',
         font=dict(size=11, family='sans-serif'),
     )
@@ -270,13 +274,14 @@ def _build_환율추이_chart(x_labels, rates):
     for r in range(1, 3):
         for c in range(1, 3):
             fig.update_xaxes(
-                tickfont=dict(size=10, color='#64748B'),
+                tickangle=0, 
+                tickfont=dict(size=13, color='#64748B'),
                 showgrid=False, linecolor='#CBD5E1', linewidth=1, showline=True,
-                automargin=True, row=r, col=c
+                row=r, col=c
             )
             fig.update_yaxes(
                 showgrid=False, showticklabels=False, showline=False, zeroline=False,
-                automargin=True, row=r, col=c
+                row=r, col=c
             )
 
     return fig
@@ -698,7 +703,8 @@ def _라디오_선택_section(title, per_item_dfs, item_labels, prefix="type_op"
 
     inputs = ''.join(
         f'<input type="radio" id="ft_{prefix}_{s}" name="ftab_{prefix}" {"checked" if i == 0 else ""} '
-        f'style="position:absolute;opacity:0;pointer-events:none">'
+        # [수정] width와 height를 0으로 설정하여 보이지 않는 요소가 스크롤 공간을 차지하지 않도록 방지
+        f'style="position:absolute;opacity:0;width:0px;height:0px;pointer-events:none;overflow:hidden;">'
         for i, s in enumerate(safe)
     )
 
@@ -1212,6 +1218,9 @@ def _build_인당_영업이익_period_dfs(df_out: pd.DataFrame) -> dict:
 
 def render_page(app, year_state, month_state):
 
+    app.markdown("""
+    """, unsafe_allow_html=True)
+
     def _render_title():
         app.markdown(
             f'<h1 style="color:#404448">{int(year_state.value)}년 {int(month_state.value)}월 별첨</h1>',
@@ -1238,7 +1247,8 @@ def render_page(app, year_state, month_state):
                 ('태국', '4) 태국 실적요약'),
             ]
 
-            for site_filter, title_text in sites:
+            # enumerate를 사용하여 인덱스 확인
+            for i, (site_filter, title_text) in enumerate(sites):
                 x_labels, sales, volume, op_profit, op_margin = _build_실적요약_data(
                     site_filter, year, month, n_months=12
                 )
@@ -1251,10 +1261,11 @@ def render_page(app, year_state, month_state):
                 app.plotly_chart(
                     _build_실적요약_chart(x_labels, sales, volume, op_profit, op_margin),
                     use_container_width=True,
-                    config={'responsive': True} # 반응형 옵션 강제 활성화
                 )
                 
-                app.markdown("<br>", unsafe_allow_html=True)
+                # 마지막 요소가 아닐 때만 <br> 태그 추가
+                if i < len(sites) - 1:
+                    app.markdown("<br>", unsafe_allow_html=True)
 
         app.If(lambda: True, _render_실적요약_탭)
 
@@ -1283,7 +1294,7 @@ def render_page(app, year_state, month_state):
             
             memo = _get_memo(Sheets.손익계산서_메모, year, month) if hasattr(Sheets, '손익계산서_메모') else ''
             
-            app.markdown(_layout100("1) 손익계산서 수정정상원가", html, memo=memo, unit="(단위: 톤, 백만원)"), unsafe_allow_html=True)
+            app.markdown(_layout100("1) 손익계산서 수정정상원가 (국내)", html, memo=memo, unit="(단위: 톤, 백만원)"), unsafe_allow_html=True)
 
         app.If(lambda: True, _render_손익계산서_탭)
 
@@ -1298,8 +1309,8 @@ def render_page(app, year_state, month_state):
                 df1 = _build_산업군별_영업이익_table(year, month)
                 per_item_dfs1 = _build_개별_그룹_dfs(df1, ["총계", "CHQ", "CD", "STS", "BTB", "PB"])
                 item_labels1 = ["총계", "CHQ", "CD", "STS", "BTB", "PB"]
-                memo1 = ''
-                app.markdown(_라디오_선택_section("1) 산업군별 영업이익 (B급 제외)", per_item_dfs1, item_labels1, prefix="ind_op", memo=memo1, unit="(단위: 톤, 백만원, %)"), unsafe_allow_html=True)
+                memo1 = _get_memo(Sheets.산업군별영업이익_메모, year, month)
+                app.markdown(_라디오_선택_section("1) 산업군별 영업이익 (국내, B급 제외)", per_item_dfs1, item_labels1, prefix="ind_op", memo=memo1, unit="(단위: 톤, 백만원, %)"), unsafe_allow_html=True)
                 app.markdown("<br>", unsafe_allow_html=True)
             except Exception as e:
                 app.markdown(f"<p style='color:#d32f2f;'>1) 산업군별 영업이익 생성 오류: {e}</p>", unsafe_allow_html=True)
@@ -1309,8 +1320,8 @@ def render_page(app, year_state, month_state):
                 df2 = _build_실수요유통영업이익_table(year, month)
                 per_item_dfs2 = _build_개별_그룹_dfs(df2, ["총계", "CHQ", "CD", "STS", "BTB", "PB"])
                 item_labels2 = ["총계", "CHQ", "CD", "STS", "BTB", "PB"]
-                memo2 = ''
-                app.markdown(_라디오_선택_section("2) 실수요/유통 영업이익 (B급 제외)", per_item_dfs2, item_labels2, prefix="usage_op", memo=memo2, unit="(단위: 톤, 백만원, %)"), unsafe_allow_html=True)
+                memo2 = _get_memo(Sheets.실수요유통영업이익_메모, year, month)
+                app.markdown(_라디오_선택_section("2) 실수요/유통 영업이익 (국내, B급 제외)", per_item_dfs2, item_labels2, prefix="usage_op", memo=memo2, unit="(단위: 톤, 백만원, %)"), unsafe_allow_html=True)
                 app.markdown("<br>", unsafe_allow_html=True)
             except Exception as e:
                 app.markdown(f"<p style='color:#d32f2f;'>2) 실수요/유통 영업이익 생성 오류: {e}</p>", unsafe_allow_html=True)
@@ -1320,8 +1331,8 @@ def render_page(app, year_state, month_state):
                 df3 = _build_메이커별영업이익_table(year, month)
                 per_item_dfs3 = _build_개별_그룹_dfs(df3, ["총계", "CHQ", "CD", "STS", "BTB", "PB"])
                 item_labels3 = ["총계", "CHQ", "CD", "STS", "BTB", "PB"]
-                memo3 = ''
-                app.markdown(_라디오_선택_section("3) 메이커별 영업이익 (B급 제외)", per_item_dfs3, item_labels3, prefix="maker_op", memo=memo3, unit="(단위: 톤, 백만원, %)"), unsafe_allow_html=True)
+                memo3 = _get_memo(Sheets.메이커별영업이익_메모, year, month)
+                app.markdown(_라디오_선택_section("3) 메이커별 영업이익 (국내, B급 제외)", per_item_dfs3, item_labels3, prefix="maker_op", memo=memo3, unit="(단위: 톤, 백만원, %)"), unsafe_allow_html=True)
                 app.markdown("<br>", unsafe_allow_html=True)
             except Exception as e:
                 app.markdown(f"<p style='color:#d32f2f;'>3) 메이커별 영업이익 생성 오류: {e}</p>", unsafe_allow_html=True)
@@ -1330,8 +1341,8 @@ def render_page(app, year_state, month_state):
             try:
                 df4 = _build_부서_메이커별_영업이익_table(year, month)
                 per_team_dfs4 = _build_개별_그룹_dfs(df4, teams_labels)
-                memo4 = ''
-                app.markdown(_라디오_선택_section("4) 부서/메이커별 영업이익 (B급 및 매입매출 제외)", per_team_dfs4, teams_labels, prefix="dept_maker_op", memo=memo4, unit="(단위: 톤, 백만원, %)"), unsafe_allow_html=True)
+                memo4 = _get_memo(Sheets.부서메이커별영업이익_메모, year, month)
+                app.markdown(_라디오_선택_section("4) 부서/메이커별 영업이익 (국내, B급 및 매입매출 제외)", per_team_dfs4, teams_labels, prefix="dept_maker_op", memo=memo4, unit="(단위: 톤, 백만원, %)"), unsafe_allow_html=True)
                 app.markdown("<br>", unsafe_allow_html=True)
             except Exception as e:
                 app.markdown(f"<p style='color:#d32f2f;'>4) 부서/메이커별 영업이익 생성 오류: {e}</p>", unsafe_allow_html=True)
@@ -1340,8 +1351,8 @@ def render_page(app, year_state, month_state):
             try:
                 df5 = _build_부서_사업장_메이커별_영업이익_table(year, month)
                 per_team_dfs5 = _build_개별_그룹_dfs(df5, teams_labels)
-                memo5 = ''
-                app.markdown(_라디오_선택_section("5) 부서/사업장/메이커별 영업이익 (B급 및 매입매출 제외)", per_team_dfs5, teams_labels, prefix="dept_site_maker_op", memo=memo5, unit="(단위: 톤, 백만원, %)"), unsafe_allow_html=True)
+                memo5 = _get_memo(Sheets.부서사업장메이커별영업이익_메모, year, month)
+                app.markdown(_라디오_선택_section("5) 부서/사업장/메이커별 영업이익 (국내, B급 및 매입매출 제외)", per_team_dfs5, teams_labels, prefix="dept_site_maker_op", memo=memo5, unit="(단위: 톤, 백만원, %)"), unsafe_allow_html=True)
                 app.markdown("<br>", unsafe_allow_html=True)
             except Exception as e:
                 app.markdown(f"<p style='color:#d32f2f;'>5) 부서/사업장/메이커별 영업이익 생성 오류: {e}</p>", unsafe_allow_html=True)
@@ -1351,8 +1362,8 @@ def render_page(app, year_state, month_state):
                 df6 = _build_부서별_인당_영업이익_table(year, month)
                 per_period_dfs6 = _build_인당_영업이익_period_dfs(df6)
                 period_labels6 = ["누적", "전월", "당월"]
-                memo6 = ''
-                app.markdown(_라디오_선택_section("6) 부서별/인당 영업이익 (B급 제외)", per_period_dfs6, period_labels6, prefix="per_capita_op", memo=memo6, unit="(단위: 톤, 백만원, %)"), unsafe_allow_html=True)
+                memo6 = _get_memo(Sheets.부서별인당영업이익_메모, year, month)
+                app.markdown(_라디오_선택_section("6) 부서별/인당 영업이익 (국내, B급 제외)", per_period_dfs6, period_labels6, prefix="per_capita_op", memo=memo6, unit="(단위: 톤, 백만원, %)"), unsafe_allow_html=True)
             except Exception as e:
                 app.markdown(f"<p style='color:#d32f2f;'>6) 부서별/인당 영업이익 생성 오류: {e}</p>", unsafe_allow_html=True)
 

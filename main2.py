@@ -66,8 +66,7 @@ PAGE_SHEETS_MAP = {
         Sheets.부적합발생추이_포항_메모, Sheets.부적합발생추이_충주_충주2_메모
     ],
     "5. 비용분석": [
-        Sheets.부재료사용량_DB, Sheets.부재료사용량_메모,
-        Sheets.부재료단가추이_DB, Sheets.부재료단가추이_메모,
+        Sheets.부재료단가추이_DB, Sheets.부재료사용량_포항_메모, Sheets.부재료사용량_충주_메모, Sheets.부재료사용량_충주2_메모,
         Sheets.월평균클레임_DB, Sheets.당월클레임_메모,
         Sheets.당월클레임_DB,
         Sheets.영업외비용_DB, Sheets.영업외비용_메모
@@ -101,7 +100,9 @@ PAGE_SHEETS_MAP = {
     ],
     "10. 별첨" : [
         Sheets.전체실적요약_DB, Sheets.환율_DB, Sheets.손익계산서_DB,Sheets.산업군별영업이익_DB,
-        Sheets.메이커별영업이익_DB, Sheets.실수요유통영업이익_DB
+        Sheets.메이커별영업이익_DB, Sheets.실수요유통영업이익_DB,
+        Sheets.산업군별영업이익_메모, Sheets.실수요유통영업이익_메모, Sheets.메이커별영업이익_메모,
+        Sheets.부서메이커별영업이익_메모, Sheets.부서사업장메이커별영업이익_메모, Sheets.부서별인당영업이익_메모
         ]
     }
 
