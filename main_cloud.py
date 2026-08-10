@@ -19,7 +19,7 @@ from violit.context import layout_ctx, session_ctx
 
 from data.config import Sheets
 from data.loader import load_sheet, preload_all, refresh_all
-from views import p1_실적요약 ,p2_손익분석, p3_매출분석, p4_생산분석, p5_비용분석, p6_재고자산, p7_채권분석, p8_인원분석, p9_해외법인, p10_별첨
+from views import p1_실적요약, p2_손익분석, p3_매출분석, p4_생산분석, p5_비용분석, p6_재고자산, p7_채권분석, p8_인원분석, p9_해외법인, p10_별첨
 import asyncio 
 import time  
 from views.common import prev_month
@@ -27,7 +27,7 @@ from views.common import prev_month
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 
 # ── 1. 인증 및 권한 설정 ────────────────────────────────────────────────
-# 데이터 새로고침 버튼을 볼 수 있는 관리자 이메일 목록 (이메일 형식으로 변경)
+# 데이터 새로고침 버튼을 볼 수 있는 관리자 이메일 목록
 _ADMIN_USERS: set[str] = {"gawon.yi@seah.co.kr", "jaeseok.heo@seah.co.kr", "daeseong.kang@seah.co.kr", "sejong.hyun@seah.co.kr"}
 
 # 접근 허용 이메일 목록 (환경변수 ALLOWED_EMAILS에 쉼표로 구분해 등록)
@@ -176,12 +176,10 @@ _current_user: ContextVar[str | None] = ContextVar("current_user", default=None)
 
 def get_current_user() -> str | None:
     """렌더 및 웹소켓 Context 내에서 현재 사용자 이메일 동적 판단"""
-    # 1. HTTP ContextVar 확인
     user = _current_user.get()
     if user:
         return user
     
-    # 2. Violit Session Context 확인
     try:
         sid = session_ctx.get()
         if sid and sid in _sid_email:
@@ -189,7 +187,6 @@ def get_current_user() -> str | None:
     except Exception:
         pass
 
-    # 3. 매핑 실패 시 백업(가장 최근 인증된 사용자 이메일)
     return _sid_email.get("_latest_auth_email")
 
 def is_authenticated() -> bool:
@@ -202,7 +199,6 @@ class _GoogleAuthMiddleware:
         self._app = app
 
     async def __call__(self, scope, receive, send):
-        # HTTP 및 WebSocket 통신 모두에서 인증 쿠키 검증 수행
         if scope["type"] in ("http", "websocket"):
             email = _parse_auth_cookie(scope)
             sid = _parse_ss_sid(scope)
@@ -225,7 +221,6 @@ class _GoogleAuthMiddleware:
         token = _current_user.set(email)
         
         try:
-            # 인증되지 않았고 공개 경로가 아닌 경우 OAuth 로그인 페이지로 리디렉션
             if email is None and not any(path.startswith(p) for p in _AUTH_PUBLIC_PREFIXES):
                 response = RedirectResponse("/auth/google")
                 await response(scope, receive, send)
@@ -236,7 +231,6 @@ class _GoogleAuthMiddleware:
 
 # ── 4. Violit 앱 초기화 ───────────────────────────────────────────────────
 app = vl.App(title="선재사업부문 경영실적 대시보드", container_width="100%", db="./app.db")
-# 기존의 SQLModel 기반 인증 제거 후 미들웨어 장착
 app.fastapi.add_middleware(_GoogleAuthMiddleware)
 
 @app.fastapi.on_event("startup")
@@ -308,12 +302,11 @@ async def auth_callback(request: Request, code: str = None, error: str = None):
     auth_token = _get_signer().dumps(email)
     response = RedirectResponse("/", status_code=302)
     
-    # 1. Cloud Run(HTTPS) 환경에 맞춰 secure 옵션 명시
     response.set_cookie(
         "at_auth", auth_token,
         httponly=True, samesite="lax",
         max_age=86400 * 30,
-        secure=True,  # HTTPS 전용 고정[cite: 14]
+        secure=True,
         path="/"
     )
     return response
@@ -339,8 +332,6 @@ _LOGOUT_BTN = (
 )
 
 def _sidebar_controls():
-    if not is_authenticated():
-        return
     연도_목록 = _get_연도_목록()
     cur_year = year_state.value
     default_year_idx = 연도_목록.index(cur_year) if cur_year in 연도_목록 else len(연도_목록) - 1
@@ -400,7 +391,7 @@ def _sidebar_controls():
                     elif status == "error":
                         app.button("❌", on_click=lambda p=page_name: _REFRESH_STATES[p].set("idle"), key=f"err_{page_name}")
         
-        # 로그아웃 버튼 (OAuth 용 a 태그 링크)
+        # 로그아웃 버튼
         app.markdown(_LOGOUT_BTN, unsafe_allow_html=True)
 
     finally:
@@ -412,41 +403,12 @@ with app.sidebar:
 
 
 # ── 7. 페이지 설정 ────────────────────────────────────────────────────────
-def login_page():
-    # 이제 이 페이지는 미들웨어에서 리디렉션하지 않는 경우에만 보여집니다 (주로 첫 진입점 찰나).
-    # Google 로그인 버튼으로 깔끔하게 정리했습니다.
-    _, col, _ = app.columns([1, 2, 1])
-    with col:
-        app.markdown(
-            '<div style="text-align:center;padding:48px 0 28px">'
-            '<p style="font-size:1.4em;font-weight:700;color:#323C47;margin:0"><span style="color:#EA5421;">🔒</span> 선재사업부문 경영실적 대시보드</p>'
-            '<p style="color:#666;font-size:0.9em;margin:8px 0 24px">사내 Google 계정으로 로그인해주세요.</p>'
-            '<a href="/auth/google" style="display:inline-block;padding:12px 24px;background:#EA5421;color:white;text-decoration:none;border-radius:6px;font-weight:bold;">Google 계정으로 로그인</a>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-
 def _protected(render_fn):
     def _page():
-        if not is_authenticated():
-            app.markdown(
-                '<div style="display:flex;flex-direction:column;align-items:center;'
-                'justify-content:center;padding:80px 20px;text-align:center">'
-                '<p style="font-size:2em;margin:0 0 12px">🔒</p>'
-                '<p style="font-size:1.1em;color:#DC2626;font-weight:600;margin:0 0 8px">'
-                '접근 권한이 없습니다</p>'
-                '<p style="color:#666;font-size:0.9em;margin:0 0 24px">'
-                '이 자료는 권한이 있는 사내 계정으로 로그인 후 열람할 수 있습니다.</p>'
-                '<a href="/auth/google" style="padding:10px 20px;background:#323C47;color:white;text-decoration:none;border-radius:4px;">로그인 페이지로 이동</a>'
-                '</div>',
-                unsafe_allow_html=True,
-            )
-            return
         render_fn(app, year_state, month_state)
     return _page
 
 app.navigation([
-    vl.Page(login_page,                              title="Login"),
     vl.Page(_protected(p1_실적요약.render_page),     title="1. 실적요약"),
     vl.Page(_protected(p2_손익분석.render_page),     title="2. 손익분석"),
     vl.Page(_protected(p3_매출분석.render_page),     title="3. 매출분석"),
