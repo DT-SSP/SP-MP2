@@ -6,42 +6,27 @@ import datetime
 import logging
 import os
 import threading
-from contextvars import ContextVar
-from urllib.parse import urlencode
+from typing import Optional
+from sqlmodel import SQLModel, Field
 
-import httpx
 import pandas as pd
 import violit as vl
-from fastapi import Request
-from fastapi.responses import HTMLResponse, RedirectResponse
-from itsdangerous import BadSignature, URLSafeSerializer
-from violit.context import layout_ctx, session_ctx
+from violit.context import layout_ctx
 
 from data.config import Sheets
-from data.loader import load_sheet, preload_all, refresh_all
+from data.loader_local import load_sheet, preload_all, refresh_all
 from views import p1_실적요약 ,p2_손익분석, p3_매출분석, p4_생산분석, p5_비용분석, p6_재고자산, p7_채권분석, p8_인원분석, p9_해외법인, p10_별첨
 import asyncio 
 import time  
 from views.common import prev_month
 
+
+# 데이터 새로고침 버튼을 볼 수 있는 관리자 아이디 목록
+_ADMIN_USERS: set[str] = {"gawon.yi", "jaeseok.heo", "daeseong.kang", "sejong.hyun"}
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 
-# ── 1. 인증 및 권한 설정 ────────────────────────────────────────────────
-# 데이터 새로고침 버튼을 볼 수 있는 관리자 이메일 목록 (이메일 형식으로 변경)
-_ADMIN_USERS: set[str] = {"gawon.yi@seah.co.kr", "jaeseok.heo@seah.co.kr", "daeseong.kang@seah.co.kr", "sejong.hyun@seah.co.kr"}
 
-# 접근 허용 이메일 목록 (환경변수 ALLOWED_EMAILS에 쉼표로 구분해 등록)
-_ALLOWED_EMAILS: set[str] = {
-    e.strip()
-    for e in os.environ.get("ALLOWED_EMAILS", "").split(",")
-    if e.strip()
-}
-
-# Cloud Run은 내부적으로 HTTP로 처리하므로 redirect_uri를 env로 고정
-_BASE_URL = os.environ.get("BASE_URL", "").rstrip("/")
-
-
-# ── 2. 페이지 및 시트 매핑 설정 ──────────────────────────────────────────
 PAGE_SHEETS_MAP = {
     "1. 실적요약": [
         Sheets.손익_DB, Sheets.손익_메모, Sheets.손익_국내_메모,
@@ -119,7 +104,7 @@ PAGE_SHEETS_MAP = {
         Sheets.산업군별영업이익_메모, Sheets.실수요유통영업이익_메모, Sheets.메이커별영업이익_메모,
         Sheets.부서메이커별영업이익_메모, Sheets.부서사업장메이커별영업이익_메모, Sheets.부서별인당영업이익_메모
         ]
-}
+    }
 
 _REFRESH_STATES = {page: vl.State(f"refresh_status_{page}", "idle") for page in PAGE_SHEETS_MAP}
 _REFRESH_LOCK = threading.Lock()
@@ -129,197 +114,56 @@ def _get_연도_목록():
     return sorted(pd.to_numeric(df['연도'], errors='coerce').dropna().astype(int).unique().tolist())
 
 
-# ── 3. Google OAuth 미들웨어 및 로직 ──────────────────────────────────────
-_GOOGLE_AUTH_URL  = "https://accounts.google.com/o/oauth2/v2/auth"
-_GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
-_GOOGLE_USERINFO  = "https://www.googleapis.com/oauth2/v3/userinfo"
+class User(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    username: str
+    hashed_password: str
 
-_signer: URLSafeSerializer | None = None
-
-def _get_signer() -> URLSafeSerializer:
-    global _signer
-    if _signer is None:
-        _signer = URLSafeSerializer(os.environ.get("SESSION_SECRET_KEY", "fallback-secret"), salt="at-mp-auth")
-    return _signer
-
-def _parse_auth_cookie(scope) -> str | None:
-    headers = dict(scope.get("headers", []))
-    raw = headers.get(b"cookie", b"").decode("latin-1")
-    cookies = {}
-    for part in raw.split(";"):
-        part = part.strip()
-        if "=" in part:
-            k, v = part.split("=", 1)
-            cookies[k.strip()] = v.strip()
-    token = cookies.get("at_auth")
-    if not token:
-        return None
+def _run_refresh_bg(target_sheets: list, page_name: str):
+    is_success = False
     try:
-        return _get_signer().loads(token)
-    except BadSignature:
-        return None
+        # 지정된 시트만 새로고침 진행
+        refresh_all(target_sheets, max_workers=2)
+        _REFRESH_STATES[page_name].set("done") # 완료 상태로 업데이트
+        is_success = True
+    except Exception as e:
+        logging.error(f"[refresh] {page_name} 실패: {e}")
+        _REFRESH_STATES[page_name].set("error") # 에러 상태로 업데이트
+    finally:
+        # 다른 페이지가 새로고침을 할 수 있도록 락을 먼저 해제
+        _REFRESH_LOCK.release()
+    
+    # 락 해제 후, 성공적으로 끝났다면 2초 뒤에 다시 idle 상태로 복구
+    if is_success:
+        time.sleep(2)  # 2초 동안 ✅ 표시 유지
+        _REFRESH_STATES[page_name].set("idle") # 🔄 아이콘으로 복구
 
-# Violit ss_sid → email 매핑
-_sid_email: dict[str, str] = {}
+app = vl.App(title="선재사업부문 경영실적 대시보드",container_width="100%", db="./app.db")
+app.setup_auth(User, require_auth=False)
 
-def _parse_ss_sid(scope) -> str | None:
-    headers = dict(scope.get("headers", []))
-    raw = headers.get(b"cookie", b"").decode("latin-1")
-    for part in raw.split(";"):
-        part = part.strip()
-        if part.startswith("ss_sid="):
-            return part[len("ss_sid="):]
-    return None
-
-def get_current_user() -> str | None:
-    """렌더 함수 내에서 현재 세션 이메일 반환."""
-    sid = session_ctx.get()
-    return _sid_email.get(sid) if sid else None
-
-def is_authenticated() -> bool:
-    return get_current_user() is not None
-
-# HTTP 요청용 ContextVar (미들웨어에서 인증 판단용)
-_current_user: ContextVar[str | None] = ContextVar("current_user", default=None)
-
-_AUTH_PUBLIC_PREFIXES = ("/auth/", "/_violit/", "/static/", "/favicon")
-
-class _GoogleAuthMiddleware:
-    def __init__(self, app):
-        self._app = app
-
-    async def __call__(self, scope, receive, send):
-        # HTTP/WebSocket 모두 ss_sid + at_auth 쿠키로 이메일 매핑 저장
-        if scope["type"] in ("http", "websocket"):
-            email = _parse_auth_cookie(scope)
-            sid   = _parse_ss_sid(scope)
-            if sid and email:
-                _sid_email[sid] = email
-
-        if scope["type"] == "websocket":
-            await self._app(scope, receive, send)
-            return
-
-        if scope["type"] != "http":
-            await self._app(scope, receive, send)
-            return
-
-        path = scope.get("path", "")
-        email = _parse_auth_cookie(scope)
-        token = _current_user.set(email)
-        try:
-            if email is None and not any(path.startswith(p) for p in _AUTH_PUBLIC_PREFIXES):
-                response = RedirectResponse("/auth/google")
-                await response(scope, receive, send)
-                return
-            await self._app(scope, receive, send)
-        finally:
-            _current_user.reset(token)
-
-
-# ── 4. Violit 앱 초기화 ───────────────────────────────────────────────────
-app = vl.App(title="선재사업부문 경영실적 대시보드", container_width="100%", db="./app.db")
-# 기존의 SQLModel 기반 인증 제거 후 미들웨어 장착
-app.fastapi.add_middleware(_GoogleAuthMiddleware)
 
 @app.fastapi.on_event("startup")
 async def _on_startup():
     all_sheets = [v for k, v in vars(Sheets).items()
                   if not k.startswith("_") and isinstance(v, tuple)]
-    threading.Thread(target=preload_all, args=(all_sheets,), daemon=True).start()
-
-# ── 5. OAuth 라우터 (FastAPI) ──────────────────────────────────────────────
-def _redirect_uri(request: Request) -> str:
-    base = _BASE_URL or str(request.base_url).rstrip("/")
-    return base + "/auth/callback"
-
-@app.fastapi.get("/auth/google")
-async def auth_google(request: Request):
-    redirect_uri = _redirect_uri(request)
-    params = {
-        "client_id":     os.environ.get("GOOGLE_CLIENT_ID", ""),
-        "redirect_uri":  redirect_uri,
-        "response_type": "code",
-        "scope":         "openid email profile",
-        "access_type":   "online",
-        "prompt":        "select_account",
-    }
-    return RedirectResponse(_GOOGLE_AUTH_URL + "?" + urlencode(params))
+    preload_all(all_sheets)
 
 
-@app.fastapi.get("/auth/callback")
-async def auth_callback(request: Request, code: str = None, error: str = None):
-    if error or not code:
-        return HTMLResponse(
-            f'<p style="font-family:sans-serif">로그인 실패: {error or "코드 없음"} '
-            f'<a href="/auth/google">다시 시도</a></p>'
-        )
+login_error = vl.State("login_error", False)
 
-    redirect_uri = _redirect_uri(request)
-    async with httpx.AsyncClient() as client:
-        token_resp = await client.post(_GOOGLE_TOKEN_URL, data={
-            "code":          code,
-            "client_id":     os.environ.get("GOOGLE_CLIENT_ID", ""),
-            "client_secret": os.environ.get("GOOGLE_CLIENT_SECRET", ""),
-            "redirect_uri":  redirect_uri,
-            "grant_type":    "authorization_code",
-        })
-        token_data = token_resp.json()
-
-    access_token = token_data.get("access_token")
-    if not access_token:
-        return HTMLResponse(
-            '<p style="font-family:sans-serif">토큰 발급 실패. '
-            '<a href="/auth/google">다시 시도</a></p>'
-        )
-
-    async with httpx.AsyncClient() as client:
-        info_resp = await client.get(
-            _GOOGLE_USERINFO,
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
-        user_info = info_resp.json()
-
-    email: str = user_info.get("email", "")
-    if email not in _ALLOWED_EMAILS:
-        return HTMLResponse(
-            f'<p style="font-family:sans-serif;color:red">'
-            f'접근 권한이 없습니다. 등록된 이메일이 아닙니다. ({email})</p>',
-            status_code=403,
-        )
-
-    auth_token = _get_signer().dumps(email)
-    response = RedirectResponse("/", status_code=302)
-    response.set_cookie(
-        "at_auth", auth_token,
-        httponly=True, samesite="lax",
-        max_age=86400 * 30,
-        secure=os.environ.get("COOKIE_SECURE", "true").lower() == "true",
-    )
-    return response
-
-@app.fastapi.get("/auth/logout")
-async def auth_logout():
-    response = RedirectResponse("/auth/google", status_code=302)
-    response.delete_cookie("at_auth")
-    return response
-
-
-# ── 6. 공통 상태 및 사이드바 ───────────────────────────────────────────────
+# Session-level year/month state — lives outside page functions so the
+# static sidebar can update them and all views can read them.
 _today = datetime.date.today()
+
 _default_year, _default_month = prev_month(_today.year, _today.month, 1)
 year_state  = vl.State("selected_year",  _default_year)
 month_state = vl.State("selected_month", _default_month)
 
-_LOGOUT_BTN = (
-    '<a href="/auth/logout" style="display:block;width:100%;box-sizing:border-box;'
-    'padding:0.4em 0.75em;border:1px solid #d1d5db;border-radius:6px;'
-    'text-align:center;text-decoration:none;color:inherit;font-size:0.9em;'
-    'cursor:pointer;background:transparent;margin-top:16px;">로그아웃</a>'
-)
 
+# ── App-level sidebar (registered statically so it works immediately
+#    after login without needing an F5 refresh) ──────────────────────
 def _sidebar_controls():
-    if not is_authenticated():
+    if not app.auth.is_authenticated():
         return
     연도_목록 = _get_연도_목록()
     cur_year = year_state.value
@@ -333,44 +177,70 @@ def _sidebar_controls():
         app.selectbox("월", list(range(1, 13)), index=month_state.value - 1, on_change=lambda v: month_state.set(int(v)))
         app.divider()
         
-        email = get_current_user() or ""
-        
-        # 관리자 전용 새로고침 로직
-        if email in _ADMIN_USERS:
+        def _do_logout():
+            app.auth.logout()
+            app.switch_page("Login")
+        app.button("로그아웃", on_click=_do_logout)
+
+        # ------------------ 변경된 부분 ------------------
+        # 관리자 전용: 각 페이지 버튼 옆에 작은 새로고침 버튼
+        user = app.auth.current_user()
+        if user and user.username in _ADMIN_USERS:
+            # 관리자는 위쪽 페이지 버튼 목록으로 이동이 가능하므로,
+            # 프레임워크가 자동으로 그리는 하단 기본 네비게이션 메뉴는 중복이라 숨긴다.
             app.markdown('<style>.nav-container{display:none}</style>', unsafe_allow_html=True)
             app.divider()
 
+            # 파이썬 반복문 내에서 콜백 함수 꼬임을 방지하기 위한 클로저 헬퍼
             def make_refresh_callback(t_sheets, p_name):
+                # UI 프레임워크 규칙에 맞게 겉은 일반(동기) 함수로 선언
                 def _do_refresh():
                     if _REFRESH_LOCK.acquire(blocking=False):
-                        _REFRESH_STATES[p_name].set("running")
+                        _REFRESH_STATES[p_name].set("running") # 즉시 ⏳ 모래시계로 변경
                         
+                        # 실제 수행할 비동기 작업을 내부 함수로 정의
                         async def _bg_task():
                             try:
+                                # 무거운 작업을 스레드로 넘겨 UI 멈춤 방지
                                 await asyncio.to_thread(refresh_all, t_sheets, max_workers=2)
-                                _REFRESH_STATES[p_name].set("done")
+                                
+                                _REFRESH_STATES[p_name].set("done") # ✅ 체크 표시로 변경
+                                
+                                # [추가된 부분] 캐시 갱신이 완료되면 해당 페이지를 다시 호출하여 화면 갱신
                                 app.switch_page(p_name)
-                                await asyncio.sleep(2)
-                                _REFRESH_STATES[p_name].set("idle")
+                                
+                                await asyncio.sleep(2)              # 2초 대기
+                                _REFRESH_STATES[p_name].set("idle") # 🔄 원래 아이콘으로 복구
+                                
                             except Exception as e:
                                 logging.error(f"[refresh] {p_name} 실패: {e}")
                                 _REFRESH_STATES[p_name].set("error")
                             finally:
                                 _REFRESH_LOCK.release()
 
+                        # 현재 실행 중인 이벤트 루프에 비동기 작업을 던져주고 즉시 종료
                         try:
                             loop = asyncio.get_running_loop()
                             loop.create_task(_bg_task())
                         except RuntimeError:
+                            # 만약 이벤트 루프가 없는 스레드 환경이라면 일반 스레드 방식으로 우회 실행
                             threading.Thread(target=lambda: asyncio.run(_bg_task()), daemon=True).start()
+
                 return _do_refresh
 
+            # 매핑된 페이지들을 순회하며 UI 렌더링
             for page_name, target_sheets in PAGE_SHEETS_MAP.items():
-                c1, c2 = app.columns([8, 2])
+                c1, c2 = app.columns([8, 2]) # 8:2 비율로 영역 분할
                 with c1:
-                    app.button(page_name, on_click=lambda p=page_name: app.switch_page(p), key=f"nav_{page_name}")
+                    app.button(
+                        page_name, 
+                        on_click=lambda p=page_name: app.switch_page(p), 
+                        key=f"nav_{page_name}"
+                    )
                 with c2:
+                    # .value 속성을 통해 현재 상태 값 가져오기
                     status = _REFRESH_STATES[page_name].value
+                    
                     if status == "idle":
                         app.button("🔄", on_click=make_refresh_callback(target_sheets, page_name), key=f"ref_{page_name}")
                     elif status == "running":
@@ -379,36 +249,51 @@ def _sidebar_controls():
                         app.button("✅", on_click=make_refresh_callback(target_sheets, page_name), key=f"done_{page_name}")
                     elif status == "error":
                         app.button("❌", on_click=lambda p=page_name: _REFRESH_STATES[p].set("idle"), key=f"err_{page_name}")
-        
-        # 로그아웃 버튼 (OAuth 용 a 태그 링크)
-        app.markdown(_LOGOUT_BTN, unsafe_allow_html=True)
+        # -------------------------------------------------
 
     finally:
         layout_ctx.reset(_token)
 
 
+
 with app.sidebar:
-    app.If(lambda: True, _sidebar_controls)
+    app.If(app.auth.is_authenticated, _sidebar_controls)
 
 
-# ── 7. 페이지 설정 ────────────────────────────────────────────────────────
 def login_page():
-    # 이제 이 페이지는 미들웨어에서 리디렉션하지 않는 경우에만 보여집니다 (주로 첫 진입점 찰나).
-    # Google 로그인 버튼으로 깔끔하게 정리했습니다.
     _, col, _ = app.columns([1, 2, 1])
     with col:
+        # 변경점: 타이틀 색상을 세아 다크 네이비(#323C47)로 변경하고, 자물쇠 아이콘에 오렌지(#EA5421) 포인트 추가
         app.markdown(
             '<div style="text-align:center;padding:48px 0 28px">'
             '<p style="font-size:1.4em;font-weight:700;color:#323C47;margin:0"><span style="color:#EA5421;">🔒</span> 선재사업부문 경영실적 대시보드</p>'
-            '<p style="color:#666;font-size:0.9em;margin:8px 0 24px">사내 Google 계정으로 로그인해주세요.</p>'
-            '<a href="/auth/google" style="display:inline-block;padding:12px 24px;background:#EA5421;color:white;text-decoration:none;border-radius:6px;font-weight:bold;">Google 계정으로 로그인</a>'
+            '<p style="color:#666;font-size:0.9em;margin:8px 0 0">권한이 있는 임직원만 열람할 수 있습니다.</p>'
             '</div>',
             unsafe_allow_html=True,
         )
+        username = app.text_input("아이디", placeholder="아이디를 입력하세요")
+        password = app.text_input("비밀번호", type="password", placeholder="비밀번호를 입력하세요")
+
+        if login_error.value:
+            # 변경점: 에러 메시지 색상을 세아 경고 레드(#DC2626)로 변경
+            app.markdown(
+                '<p style="color:#DC2626;font-size:0.9em;margin:4px 0">아이디 또는 비밀번호가 올바르지 않습니다.</p>',
+                unsafe_allow_html=True,
+            )
+
+        def _do_login():
+            if app.auth.login(username.value, password.value):
+                app.switch_page("1. 실적요약")
+            else:
+                login_error.set(True)
+
+        app.button("로그인", on_click=_do_login)
+
 
 def _protected(render_fn):
     def _page():
-        if not is_authenticated():
+        if not app.auth.is_authenticated():
+            # 변경점: 접근 권한 경고 아이콘과 텍스트를 세아 경고 레드(#DC2626)로 통일성 있게 변경
             app.markdown(
                 '<div style="display:flex;flex-direction:column;align-items:center;'
                 'justify-content:center;padding:80px 20px;text-align:center">'
@@ -416,12 +301,16 @@ def _protected(render_fn):
                 '<p style="font-size:1.1em;color:#DC2626;font-weight:600;margin:0 0 8px">'
                 '접근 권한이 없습니다</p>'
                 '<p style="color:#666;font-size:0.9em;margin:0 0 24px">'
-                '이 자료는 권한이 있는 사내 계정으로 로그인 후 열람할 수 있습니다.</p>'
-                '<a href="/auth/google" style="padding:10px 20px;background:#323C47;color:white;text-decoration:none;border-radius:4px;">로그인 페이지로 이동</a>'
+                '이 자료는 로그인 후 열람할 수 있습니다.</p>'
                 '</div>',
                 unsafe_allow_html=True,
             )
             return
+        render_fn(app, year_state, month_state)
+    return _page
+
+def _public(render_fn):
+    def _page():
         render_fn(app, year_state, month_state)
     return _page
 
@@ -434,10 +323,11 @@ app.navigation([
     vl.Page(_protected(p5_비용분석.render_page),     title="5. 비용분석"),
     vl.Page(_protected(p6_재고자산.render_page),     title="6. 재고자산분석"),
     vl.Page(_protected(p7_채권분석.render_page),     title="7. 채권분석"),
-    vl.Page(_protected(p8_인원분석.render_page),     title="8. 인원분석"),
+    vl.Page(_protected(p8_인원분석.render_page),         title="8. 인원분석"),
     vl.Page(_protected(p9_해외법인.render_page),     title="9. 해외법인실적"),
-    vl.Page(_protected(p10_별첨.render_page),        title="10. 별첨"),
+    vl.Page(_protected(p10_별첨.render_page),     title="10. 별첨"),
 ])
 
+
 if __name__ == "__main__":
-    app.run(port=int(os.environ.get("PORT", 8001)))
+    app.run(port=int(os.environ.get("PORT", 8000)))
