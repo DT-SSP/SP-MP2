@@ -15,10 +15,10 @@ from violit.context import layout_ctx
 
 from data.config import Sheets
 from data.loader_local import load_sheet, preload_all, refresh_all
-from views import p1_실적요약 ,p2_손익분석, p3_매출분석, p4_생산분석, p5_비용분석, p6_재고자산, p7_채권분석, p8_인원분석, p9_해외법인, p10_별첨
+from views_local import p1_실적요약 ,p2_손익분석, p3_매출분석, p4_생산분석, p5_비용분석, p6_재고자산, p7_채권분석, p8_인원분석, p9_해외법인, p10_별첨
 import asyncio 
 import time  
-from views.common import prev_month
+from views_local.common import prev_month
 
 
 # 데이터 새로고침 버튼을 볼 수 있는 관리자 아이디 목록
