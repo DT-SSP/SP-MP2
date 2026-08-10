@@ -171,16 +171,29 @@ def _parse_ss_sid(scope) -> str | None:
             return part[len("ss_sid="):]
     return None
 
+# HTTP 요청용 ContextVar
+_current_user: ContextVar[str | None] = ContextVar("current_user", default=None)
+
 def get_current_user() -> str | None:
-    """렌더 함수 내에서 현재 세션 이메일 반환."""
-    sid = session_ctx.get()
-    return _sid_email.get(sid) if sid else None
+    """렌더 및 웹소켓 Context 내에서 현재 사용자 이메일 동적 판단"""
+    # 1. HTTP ContextVar 확인
+    user = _current_user.get()
+    if user:
+        return user
+    
+    # 2. Violit Session Context 확인
+    try:
+        sid = session_ctx.get()
+        if sid and sid in _sid_email:
+            return _sid_email[sid]
+    except Exception:
+        pass
+
+    # 3. 매핑 실패 시 백업(가장 최근 인증된 사용자 이메일)
+    return _sid_email.get("_latest_auth_email")
 
 def is_authenticated() -> bool:
     return get_current_user() is not None
-
-# HTTP 요청용 ContextVar (미들웨어에서 인증 판단용)
-_current_user: ContextVar[str | None] = ContextVar("current_user", default=None)
 
 _AUTH_PUBLIC_PREFIXES = ("/auth/", "/_violit/", "/static/", "/favicon")
 
@@ -189,15 +202,15 @@ class _GoogleAuthMiddleware:
         self._app = app
 
     async def __call__(self, scope, receive, send):
+        # HTTP 및 WebSocket 통신 모두에서 인증 쿠키 검증 수행
         if scope["type"] in ("http", "websocket"):
             email = _parse_auth_cookie(scope)
-            sid   = _parse_ss_sid(scope)
+            sid = _parse_ss_sid(scope)
             
-            # sid가 아직 없더라도 email 쿠키가 유효하면 메모리에 임시 매핑 생성
             if email:
                 if sid:
                     _sid_email[sid] = email
-                _sid_email["_latest_auth_email"] = email  # 폴백 매핑[cite: 14]
+                _sid_email["_latest_auth_email"] = email
 
         if scope["type"] == "websocket":
             await self._app(scope, receive, send)
@@ -210,7 +223,9 @@ class _GoogleAuthMiddleware:
         path = scope.get("path", "")
         email = _parse_auth_cookie(scope)
         token = _current_user.set(email)
+        
         try:
+            # 인증되지 않았고 공개 경로가 아닌 경우 OAuth 로그인 페이지로 리디렉션
             if email is None and not any(path.startswith(p) for p in _AUTH_PUBLIC_PREFIXES):
                 response = RedirectResponse("/auth/google")
                 await response(scope, receive, send)
@@ -218,14 +233,6 @@ class _GoogleAuthMiddleware:
             await self._app(scope, receive, send)
         finally:
             _current_user.reset(token)
-
-def get_current_user() -> str | None:
-    """렌더 함수 내에서 현재 세션 이메일 반환."""
-    sid = session_ctx.get()
-    if sid and sid in _sid_email:
-        return _sid_email[sid]
-    # sid 매핑이 안 되었을 경우 폴백으로 최신 인증 이메일 활용
-    return _sid_email.get("_latest_auth_email")
 
 # ── 4. Violit 앱 초기화 ───────────────────────────────────────────────────
 app = vl.App(title="선재사업부문 경영실적 대시보드", container_width="100%", db="./app.db")
@@ -453,4 +460,4 @@ app.navigation([
 ])
 
 if __name__ == "__main__":
-    app.run(port=int(os.environ.get("PORT", 8001)))
+    app.run(port=int(os.environ.get("PORT", 8000)))
