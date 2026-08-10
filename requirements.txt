@@ -10,3 +10,5 @@ bcrypt
 fastapi
 numpy
 plotly
+google-cloud-storage
+gcsfs
