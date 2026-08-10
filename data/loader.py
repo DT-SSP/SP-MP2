@@ -90,19 +90,29 @@ def load_sheet(sheet_info: tuple, force_refresh: bool = False) -> pd.DataFrame:
     pickle 사용으로 타입/컬럼명 제약 없이 DataFrame 그대로 저장.
     """
     now = time.time()
+    path = _cache_path(sheet_info) # 경로를 상단으로 끌어올림
 
-    # 1. 메모리 캐시
+    # 0. 강제 새로고침 시 API 호출 전에 캐시 선제적 삭제
+    if force_refresh:
+        # 1) 메모리 캐시 삭제
+        _cache.pop(sheet_info, None)
+        
+        # 2) 디스크 캐시(.pkl) 삭제
+        if path.exists():
+            try:
+                path.unlink()
+                logger.info(f"[loader] 디스크 캐시 삭제 완료: {sheet_info[1]}")
+            except Exception as e:
+                logger.warning(f"[loader] 디스크 캐시 삭제 실패: {sheet_info[1]} — {e}")
+
+    # 1. 메모리 캐시 (이후 로직은 동일)
     if not force_refresh and sheet_info in _cache:
         df, ts = _cache[sheet_info]
         if now - ts < _MEM_TTL:
-            # 호출부(views/*.py)가 반환된 df를 in-place로 변형(컬럼 정리, 파싱 등)하는
-            # 경우가 많아, 캐시 원본을 그대로 내주면 그 변형이 캐시에 누적되어
-            # 이후 호출자(다른 사용자/페이지)가 오염된 데이터를 받게 된다. 항상 복사본을 반환.
             return df.copy()
 
     # 2. 디스크 캐시
     if not force_refresh:
-        path = _cache_path(sheet_info)
         if path.exists() and (now - path.stat().st_mtime) < _DISK_TTL:
             logger.info(f"[loader] 디스크 캐시: {sheet_info[1]}")
             df = pd.read_pickle(path)

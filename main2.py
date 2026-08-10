@@ -205,6 +205,10 @@ def _sidebar_controls():
                                 await asyncio.to_thread(refresh_all, t_sheets, max_workers=2)
                                 
                                 _REFRESH_STATES[p_name].set("done") # ✅ 체크 표시로 변경
+                                
+                                # [추가된 부분] 캐시 갱신이 완료되면 해당 페이지를 다시 호출하여 화면 갱신
+                                app.switch_page(p_name)
+                                
                                 await asyncio.sleep(2)              # 2초 대기
                                 _REFRESH_STATES[p_name].set("idle") # 🔄 원래 아이콘으로 복구
                                 
