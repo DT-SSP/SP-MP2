@@ -1905,7 +1905,7 @@ def render_page(app, year_state, month_state):
 
             tabs_data = _build_이익계획실적_table(year, month)
             #memo2 = _get_memo(Sheets.이익계획및실적_메모, year, month)
-            app.markdown(_이익계획실적_section("2) 이익계획 및 실적", tabs_data, "", '[단위: 억원]'),
+            app.markdown(_이익계획실적_section("2) 이익계획 및 실적", tabs_data, " ", '[단위: 억원]'),
                          unsafe_allow_html=True)
 
         app.If(lambda: True, _render_연간)
