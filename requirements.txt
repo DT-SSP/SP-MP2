@@ -12,3 +12,5 @@ numpy
 plotly
 google-cloud-storage
 gcsfs
+httpx
+itsdangerous
