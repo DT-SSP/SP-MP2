@@ -152,7 +152,7 @@ def _build_부재료_chart(사업장, rows, col_hdrs):
 
     # 2행일 경우 높이를 500, 1행일 경우 350으로 동적 설정
     fig.update_layout(
-        height=600 if num_rows == 2 else 350,
+        height=900 if num_rows == 2 else 450,
         margin=dict(l=10, r=10, t=60, b=40),
         plot_bgcolor='white', paper_bgcolor='white',
         font=dict(size=14, family='sans-serif'),
@@ -290,7 +290,7 @@ def _build_단가추이_chart(사업장, rows, col_hdrs):
             text=f"<b>{사업장} 단가 추이</b>", 
             font=dict(size=14, color='#333333')
         ),
-        height=500 if num_rows == 2 else 350,
+        height=900 if num_rows == 2 else 450,
         margin=dict(l=10, r=10, t=60, b=40),
         plot_bgcolor='white', 
         paper_bgcolor='white',
@@ -629,7 +629,7 @@ def render_page(app, year_state, month_state):
             app.plotly_chart(fig, use_container_width=True)
 
             # 포항 차트와 충주 표 사이 간격 추가
-            app.markdown('<div style="clear:both; margin-top:130px;"></div>', unsafe_allow_html=True)
+            app.markdown('<div style="clear:both; margin-top:500px;"></div>', unsafe_allow_html=True)
 
             # --- 2) 충주 ---
             rows, hdrs = _build_부재료_data('충주', year, month)
@@ -644,7 +644,7 @@ def render_page(app, year_state, month_state):
             app.plotly_chart(fig, use_container_width=True)
 
             # 충주 차트와 충주2 표 사이 간격 추가
-            app.markdown('<div style="clear:both; margin-top:130px;"></div>', unsafe_allow_html=True)
+            app.markdown('<div style="clear:both; margin-top:500px;"></div>', unsafe_allow_html=True)
 
             # --- 3) 충주2 ---
             rows, hdrs = _build_부재료_data('충주2', year, month)

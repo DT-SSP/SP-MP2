@@ -152,7 +152,7 @@ def _build_실적요약_chart(x_labels, sales_list, volume_list, op_profit_list,
 
     fig.update_layout(
         barmode='group',
-        height=380, 
+        height=500, 
         # t(상단) 여백을 늘려 텍스트 잘림을 방지하고 b(하단) 여백을 20으로 최소화
         margin=dict(l=40, r=40, t=50, b=20), 
         legend=dict(
