@@ -11,5 +11,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 4. 앱 소스코드 전체 복사
 COPY . .
 
-# 5. Cloud Run 환경에 맞춰 앱 실행 (main2_2.py 실행)
-CMD ["python", "main2_2.py"]
+# 5. Cloud Run 환경에 맞춰 앱 실행 (main2.py 실행)
+CMD ["python", "main2.py"]

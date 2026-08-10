@@ -9,6 +9,7 @@ from pathlib import Path
 import gspread
 import pandas as pd
 from google.oauth2.service_account import Credentials
+from google.cloud import storage
 
 logger = logging.getLogger("loader")
 
@@ -35,7 +36,31 @@ _CREDS_JSON_ENV = os.environ.get("GOOGLE_CREDENTIALS_JSON", "")
 
 _MEM_TTL  = 1800        # 메모리 캐시 30분
 _DISK_TTL = 86400 * 35  # 디스크 캐시 35일 (월 마감 데이터 기준)
-_CACHE_DIR = Path(__file__).parent.parent / ".sheet_cache"
+
+# 👉 1. 환경변수에서 버킷 이름을 가져오고, GCS 클라이언트 생성
+# 클라우드 런 배포 시 GCS_BUCKET_NAME 환경변수를 설정해 줍니다.
+GCS_BUCKET_NAME = os.environ.get("GCS_BUCKET_NAME", "sp-mp-dashboard-cache") 
+_storage_client = None
+
+def _get_storage_client():
+    global _storage_client
+    if _storage_client is None:
+        # Cloud Run 환경에서는 자동으로 기본 서비스 계정 권한을 사용합니다.
+        _storage_client = storage.Client()
+    return _storage_client
+
+def _get_gcs_blob(sheet_info: tuple):
+    """GCS Blob 객체와 Pandas용 gs:// 경로를 반환합니다."""
+    sheet_id, worksheet_name = sheet_info
+    safe = worksheet_name.replace("/", "_").replace(" ", "_").replace(".", "_").replace(",", "_")
+    blob_name = f"sheet_cache/{sheet_id[:10]}_{safe}.pkl"
+    
+    client = _get_storage_client()
+    bucket = client.bucket(GCS_BUCKET_NAME)
+    blob = bucket.blob(blob_name)
+    gs_path = f"gs://{GCS_BUCKET_NAME}/{blob_name}"
+    
+    return blob, gs_path
 
 _cache: dict[tuple, tuple] = {}  # sheet_info -> (DataFrame, timestamp)
 _client = None
@@ -54,12 +79,6 @@ def _get_client():
         _client = gspread.authorize(creds)
         _client_ts = time.time()
     return _client
-
-
-def _cache_path(sheet_info: tuple) -> Path:
-    sheet_id, worksheet_name = sheet_info
-    safe = worksheet_name.replace("/", "_").replace(" ", "_").replace(".", "_").replace(",", "_")
-    return _CACHE_DIR / f"{sheet_id[:10]}_{safe}.pkl"
 
 
 def _fetch_from_api(sheet_info: tuple) -> pd.DataFrame:
@@ -85,49 +104,49 @@ def _fetch_from_api(sheet_info: tuple) -> pd.DataFrame:
 
 
 def load_sheet(sheet_info: tuple, force_refresh: bool = False) -> pd.DataFrame:
-    """(SheetID, 워크시트이름) 튜플로 DataFrame 반환.
-    로드 우선순위: 메모리 캐시 → 디스크 캐시(pickle) → Google Sheets API
-    pickle 사용으로 타입/컬럼명 제약 없이 DataFrame 그대로 저장.
-    """
     now = time.time()
-    path = _cache_path(sheet_info) # 경로를 상단으로 끌어올림
+    
+    # 👉 2. 기존 Path 객체 대신 GCS blob 객체와 경로를 가져옴
+    blob, gs_path = _get_gcs_blob(sheet_info) 
 
     # 0. 강제 새로고침 시 API 호출 전에 캐시 선제적 삭제
     if force_refresh:
-        # 1) 메모리 캐시 삭제
         _cache.pop(sheet_info, None)
-        
-        # 2) 디스크 캐시(.pkl) 삭제
-        if path.exists():
+        if blob.exists():
             try:
-                path.unlink()
-                logger.info(f"[loader] 디스크 캐시 삭제 완료: {sheet_info[1]}")
+                blob.delete()
+                logger.info(f"[loader] GCS 캐시 삭제 완료: {sheet_info[1]}")
             except Exception as e:
-                logger.warning(f"[loader] 디스크 캐시 삭제 실패: {sheet_info[1]} — {e}")
+                logger.warning(f"[loader] GCS 캐시 삭제 실패: {sheet_info[1]} — {e}")
 
-    # 1. 메모리 캐시 (이후 로직은 동일)
+    # 1. 메모리 캐시 (기존 동일)
     if not force_refresh and sheet_info in _cache:
         df, ts = _cache[sheet_info]
         if now - ts < _MEM_TTL:
             return df.copy()
 
-    # 2. 디스크 캐시
+    # 2. GCS 디스크 캐시 확인
     if not force_refresh:
-        if path.exists() and (now - path.stat().st_mtime) < _DISK_TTL:
-            logger.info(f"[loader] 디스크 캐시: {sheet_info[1]}")
-            df = pd.read_pickle(path)
-            _cache[sheet_info] = (df, now)
-            return df.copy()
+        if blob.exists():
+            blob.reload() # 최신 메타데이터 불러오기
+            mtime = blob.updated.timestamp()
+            if (now - mtime) < _DISK_TTL:
+                logger.info(f"[loader] GCS 캐시 읽기: {sheet_info[1]}")
+                # pandas가 gcsfs를 사용해 gs:// 경로에서 바로 피클을 읽습니다.
+                df = pd.read_pickle(gs_path) 
+                _cache[sheet_info] = (df, now)
+                return df.copy()
 
-    # 3. Google Sheets API 호출
+    # 3. Google Sheets API 호출 (기존 동일)
     logger.info(f"[loader] API 읽기: {sheet_info[1]}")
     df = _fetch_from_api(sheet_info)
 
+    # 4. GCS에 저장
     try:
-        _CACHE_DIR.mkdir(exist_ok=True)
-        df.to_pickle(_cache_path(sheet_info))
+        # pandas가 gcsfs를 사용해 gs:// 경로로 바로 피클을 저장합니다.
+        df.to_pickle(gs_path)
     except Exception as e:
-        logger.warning(f"[loader] 디스크 저장 실패 (메모리 캐시로 동작): {sheet_info[1]} — {e}")
+        logger.warning(f"[loader] GCS 저장 실패 (메모리 캐시로 동작): {sheet_info[1]} — {e}")
 
     _cache[sheet_info] = (df, now)
     return df.copy()
