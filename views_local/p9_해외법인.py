@@ -21,7 +21,7 @@ from views.common import (
     html_table as _html_table, memo_html as _memo_html, layout64 as _layout64, layout100 as _layout100,
 )
 
-from views.p1_실적요약 import _build_현금흐름표_연결_table, _현금흐름표_연결_to_html_table
+from views_local.p1_실적요약 import _build_현금흐름표_연결_table, _현금흐름표_연결_to_html_table
 
 _기호 = ['①', '②', '③', '④', '⑤', '⑥']
 
