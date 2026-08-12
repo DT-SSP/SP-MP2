@@ -1431,7 +1431,7 @@ def _build_수익성_대표이사_table(year, month):
     # 컬럼 동적 생성
     col_prev_accum = f"'{yr_prev_str}.누적"
     col_goal = f"'{yr_str}.목표"
-    col_months = [f"{yr_str}.{m}월" for m in range(month, month + 1)]
+    col_months = [f"'{yr_str}.{m}월" for m in range(month - 1, month + 1)]
     col_mom = '전월대비'
     col_vs_goal = '목표대비'
 
