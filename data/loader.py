@@ -82,12 +82,11 @@ def _get_client():
 
 
 def _fetch_from_api(sheet_info: tuple) -> pd.DataFrame:
-    """Google Sheets API에서 읽기. 호출 전 속도 제한 적용, 429 시 재시도."""
     sheet_id, worksheet_name = sheet_info
     gc = _get_client()
 
     for attempt in range(4):
-        _throttle()  # 매 시도마다 속도 제한 적용
+        _throttle()
         try:
             ws   = gc.open_by_key(sheet_id).worksheet(worksheet_name)
             data = ws.get_all_values(value_render_option='UNFORMATTED_VALUE')
@@ -100,7 +99,20 @@ def _fetch_from_api(sheet_info: tuple) -> pd.DataFrame:
             else:
                 raise
 
-    return pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
+    # === 💡 수정된 부분: 컬럼명 중복 방지 로직 추가 ===
+    raw_columns = [str(c).strip() for c in data[0]]
+    deduplicated_cols = []
+    seen = {}
+    
+    for col in raw_columns:
+        if col in seen:
+            seen[col] += 1
+            deduplicated_cols.append(f"{col}_{seen[col]}")
+        else:
+            seen[col] = 0
+            deduplicated_cols.append(col)
+
+    return pd.DataFrame(data[1:], columns=deduplicated_cols)
 
 
 def load_sheet(sheet_info: tuple, force_refresh: bool = False) -> pd.DataFrame:
