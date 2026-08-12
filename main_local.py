@@ -83,7 +83,7 @@ PAGE_SHEETS_MAP = {
         Sheets.부서별초과채권_DB, Sheets.부서별초과채권_메모
     ],
     "8. 인원분석": [
-        Sheets.인원_DB
+        Sheets.인원_DB, Sheets.인원_메모
     ],
     "9. 해외법인실적": [
         Sheets.해외손익요약_DB, Sheets.해외손익요약_중국_메모, Sheets.해외손익요약_태국_메모,
