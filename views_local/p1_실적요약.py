@@ -1396,6 +1396,93 @@ def _build_수익성_연결_table(year, month):
 
     return rows, sub_labels
 
+def _build_수익성_대표이사_table(year, month):
+    df = load_sheet(Sheets.수익성_대표이사_DB)
+    val_col = '값' if '값' in df.columns else '실적'
+    
+    # 엑셀 퍼센트 서식(%) 처리 및 숫자 파싱
+    df[val_col] = df[val_col].astype(str).str.replace('%', '', regex=False).apply(_parse)
+    
+    # NaN 처리 및 형변환
+    df['구분1'] = df['구분1'].fillna('').astype(str).str.strip()
+    df['구분2'] = df['구분2'].fillna('').astype(str).str.strip()
+    df['연도'] = pd.to_numeric(df['연도'], errors='coerce')
+    
+    # 월 데이터가 빈칸(NaN)일 수 있는 목표값 등을 위해 0으로 채움
+    df['월'] = pd.to_numeric(df['월'], errors='coerce').fillna(0)
+    
+    # 빠른 조회를 위해 dict로 변환
+    val_map = df.groupby(['연도', '월', '구분1', '구분2'])[val_col].sum().to_dict()
+
+    def 값(yr, mo, g1, g2):
+        if g2 == '목표':
+            # 목표는 월(mo) 구분 없이 연도와 구분만 일치하면 가져옴
+            for k, v in val_map.items():
+                if k[0] == yr and k[2] == g1 and k[3] == g2:
+                    return float(v) * 100 if v else None
+            return None
+        else:
+            v = val_map.get((yr, mo, g1, g2))
+            return float(v) * 100 if v is not None else None
+
+    yr_str = str(year)[2:]
+    yr_prev_str = str(year - 1)[2:]
+
+    # 컬럼 동적 생성
+    col_prev_accum = f"'{yr_prev_str}.누적"
+    col_goal = f"'{yr_str}.목표"
+    col_months = [f"{yr_str}.{m}월" for m in range(month, month + 1)]
+    col_mom = '전월대비'
+    col_vs_goal = '목표대비'
+
+    columns = ['구분', col_prev_accum, col_goal] + col_months + [col_mom, col_vs_goal]
+    rows = []
+
+    def fmt_pct(v):
+        if v is None: return ""
+        return f"{v:.1f}%"
+
+    def fmt_p(v):
+        if v is None: return ""
+        if v > 0: return f"↑{v:.1f}%p"
+        if v < 0: return f"↓{abs(v):.1f}%p"
+        return f"{v:.1f}%p"
+
+    # 행 단위 데이터 산출 (ROE, ROA)
+    for label in ["ROE"]:
+        v_prev_accum = 값(year - 1, 12, label, '실적')
+        v_goal = 값(year, 0, label, '목표')
+
+        row = {
+            '구분': label,
+            col_prev_accum: fmt_pct(v_prev_accum),
+            col_goal: fmt_pct(v_goal),
+        }
+
+        v_curr = None
+        v_prev = None
+
+        for m in range(1, month + 1):
+            v_m = 값(year, m, label, '실적')
+            row[f"{yr_str}.{m}월"] = fmt_pct(v_m)
+            if m == month:
+                v_curr = v_m
+            if m == month - 1:
+                v_prev = v_m
+
+        # 1월 조회 시 전월값은 작년 12월 누적 실적으로 맵핑
+        if month == 1:
+            v_prev = v_prev_accum
+        
+        v_mom = v_curr - v_prev if (v_curr is not None and v_prev is not None) else None
+        v_vs_goal = v_curr - v_goal if (v_curr is not None and v_goal is not None) else None
+
+        row[col_mom] = fmt_p(v_mom)
+        row[col_vs_goal] = fmt_p(v_vs_goal)
+
+        rows.append(row)
+
+    return pd.DataFrame(rows, columns=columns)
 
 def _build_판매계획및실적_html(year, month):
     raw = load_sheet(Sheets.판매계획및실적_DB)
@@ -1833,6 +1920,10 @@ def render_page(app, year_state, month_state):
             app.markdown(_layout64("5) 수익성",
                                    _회전일_to_html_table(rows_수익성, sub_수익성),
                                    memo5, '[단위: %]'),
+                         unsafe_allow_html=True)
+
+            df_수익성_대표이사 = _build_수익성_대표이사_table(year, month)
+            app.markdown(_section("6) 수익성 (연결, 대표이사 SPS)", df_수익성_대표이사, "", '[단위: %]'),
                          unsafe_allow_html=True)
 
         app.If(lambda: True, _render_포함)

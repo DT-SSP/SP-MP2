@@ -179,11 +179,7 @@ def _build_부서별_채권기일_현황(year, month):
         for metric in metrics:
             vals = []
             for py, pm in periods:
-                # 26년 5월 이후 여부 확인
-                is_after_2605 = (py > 2026) or (py == 2026 and pm >= 5)
-                
-                # 내수 데이터 산출 로직 적용 (매출/채권은 4개 팀 합산, 일수는 시트 원본값 그대로 사용)
-                if db_key == '내수' and is_after_2605 and metric in ['매출', '채권']:
+                if db_key == '내수' and metric in ['매출', '채권']:
                     val = sum(raw(k, metric, py, pm) for k in ['선재', '봉강', '부산', '대구'])
                 else:
                     val = raw(db_key, metric, py, pm)
@@ -206,23 +202,17 @@ def _build_부서별_채권기일_현황(year, month):
                 
             # 2) 지표가 '매출' 또는 '채권'인 경우 합산 로직 적용
             else:
-                # 26년 5월 이후 여부 확인
-                is_after_2605 = (py > 2026) or (py == 2026 and pm >= 5)
-                
-                if is_after_2605:
-                    # 26년 5월부터는 전체 = 내수(선재+봉강+부산+대구) + 수출
-                    val_naesu = sum(raw(k, metric, py, pm) for k in ['선재', '봉강', '부산', '대구'])
-                    val_suchul = raw('수출', metric, py, pm)
-                    val_total = (val_naesu + val_suchul) / UNIT
-                else:
-                    # 26년 5월 이전 기존 로직
-                    val_total = (raw('내수', metric, py, pm) + raw('수출', metric, py, pm)) / UNIT
+                # 26년 5월 조건 삭제: 항상 내수(선재+봉강+부산+대구) + 수출로 합계 계산
+                val_naesu = sum(raw(k, metric, py, pm) for k in ['선재', '봉강', '부산', '대구'])
+                val_suchul = raw('수출', metric, py, pm)
+                val_total = (val_naesu + val_suchul) / UNIT
                 
             vals.append(val_total)
         
         rows.append(('total', metric, *vals))
 
     return rows, col_headers
+        
 
 def _부서별_채권기일_to_html(rows, col_headers):
     # views.common에 ROW_SEC가 없다면 아래 주석을 해제하여 사용하세요.
