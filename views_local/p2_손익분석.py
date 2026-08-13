@@ -79,7 +79,7 @@ def _build_손익요약표_table(year: int, month: int) -> pd.DataFrame:
     # 3. DB 매핑용 딕셔너리
     item_map = {
         "매출액": ("매출액", ""),
-        "제품등": ("매출액", "제품등"),
+        "제품 등": ("매출액", "제품등"),
         "부산물": ("매출액", "부산물"),
         "판매량": ("판매량", ""),
         "매출원가": ("매출원가", ""),
@@ -137,7 +137,7 @@ def _build_손익요약표_table(year: int, month: int) -> pd.DataFrame:
 
     # 5. 화면 출력 순서 및 계층 구조
     display_order = [
-        ("매출액", 0), ("제품등", 1), ("부산물", 1),
+        ("매출액", 0), ("제품 등", 1), ("부산물", 1),
         ("판매량", 0),
         ("매출원가", 0), ("제품원가", 1), ("C조건 선임", 1), ("클레임", 1), ("재고평가분", 1), ("단가소급 등", 1),
         ("매출이익", 0), ("매출이익(%)", 0),
@@ -149,11 +149,11 @@ def _build_손익요약표_table(year: int, month: int) -> pd.DataFrame:
 
     col_23 = f"'{str(y_2)[-2:]}년"
     col_24 = f"'{str(y_1)[-2:]}년"
-    col_pm = f"'{str(prev_year)[-2:]}년 {pm}월"
-    col_m = f"'{str(year)[-2:]}년 {m}월"
-    col_pm_pln = f"'{str(prev_year)[-2:]}년 {pm}월계획"
-    col_m_pln = f"'{str(year)[-2:]}년 {m}월계획"
-    cols_num = [col_23, col_24, col_pm, col_m, "전월대비", col_pm_pln, col_m_pln, "계획대비", "당월누적"]
+    col_pm = f"'{str(prev_year)[-2:]}.{pm}월"
+    col_m = f"'{str(year)[-2:]}.{m}월"
+    col_pm_pln = f"'{str(prev_year)[-2:]}.{pm}월 계획"
+    col_m_pln = f"'{str(year)[-2:]}.{m}월 계획"
+    cols_num = [col_23, col_24, col_pm, col_m, "전월대비", col_pm_pln, col_m_pln, "계획대비", "누적"]
 
     # 6. 테이블 데이터 구축
     rows = []
@@ -172,7 +172,7 @@ def _build_손익요약표_table(year: int, month: int) -> pd.DataFrame:
             row[col_m]  = get_val(year, m, label)
             row[col_pm_pln] = get_val(prev_year, pm, label, plan_type="계획")
             row[col_m_pln]  = get_val(year, m, label, plan_type="계획")
-            row['당월누적'] = get_val(year, m, label, is_acc=True)
+            row['누적'] = get_val(year, m, label, is_acc=True)
             
             row['전월대비'] = row[col_m] - row[col_pm] if pd.notna(row[col_m]) and pd.notna(row[col_pm]) else np.nan
             row['계획대비'] = row[col_m] - row[col_m_pln] if pd.notna(row[col_m]) and pd.notna(row[col_m_pln]) else np.nan
@@ -186,7 +186,7 @@ def _build_손익요약표_table(year: int, month: int) -> pd.DataFrame:
         if pd.isna(num) or pd.isna(den) or den == 0: return np.nan
         return (num / den) * 100.0
 
-    calc_cols = [col_23, col_24, col_pm, col_m, col_pm_pln, col_m_pln, '당월누적']
+    calc_cols = [col_23, col_24, col_pm, col_m, col_pm_pln, col_m_pln, '누적']
     for c in calc_cols:
         sales_val = out.loc[out['구분'] == '매출액', c].values[0]
         gp_val = out.loc[out['구분'] == '매출이익', c].values[0]
@@ -270,14 +270,25 @@ def _손익요약표_to_html_table(df):
             rows_html += f'<tr><td colspan="{len(data_cols) + 1}" style="height:25px; border:none; background-color:#ffffff;"></td></tr>'
             continue
 
+        # 1. 기본 표시 라벨 치환 (%)
+        if label in ["매출이익(%)", "영업이익(%)"]:
+            display_label = "(%)"
+        else:
+            display_label = label
+
         depth = row.get('_depth', 0)
         is_bold = row.get('_bold', False)
+        
+        # 2. [추가] depth가 1인 경우, 라벨 텍스트 맨 앞에 띄어쓰기 한 칸(&nbsp;) 추가
+        if depth == 1:
+            display_label = f"&nbsp;{display_label}"
         
         style_label = ROW_HDR_LBL if is_bold else ROW_ITEM
         style_num = ROW_HDR_NUM if is_bold else _TD_NUM
         
+        # (참고: padding-left는 전체적인 들여쓰기 여백을 잡아줍니다)
         padding = depth * 16
-        cells = f'<td style="{style_label}; padding-left:{padding}px;">{label}</td>'
+        cells = f'<td style="{style_label}; padding-left:{padding}px;">{display_label}</td>' 
         
         for col in data_cols:
             val = row[col]
@@ -756,7 +767,7 @@ def _build_포스코_JFE_입고가격_table(year: int, month: int):
     d_base = d[d["구분3"] == "월평균"]
     for y in monthly_years:
         dd = d_base[d_base["연도"] == y]
-        cname = f"'{str(y)[-2:]}년 월평균"
+        cname = f"'{str(y)[-2:]}.평균"
         
         if cname not in col_order:
             col_order.append(cname)
@@ -765,7 +776,7 @@ def _build_포스코_JFE_입고가격_table(year: int, month: int):
 
     dyn = [_month_shift(year, month, -2), _month_shift(year, month, -1), (year, month)]
     for y, m in dyn:
-        cname = f"'{str(y)[-2:]}년 {m}월"
+        cname = f"'{str(y)[-2:]}.{m}월"
         
         if cname not in col_order:
             col_order.append(cname)
@@ -941,7 +952,7 @@ def _build_포스코_JFE_투입비중_table(year: int, month: int):
     
     # ── 1. 과거 3개년 월평균 처리 로직 ──
     for y in [year - 3, year - 2, year - 1]:
-        col = f"'{str(y)[-2:]}년 월평균"
+        col = f"'{str(y)[-2:]}.평균"
         
         if col not in col_order:
             col_order.append(col)
@@ -960,7 +971,7 @@ def _build_포스코_JFE_투입비중_table(year: int, month: int):
     # ── 2. 최근 4개월 당월 처리 로직 ──
     for i in range(3, -1, -1):
         y, m = _month_shift(year, month, -i)
-        col = f"'{str(y)[-2:]}년 {m}월"
+        col = f"'{str(y)[-2:]}.{m}월"
         dd = d[(d["연도"] == y) & (d["월"] == m)]
         
         if col not in col_order:
@@ -1111,20 +1122,20 @@ def _build_메이커별_입고추이_table(year: int, month: int):
     rows = []
     for mk in makers:
         rows.append({"구분": f"{mk}_중량", 
-                     f"'{str(base_year)[-2:]}년 월평균": bw.get(mk), f"'{str(base_year)[-2:]}년 매입비중": calc_share(bw).get(mk),
-                     f"'{str(prev_y)[-2:]}년 {prev_m}월": pw.get(mk), f"'{str(prev_y)[-2:]}년 {prev_m}월 매입비중": calc_share(pw).get(mk),
-                     f"'{str(year)[-2:]}년 {month}월": cw.get(mk), f"'{str(year)[-2:]}년 {month}월 매입비중": calc_share(cw).get(mk),
-                     f"'{str(year)[-2:]}년 월평균": sw.get(mk), f"'{str(year)[-2:]}년 매입비중": calc_share(sw).get(mk)})
+                     f"'{str(base_year)[-2:]}.평균": bw.get(mk), f"'{str(base_year)[-2:]}.비중": calc_share(bw).get(mk),
+                     f"'{str(prev_y)[-2:]}.{prev_m}월": pw.get(mk), f"'{str(prev_y)[-2:]}.{prev_m}월 비중": calc_share(pw).get(mk),
+                     f"'{str(year)[-2:]}.{month}월": cw.get(mk), f"'{str(year)[-2:]}.{month}월 비중": calc_share(cw).get(mk),
+                     f"'{str(year)[-2:]}.평균": sw.get(mk), f"'{str(year)[-2:]}.비중": calc_share(sw).get(mk)})
         rows.append({"구분": f"{mk}_단가", 
-                     f"'{str(base_year)[-2:]}년 월평균": calc_price(ba, bw).get(mk), f"'{str(base_year)[-2:]}년 매입비중": np.nan,
-                     f"'{str(prev_y)[-2:]}년 {prev_m}월": calc_price(pa, pw).get(mk), f"'{str(prev_y)[-2:]}년 {prev_m}월 매입비중": np.nan,
-                     f"'{str(year)[-2:]}년 {month}월": calc_price(ca, cw).get(mk), f"'{str(year)[-2:]}년 {month}월 매입비중": np.nan,
-                     f"'{str(year)[-2:]}년 월평균": calc_price(sa, sw).get(mk), f"'{str(year)[-2:]}년 매입비중": np.nan})
+                     f"'{str(base_year)[-2:]}.평균": calc_price(ba, bw).get(mk), f"'{str(base_year)[-2:]}.비중": np.nan,
+                     f"'{str(prev_y)[-2:]}.{prev_m}월": calc_price(pa, pw).get(mk), f"'{str(prev_y)[-2:]}.{prev_m}월 매비중": np.nan,
+                     f"'{str(year)[-2:]}.{month}월": calc_price(ca, cw).get(mk), f"'{str(year)[-2:]}.{month}월 비중": np.nan,
+                     f"'{str(year)[-2:]}.평균": calc_price(sa, sw).get(mk), f"'{str(year)[-2:]}.비중": np.nan})
         rows.append({"구분": f"{mk}_증감", 
-                     f"'{str(base_year)[-2:]}년 월평균": np.nan, f"'{str(base_year)[-2:]}년 매입비중": np.nan,
-                     f"'{str(prev_y)[-2:]}년 {prev_m}월": diff_prev.get(mk), f"'{str(prev_y)[-2:]}년 {prev_m}월 매입비중": np.nan,
-                     f"'{str(year)[-2:]}년 {month}월": diff_curr.get(mk), f"'{str(year)[-2:]}년 {month}월 매입비중": np.nan,
-                     f"'{str(year)[-2:]}년 월평균": np.nan, f"'{str(year)[-2:]}년 매입비중": np.nan})
+                     f"'{str(base_year)[-2:]}.평균": np.nan, f"'{str(base_year)[-2:]}.비중": np.nan,
+                     f"'{str(prev_y)[-2:]}.{prev_m}월": diff_prev.get(mk), f"'{str(prev_y)[-2:]}.{prev_m}월 비중": np.nan,
+                     f"'{str(year)[-2:]}.{month}월": diff_curr.get(mk), f"'{str(year)[-2:]}.{month}월 비중": np.nan,
+                     f"'{str(year)[-2:]}.평균": np.nan, f"'{str(year)[-2:]}.비중": np.nan})
 
     # ── 총계 계산 ──────────────────────────────────────────────────────────
     tot_bw, tot_ba = bw.sum(), ba.sum()
@@ -1309,8 +1320,8 @@ def _build_제조가공비_table(year: int, month: int):
 
     # 동적 단층 컬럼명 지정
     yy_str = str(year)[-2:]
-    prev_m_label = f"'{str(prev_y)[-2:]}년 {prev_m}월"
-    curr_m_label = f"'{yy_str}년 {month}월"
+    prev_m_label = f"'{str(prev_y)[-2:]}.{prev_m}월"
+    curr_m_label = f"'{yy_str}.{month}월"
 
     disp.columns = [
         '구분',
@@ -1333,7 +1344,12 @@ def _제조가공비_to_html(df) -> str:
         label = str(row['구분']).strip()
         if not label: continue
 
-        body_html += '<tr>'
+        # 들여쓰기가 0인 항목(lv0_items)일 경우 배경색(회색) 적용
+        bg_style = 'background-color: #f2f2f2;' if label in lv0_items else ''
+        
+        # 적용된 배경색을 tr 태그에 삽입
+        body_html += f'<tr style="{bg_style}">'
+        
         for c in cols:
             val = row[c]
             
@@ -1903,12 +1919,13 @@ def render_page(app, year_state, month_state):
             df_table = _build_손익요약표_table(year, month)
             html = _손익요약표_to_html_table(df_table)
             
+            html = f"<div style='overflow-x: auto; width: 100%;'>{html}</div>"
+            
             # 2. 구글 시트에서 해당 연/월의 메모 가져오기
-            # (주의: Sheets.손익요약표_메모 부분은 config.py에 정의된 Enum 명칭에 맞게 사용해주세요)
             memo = _get_memo(Sheets.손익요약표_메모, year, month)
             
             # 3. 레이아웃에 memo 인자 추가하여 렌더링
-            app.markdown(_layout100("1) 손익요약표", html, memo=memo, unit="[단위: 백만원]"), unsafe_allow_html=True)
+            app.markdown(_layout100("1) 손익요약표", html, memo=memo, unit="[단위: 톤, 백만원]"), unsafe_allow_html=True)
 
         app.If(lambda: True, _render_손익요약)
 
