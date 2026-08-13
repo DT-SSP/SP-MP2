@@ -256,21 +256,35 @@ def _build_회전일_table(year, month):
         '전월대비',
     ]
 
+    # 원본 데이터 기준(기호 없음)으로 값을 정확히 찾음
     val_map = df.set_index(['연도', '월', '사업장', '구분1'])['값'].to_dict()
 
     def 값(yr, mo, corp, 항목):
         return val_map.get((yr, mo, corp, 항목), 0.0)
 
+    # 💡 화면 표시용 라벨 매핑 딕셔너리 추가
+    label_map = {
+        '매출채권': '매출채권 ⓐ',
+        '재고자산': '재고자산 ⓑ',
+        '매입채무': '매입채무 ⓒ',
+        '현금전환주기': '현금전환주기<br>(ⓐ+ⓑ-ⓒ)'
+    }
+
     rows = []
     for db_corp, corp_disp in zip(db_corps, corp_labels):
         for i, 항목 in enumerate(회전일_구분_순서):
+            # DB 조회는 기호가 없는 원래 '항목' 이름으로 찾음
             전기_v = 값(yr_전기, mo_전기, db_corp, 항목)
             전월_v = 값(yr_전월, mo_전월, db_corp, 항목)
             당월_v = 값(year,    month,   db_corp, 항목)
+            
+            # 화면에 표시할 때는 label_map에서 기호가 붙은 이름을 가져옴
+            display_label = label_map.get(항목, 항목)
+
             rows.append({
                 '사업장':       corp_disp,
                 '_first':       i == 0,
-                '구분':         항목,
+                '구분':         display_label, # 💡 기호가 포함된 이름으로 대체
                 sub_labels[0]:  _fmt(전기_v,           decimal=0),
                 sub_labels[1]:  _fmt(전월_v,           decimal=0),
                 sub_labels[2]:  _fmt(당월_v,           decimal=0),
@@ -1195,7 +1209,7 @@ def _build_회전일_별도_table(year, month):
     
     def fmt_num(v):
         if v is None: return ""
-        return f"{v:.1f}"
+        return f"{v:.0f}"
 
     for label, key in rows_info:
         v_end = 값(yr_전기, mo_전기, key)
@@ -1363,7 +1377,7 @@ def _build_수익성_연결_table(year, month):
     corp_labels = [수익성_사업장_표시명.get(c, c) for c in db_corps]
 
     sub_labels = [
-        f"'{str(yr_전기)[2:]}년 누적",
+        f"'{str(yr_전기)[2:]}.누적",
         f"'{str(yr_전월)[2:]}.{mo_전월}월 누적",
         f"'{str(year)[2:]}.{month}월 누적",
         '전월대비',
@@ -1974,7 +1988,7 @@ def render_page(app, year_state, month_state):
             app.markdown('<div style="font-size:0.85em;color:gray;margin:2px 0 12px 0">※ 산출기준 : 거래처 / 메이커 / 산업재 / 강종 </div>',
                          unsafe_allow_html=True)
 
-            app.markdown(_section("6) 제품수불표 (별도)", _build_제품수불표_table(year, month), "", '[단위: 원, 백만원]'),
+            app.markdown(_원재료_section("6) 제품수불표 (별도)", _build_제품수불표_table(year, month), "", '[단위: 원, 백만원]'),
                          unsafe_allow_html=True)
             app.markdown('<div style="font-size:0.85em;color:gray;margin:2px 0 12px 0">※ 산출기준 : 품목 / 내수 / 열처리 / 대표공정 / 강종종류 / 수불강종 / 표준강종 </div>',
                          unsafe_allow_html=True)
@@ -1991,7 +2005,7 @@ def render_page(app, year_state, month_state):
                          unsafe_allow_html=True)
             
             memo9 = _get_memo(Sheets.안정성_메모, year, month)
-            app.markdown(_section("9) 안정성 (별도)", _build_안정성_별도_table(year, month), memo9, '[단위: %]'),
+            app.markdown(_section("9) 안정성 (별도)", _build_안정성_별도_table(year, month), memo9, ''),
                          unsafe_allow_html=True)
             
             memo10 = _get_memo(Sheets.회전일_국내_메모, year, month)
