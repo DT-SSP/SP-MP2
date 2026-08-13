@@ -65,7 +65,7 @@ def _to_html_table(df):
     return _html_table(f'<tr>{headers}</tr>', rows_html)
 
 
-def _section(title, table_df, memo='', unit='[단위: 톤, 백만원, %]'):
+def _section(title, table_df, memo='', unit='[단위: 톤, 백만원]'):
     return _layout64(title, _to_html_table(table_df), memo, unit)
 
 
@@ -253,7 +253,7 @@ def _build_회전일_table(year, month):
         f"'{str(year - 1)[2:]}년",
         f"'{str(yr_전월)[2:]}.{mo_전월}월",
         f"'{str(year)[2:]}.{month}월",
-        '전월비',
+        '전월대비',
     ]
 
     val_map = df.set_index(['연도', '월', '사업장', '구분1'])['값'].to_dict()
@@ -271,10 +271,10 @@ def _build_회전일_table(year, month):
                 '사업장':       corp_disp,
                 '_first':       i == 0,
                 '구분':         항목,
-                sub_labels[0]:  _fmt(전기_v,           decimal=1),
-                sub_labels[1]:  _fmt(전월_v,           decimal=1),
-                sub_labels[2]:  _fmt(당월_v,           decimal=1),
-                sub_labels[3]:  _fmt(당월_v - 전월_v,  decimal=1),
+                sub_labels[0]:  _fmt(전기_v,           decimal=0),
+                sub_labels[1]:  _fmt(전월_v,           decimal=0),
+                sub_labels[2]:  _fmt(당월_v,           decimal=0),
+                sub_labels[3]:  _fmt(당월_v - 전월_v,  decimal=0),
             })
 
     return rows, sub_labels
@@ -363,7 +363,7 @@ def _build_포함_table(get, 사업장_list, year, month):
     전전월_col = _월헤더(yr1, mo1)
     전월_col   = _월헤더(yr2, mo2)
     당월_col   = _당월헤더(year, month, len(사업장_list))
-    _장_표시명 = {'본사': '선재_국내', '남통': '선재_중국', '타이': '선재_타이'}
+    _장_표시명 = {'본사': '선재_국내', '남통': '선재_중국', '타이': '선재_태국'}
     장_cols    = [f"{_장_표시명.get(장, 장)} {_기호[i]}" for i, 장 in enumerate(사업장_list)]
     columns    = ['구분', 전전월_col, 전월_col, '계획', 당월_col] + 장_cols + ['전월대비', '계획대비']
 
@@ -490,9 +490,9 @@ def _build_현금흐름표_연결_table(year, month):
 
     sub_labels = [
         f"'{str(year - 1)[2:]}년",
-        '전월누적',
+        '전월 누적',
         f"'{str(year)[2:]}.{month}월",
-        f"'{str(year)[2:]}년누적",
+        f"'{str(year)[2:]}.누적",
     ]
 
     # 표의 뼈대(행 순서)는 특정 월이 아니라 시트 전체(모든 연도)에 존재하는 항목의 합집합으로 생성.
@@ -739,7 +739,7 @@ def _build_재무상태표_table(year, month):
         f"'{str(year - 1)[2:]}년",
         f"'{str(yr_전월)[2:]}.{mo_전월}월",
         f"'{str(year)[2:]}.{month}월",
-        '전월비',
+        '전월대비',
     ]
 
     anchor  = df[(df['연도'] == year) & (df['월'] == month) & (df['사업장'] == db_corps[0])]
@@ -1005,23 +1005,36 @@ def _build_원재료입고단가차이_거래처기준_table(year, month):
     if '합계' in target['구분1'].values:
         makers.append('합계')
 
-    columns = ['메이커', '금액', '단가']
+    columns = ['메이커', '단가', '금액']
     rows = []
+    
+    # 표시용 이름 매핑 딕셔너리 추가
+    name_map = {
+        '포스코_일반': '포스코 일반재',
+        '포스코_산업': '포스코 산업재'
+    }
     
     for m in makers:
         a = get_val(m, '금액') / 1000000.0   # 백만원 단위
         p = get_val(m, '단가')               # 그대로
         
+        # 딕셔너리에 정의된 이름이 있으면 가져오고, 없으면 기존 원본 이름(m) 사용
+        display_name = name_map.get(m, m)
+        
         rows.append({
-            '메이커': m,
-            '금액': _fmt(a, decimal=0),
+            '메이커': display_name,
             '단가': _fmt(p, decimal=0),
+            '금액': _fmt(a, decimal=0),
         })
 
     return pd.DataFrame({col: [r.get(col, '') for r in rows] for col in columns})
 
 
 def _원재료_to_html_table(df):
+    # 컬럼 개수에 따라 균등한 너비(%) 계산
+    num_cols = len(df.columns)
+    col_width = 100 / num_cols if num_cols > 0 else 100
+
     rows_html = ''
     for idx, row in df.iterrows():
         is_sub = str(row.iloc[0]) == '합계'
@@ -1036,10 +1049,13 @@ def _원재료_to_html_table(df):
                 style = _TD_SUB_RED if is_sub else _TD_RED + bg
             else:
                 style = _TD_SUB_NUM if is_sub else _TD_NUM + bg
-            cells += f'<td style="{style}">{s}</td>'
+            
+            # 셀(td)에도 계산된 너비를 인라인으로 추가
+            cells += f'<td style="{style}; width:{col_width:.1f}%;">{s}</td>'
         rows_html += f'<tr style="vertical-align:middle">{cells}</tr>'
 
-    headers = ''.join(f'<th style="{_TH}">{c}</th>' for c in df.columns)
+    # 헤더(th)에도 계산된 너비를 인라인으로 추가
+    headers = ''.join(f'<th style="{_TH}; width:{col_width:.1f}%;">{c}</th>' for c in df.columns)
     return _html_table(f'<tr>{headers}</tr>', rows_html)
 
 
@@ -1086,7 +1102,7 @@ def _build_재무상태표_별도_table(year, month):
         f"'{str(year - 1)[2:]}년",
         f"'{str(yr_전월)[2:]}.{mo_전월}월",
         f"'{str(year)[2:]}.{month}월",
-        '전월비',
+        '전월대비',
     ]
 
     anchor = df[(df['연도'] == year) & (df['월'] == month)]
@@ -1279,7 +1295,7 @@ def _build_수익성_별도_table(year, month):
     yr_전월, mo_전월 = _prev(year, month, 1)
 
     sub_labels = [
-        f"'{str(yr_전기)[2:]}년 누적",
+        f"'{str(yr_전기)[2:]}.누적",
         f"'{str(yr_전월)[2:]}.{mo_전월}월 누적",
         f"'{str(year)[2:]}.{month}월 누적",
         '전월대비'
@@ -1920,11 +1936,11 @@ def render_page(app, year_state, month_state):
             memo5 = _get_memo(Sheets.수익성_메모_연결, year, month)
             app.markdown(_layout64("5) 수익성",
                                    _회전일_to_html_table(rows_수익성, sub_수익성),
-                                   memo5, '[단위: %]'),
+                                   memo5, ''),
                          unsafe_allow_html=True)
 
             df_수익성_대표이사 = _build_수익성_대표이사_table(year, month)
-            app.markdown(_section("6) 수익성 (연결, 대표이사 SPS)", df_수익성_대표이사, "", '[단위: %]'),
+            app.markdown(_section("6) 수익성 (연결, 대표이사 SPS)", df_수익성_대표이사, "", ''),
                             unsafe_allow_html=True)
 
         app.If(lambda: True, _render_포함)
@@ -1943,22 +1959,24 @@ def render_page(app, year_state, month_state):
                          unsafe_allow_html=True)
 
             memo3 = _get_memo(Sheets.수정원가기준손익_메모, year, month)
-            app.markdown(_section("3) 수정원가기준손익 (별도)", _build_수정원가기준손익_별도_table(year, month), memo3),
-                         unsafe_allow_html=True)
+            app.markdown(_section("3) 수정원가기준손익 (별도)", _build_수정원가기준손익_별도_table(year, month), ""),
+                            unsafe_allow_html=True)
+            app.markdown(f'<div style="font-size:0.85em;color:gray;margin:2px 0 12px 0">{memo3}</div>',
+                        unsafe_allow_html=True)
             
             app.markdown(_원재료_section("4) 원재료 입고-기초 단가 차이", _build_원재료입고기초단가차이_table(year, month), "", '[단위: 톤, 백만원]'),
                          unsafe_allow_html=True)
-            app.markdown('<div style="font-size:0.85em;color:gray;margin:2px 0 12px 0">※ 산출기준 : 대구분/내외자/강종류/강종/메이커</div>',
+            app.markdown('<div style="font-size:0.85em;color:gray;margin:2px 0 12px 0">※ 산출기준 : 대구분 / 내외자 / 강종류 / 강종 / 메이커 </div>',
                          unsafe_allow_html=True)
 
             app.markdown(_원재료_section("5) 원재료 입고 단가 전월대비 차이", _build_원재료입고단가차이_거래처기준_table(year, month), "", '[단위: 톤, 백만원]'),
                          unsafe_allow_html=True)
-            app.markdown('<div style="font-size:0.85em;color:gray;margin:2px 0 12px 0">※ 산출기준 : 거래처/메이커/산업재/강종</div>',
+            app.markdown('<div style="font-size:0.85em;color:gray;margin:2px 0 12px 0">※ 산출기준 : 거래처 / 메이커 / 산업재 / 강종 </div>',
                          unsafe_allow_html=True)
 
             app.markdown(_section("6) 제품수불표 (별도)", _build_제품수불표_table(year, month), "", '[단위: 원, 백만원]'),
                          unsafe_allow_html=True)
-            app.markdown('<div style="font-size:0.85em;color:gray;margin:2px 0 12px 0">※ 산출기준 : 품목/내수/열처리/대표공정/강종종류/수불강종/표준강종</div>',
+            app.markdown('<div style="font-size:0.85em;color:gray;margin:2px 0 12px 0">※ 산출기준 : 품목 / 내수 / 열처리 / 대표공정 / 강종종류 / 수불강종 / 표준강종 </div>',
                          unsafe_allow_html=True)
 
             # 7) 현금흐름표 (별도): 2) 현금흐름표 (연결)의 "선재_국내" 탭 데이터를 그대로 재사용
@@ -1981,7 +1999,7 @@ def render_page(app, year_state, month_state):
                          unsafe_allow_html=True)
             
             memo11 = _get_memo(Sheets.수익성_메모, year, month)
-            app.markdown(_section("11) 수익성 (별도)", _build_수익성_별도_table(year, month), memo11, '[단위: %]'),
+            app.markdown(_section("11) 수익성 (별도)", _build_수익성_별도_table(year, month), memo11, ''),
                          unsafe_allow_html=True)
             
         app.If(lambda: True, _render_국내)
