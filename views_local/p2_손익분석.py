@@ -1422,6 +1422,12 @@ def _build_판관비_table(year: int, month: int):
     df["구분1"] = df["구분1"].fillna("").astype(str).str.strip()
     df["항목"] = df["구분2"].replace("", np.nan).fillna(df["구분1"])
 
+    # ★ 추가된 부분: 표에 표시될 항목 이름 일괄 변경 ★
+    df["항목"] = df["항목"].replace({
+        "판관-운반비": "운반비",
+        "판관-수출개별비": "수출개별비"
+    })
+
     # 24년 이하 월평균 데이터 분리 (월을 숫자로 강제 변환하기 '전'에 추출)
     avg_rows = df[df["월"].astype(str).str.contains("평균", na=False)].copy()
     avg_explicit = avg_rows.groupby(["연도", "항목"])["값"].sum().reset_index()
@@ -1436,17 +1442,18 @@ def _build_판관비_table(year: int, month: int):
     wide.rename(columns={"값": "계"}, inplace=True)
 
     # 구분행 순서를 부모 항목 -> 하위 항목 순으로 바르게 정렬
+    # ★ 수정된 부분: SGNA_ORDER 및 SELL 리스트 내 이름도 변경된 이름으로 일치시킴 ★
     SGNA_ORDER = [
         "인건비", "급여", "상여금", "퇴직급여충당금",
         "관리비", "복리후생비", "지급임차료", "사용권자산 감가상각비", "접대비", "세금과공과",
         "대손상각비", "지급수수료", "A/S비", "경상연구비", "기타",
-        "판매비", "판관-운반비", "판관-수출개별비",
+        "판매비", "운반비", "수출개별비", 
         "합계", "", "판매량", "인건비 및 관리비 원단위", "운반비 원단위"
     ]
 
     LABOR = ["급여", "상여금", "퇴직급여충당금"]
     ADMIN = ["복리후생비", "지급임차료", "사용권자산 감가상각비", "접대비", "세금과공과", "대손상각비", "지급수수료", "A/S비", "경상연구비", "기타"]
-    SELL = ["판관-운반비", "판관-수출개별비"]
+    SELL = ["운반비", "수출개별비"]
 
     def _sgna_from_base(base, sales_override=None):
         def _sum(keys): return float(base.reindex(keys).fillna(0).sum())
@@ -1520,13 +1527,13 @@ def _build_판관비_table(year: int, month: int):
             sales_avg = base.get(sales_key, np.nan) if sales_key else np.nan
 
         s_avg = _sgna_from_base(base, sales_avg)
-        avg_data[f"'{str(y)[-2:]}년 월평균"] = s_avg.values
+        avg_data[f"'{str(y)[-2:]}.평균"] = s_avg.values
 
     final_data = {"구분": SGNA_ORDER}
     final_data.update(avg_data)
-    final_data[f"'{str(m2_y)[-2:]}년 {m2_m}월"] = s_m2.values
-    final_data[f"'{str(m1_y)[-2:]}년 {m1_m}월"] = s_m1.values
-    final_data[f"'{str(year)[-2:]}년 {month}월"] = s_m0.values
+    final_data[f"'{str(m2_y)[-2:]}.{m2_m}월"] = s_m2.values
+    final_data[f"'{str(m1_y)[-2:]}.{m1_m}월"] = s_m1.values
+    final_data[f"'{str(year)[-2:]}.{month}월"] = s_m0.values
     final_data["전월대비"] = diff.values
 
     disp = pd.DataFrame(final_data)
