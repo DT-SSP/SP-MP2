@@ -1054,12 +1054,18 @@ def _등급별판매현황_to_html_table(df):
         bg = f'background:#f8f9fa;' if is_total else ''
         fw = 'font-weight:700;' if is_total else ''
         
+        # 💡 [수정] 하이라이트(총계) 행이 아닌 일반 항목들에 들여쓰기 적용
+        indent = '' if is_total else '&nbsp;&nbsp;&nbsp;&nbsp;'
+        
         cells = ''
         for i, val in enumerate(row):
             s = str(val)
-            align = 'center' if i == 0 else 'right'
-            color = f';color:{_C_RED}' if s.startswith('-') else ''
-            cells += f'<td style="padding:6px 12px;text-align:{align};border-bottom:1px solid #e2e8f0;{bg}{fw}{color}">{s}</td>'
+            if i == 0:
+                # 💡 [수정] 왼쪽 정렬 적용 및 들여쓰기 변수({indent}) 추가
+                cells += f'<td style="padding:6px 12px;text-align:left;border-bottom:1px solid #e2e8f0;{bg}{fw}">{indent}{s}</td>'
+            else:
+                color = f';color:{_C_RED}' if s.startswith('-') else ''
+                cells += f'<td style="padding:6px 12px;text-align:right;border-bottom:1px solid #e2e8f0;{bg}{fw}{color}">{s}</td>'
         
         rows_html += f'<tr style="vertical-align:middle">{cells}</tr>'
     
@@ -1079,15 +1085,15 @@ def _세부판매현황_to_html_table(df):
         bg = 'background:#f8f9fa;' if is_total else ''
         fw = 'font-weight:700;' if is_total else ''
         
-        # 항목 행(depth=1)에 들여쓰기 적용
+        # 항목 행(depth=1)에 들여쓰기 적용 (기존 로직 유지)
         indent = '&nbsp;&nbsp;&nbsp;&nbsp;' if depth == 1 else ''
-        align_first = 'left' if depth == 1 else 'center'
         
         cells = ''
         for i, val in enumerate(row):
             s = str(val)
             if i == 0:
-                cells += f'<td style="padding:6px 12px;text-align:{align_first};border-bottom:1px solid #e2e8f0;{bg}{fw}">{indent}{s}</td>'
+                # 💡 [수정] 합계 여부와 상관없이 무조건 'left'로 정렬하여 들여쓰기 형태가 유지되도록 함
+                cells += f'<td style="padding:6px 12px;text-align:left;border-bottom:1px solid #e2e8f0;{bg}{fw}">{indent}{s}</td>'
             else:
                 color = f';color:{_C_RED}' if s.startswith('-') else ''
                 cells += f'<td style="padding:6px 12px;text-align:right;border-bottom:1px solid #e2e8f0;{bg}{fw}{color}">{s}</td>'
@@ -1096,6 +1102,7 @@ def _세부판매현황_to_html_table(df):
     
     headers = ''.join(f'<th style="{_TH};text-align:center">{c}</th>' for c in render_df.columns)
     return _html_table(f'<tr>{headers}</tr>', rows_html)
+
 
 def _build_해외손익차이_table(year, month, corp):
     # 손익차이 DB 로드 (Sheets 상수는 환경에 맞게 수정 필요)
@@ -1389,10 +1396,9 @@ def _build_해외부적합장기재고_flow_table(year, month, corp):
     c_in = "당월 발생"
     c_out = "당월 소진"
     c_c = f"'{str(year)[2:]}.{month}월말"
-    c_diff_val = "전월비 증감" # 새로 추가된 컬럼
+    c_diff_val = "전월비 증감"
     c_diff_pct = "전월비 증감률"
 
-    # columns에 전월비 증감(c_diff_val) 추가
     columns = ['구분', '_depth', c_py, c_p2, c_p1, c_in, c_out, c_c, c_diff_val, c_diff_pct]
 
     df = load_sheet(Sheets.해외부적합장기재고_DB) 
@@ -1416,8 +1422,7 @@ def _build_해외부적합장기재고_flow_table(year, month, corp):
     def get_v(g1, g2, g3, y, m):
         return vm.get((g1, g2, g3, y, m), 0.0)
 
-    # 증감률 계산 헬퍼 함수 - %p 추가 및 0 처리 간소화
-    # _build_해외부적합장기재고_flow_table 함수 내부
+    # 증감률 계산 헬퍼 함수
     def calc_pct_str(curr, prev):
         if prev == 0:
             return "0.0%" 
@@ -1440,7 +1445,11 @@ def _build_해외부적합장기재고_flow_table(year, month, corp):
         g2_list = list(dict.fromkeys(df[df['구분1'] == g1]['구분2'].tolist()))
         
         g1_totals = {c_py: 0, c_p2: 0, c_p1: 0, c_in: 0, c_out: 0, c_c: 0}
+        jephum_totals = {c_py: 0, c_p2: 0, c_p1: 0, c_in: 0, c_out: 0, c_c: 0}
+        has_jephum = False
+        
         g2_rows = []
+        grade_rows = []
         
         # 세부 품목별 데이터 계산
         for g2 in g2_list:
@@ -1451,6 +1460,7 @@ def _build_해외부적합장기재고_flow_table(year, month, corp):
             v_out = get_v(g1, g2, '소진', year, month)
             v_c   = get_v(g1, g2, '실적', year, month)
             
+            # 전체 합계 계산
             g1_totals[c_py]  += v_py
             g1_totals[c_p2]  += v_p2
             g1_totals[c_p1]  += v_p1
@@ -1458,20 +1468,76 @@ def _build_해외부적합장기재고_flow_table(year, month, corp):
             g1_totals[c_out] += v_out
             g1_totals[c_c]   += v_c
             
+            if g1 == '부적합재고':
+                if g2 == '재공':
+                    # 재공 행은 depth=1
+                    g2_rows.append({
+                        '구분': g2,
+                        '_depth': 1,
+                        c_py: _fmt(v_py),
+                        c_p2: _fmt(v_p2),
+                        c_p1: _fmt(v_p1),
+                        c_in: _fmt(v_in),
+                        c_out: _fmt(v_out),
+                        c_c: _fmt(v_c),
+                        c_diff_val: _fmt(v_c - v_p1),
+                        c_diff_pct: calc_pct_str(v_c, v_p1)
+                    })
+                elif g2 != '제품':
+                    # 각 급 항목들은 합산에 포함하고 depth=2 (하위 들여쓰기) 지정
+                    has_jephum = True
+                    jephum_totals[c_py]  += v_py
+                    jephum_totals[c_p2]  += v_p2
+                    jephum_totals[c_p1]  += v_p1
+                    jephum_totals[c_in]  += v_in
+                    jephum_totals[c_out] += v_out
+                    jephum_totals[c_c]   += v_c
+                    
+                    grade_rows.append({
+                        '구분': g2,
+                        '_depth': 2,  # 💡 한 단계 더 들여쓰기
+                        c_py: _fmt(v_py),
+                        c_p2: _fmt(v_p2),
+                        c_p1: _fmt(v_p1),
+                        c_in: _fmt(v_in),
+                        c_out: _fmt(v_out),
+                        c_c: _fmt(v_c),
+                        c_diff_val: _fmt(v_c - v_p1),
+                        c_diff_pct: calc_pct_str(v_c, v_p1)
+                    })
+            else:
+                g2_rows.append({
+                    '구분': g2,
+                    '_depth': 1,
+                    c_py: _fmt(v_py),
+                    c_p2: _fmt(v_p2),
+                    c_p1: _fmt(v_p1),
+                    c_in: _fmt(v_in),
+                    c_out: _fmt(v_out),
+                    c_c: _fmt(v_c),
+                    c_diff_val: _fmt(v_c - v_p1),
+                    c_diff_pct: calc_pct_str(v_c, v_p1)
+                })
+                
+        # 💡 '재공' 아래에 '제품' 행(depth=1) 배치 후, 그 아래에 각 급 항목(depth=2) 배치
+        if g1 == '부적합재고' and has_jephum:
+            v_c_j = jephum_totals[c_c]
+            v_p1_j = jephum_totals[c_p1]
             g2_rows.append({
-                '구분': g2,
+                '구분': '제품',
                 '_depth': 1,
-                c_py: _fmt(v_py),
-                c_p2: _fmt(v_p2),
-                c_p1: _fmt(v_p1),
-                c_in: _fmt(v_in),
-                c_out: _fmt(v_out),
-                c_c: _fmt(v_c),
-                c_diff_val: _fmt(v_c - v_p1), # 전월비 증감(값) 추가
-                c_diff_pct: calc_pct_str(v_c, v_p1) # 증감률 포맷팅 적용
+                c_py: _fmt(jephum_totals[c_py]),
+                c_p2: _fmt(jephum_totals[c_p2]),
+                c_p1: _fmt(jephum_totals[c_p1]),
+                c_in: _fmt(jephum_totals[c_in]),
+                c_out: _fmt(jephum_totals[c_out]),
+                c_c: _fmt(v_c_j),
+                c_diff_val: _fmt(v_c_j - v_p1_j),
+                c_diff_pct: calc_pct_str(v_c_j, v_p1_j)
             })
+            g2_rows.extend(grade_rows)
             
-        # 그룹(구분1) 합계 행 추가 (부적합재고 합계, 장기재고 합계)
+        # 그룹(구분1) 합계 행 추가
         rows.append({
             '구분': f'{g1} 합계',
             '_depth': 0,
@@ -1481,11 +1547,10 @@ def _build_해외부적합장기재고_flow_table(year, month, corp):
             c_in: _fmt(g1_totals[c_in]),
             c_out: _fmt(g1_totals[c_out]),
             c_c: _fmt(g1_totals[c_c]),
-            c_diff_val: _fmt(g1_totals[c_c] - g1_totals[c_p1]), # 전월비 증감(값) 추가
-            c_diff_pct: calc_pct_str(g1_totals[c_c], g1_totals[c_p1]) # 증감률 포맷팅 적용
+            c_diff_val: _fmt(g1_totals[c_c] - g1_totals[c_p1]),
+            c_diff_pct: calc_pct_str(g1_totals[c_c], g1_totals[c_p1]) 
         })
         
-        # 세부 품목 행을 그룹 합계 아래에 추가
         rows.extend(g2_rows)
         
         for k in grand_totals:
@@ -1502,11 +1567,10 @@ def _build_해외부적합장기재고_flow_table(year, month, corp):
             c_in: _fmt(grand_totals[c_in]),
             c_out: _fmt(grand_totals[c_out]),
             c_c: _fmt(grand_totals[c_c]),
-            c_diff_val: _fmt(grand_totals[c_c] - grand_totals[c_p1]), # 전월비 증감(값) 추가
-            c_diff_pct: calc_pct_str(grand_totals[c_c], grand_totals[c_p1]) # 증감률 포맷팅 적용
+            c_diff_val: _fmt(grand_totals[c_c] - grand_totals[c_p1]),
+            c_diff_pct: calc_pct_str(grand_totals[c_c], grand_totals[c_p1])
         })
 
-    # 최종 결과 데이터프레임 순서를 명확하게 지정하여 반환
     return pd.DataFrame(rows, columns=columns)
 
 def _해외부적합장기재고_flow_to_html_table(df):
@@ -1523,7 +1587,14 @@ def _해외부적합장기재고_flow_to_html_table(df):
         is_total = (depth == 0)
         bg = 'background:#f8f9fa;' if is_total else ''
         fw = 'font-weight:700;' if is_total else ''
-        indent = '&nbsp;&nbsp;&nbsp;&nbsp;' if depth == 1 else ''
+        
+        # 💡 depth 단계에 따라 들여쓰기 공백 처리
+        if depth == 1:
+            indent = '&nbsp;&nbsp;&nbsp;&nbsp;'
+        elif depth == 2:
+            indent = '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'
+        else:
+            indent = ''
         
         cells = ''
         for i, val in enumerate(row):

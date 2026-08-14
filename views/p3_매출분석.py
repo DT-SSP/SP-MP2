@@ -184,13 +184,13 @@ def _build_계획대비_매출실적(year, month):
     prev_pfx = f"'{str(prev_yr)[2:]}." if prev_yr != year else "'"
     curr_pfx = f"'{str(year)[2:]}."
     
-    col_연간계획 = f"'{str(year)[2:]}년 계획"
-    col_전월실적 = f"{prev_mo}월 실적"
-    col_당월계획 = f"{month}월 계획"
-    col_당월실적 = f"{month}월 실적"
+    col_연간계획 = f"'{str(year)[2:]}.계획"
+    col_전월실적 = f"'{str(year)[2:]}.{prev_mo} 실적"
+    col_당월계획 = f"'{str(year)[2:]}.{month} 계획"
+    col_당월실적 = f"'{str(year)[2:]}.{month} 실적"
 
     col_headers = ['구분', col_연간계획, col_전월실적, col_당월계획, col_당월실적,
-                   '계획비', '전월비', '누계_계획', '누계_실적', '누계_계획비']
+                    '계획대비', '전월대비', '누적_계획', '누적_실적', '누적_계획비']
     
     return rows, col_headers
 
@@ -276,11 +276,12 @@ def _build_판매현황_등급별(year, month):
     yr_1, yr_curr = year - 1, year
     recent_6 = _recent_months(year, month, n=6) 
 
-    col_hdrs = [f"'{str(yr_1)[2:]}년 월평균", f"'{str(yr_curr)[2:]}년 월평균"]
-    
+    col_hdrs = [f"'{str(yr_1)[2:]}.평균", f"'{str(yr_curr)[2:]}.평균"]
+        
     last_yr = None
     for yr_c, mo_c in recent_6:
-        col_hdrs.append(f"'{str(yr_c)[2:]}.{mo_c}월" if yr_c != last_yr else f"{mo_c}월")
+        #col_hdrs.append(f"'{str(yr_c)[2:]}.{mo_c}월" if yr_c != last_yr else f"{mo_c}월")
+        col_hdrs.append(f"'{str(yr_c)[2:]}.{mo_c}월")
         last_yr = yr_c
 
     # 마지막 컬럼으로 '전월대비' 추가
@@ -1191,7 +1192,7 @@ def _build_PSI_data(sheet_info, year, month, n_months=12):
     
     rows = []
     for yr_c, mo_c in recent_months:
-        lbl = f"{str(yr_c)[2:]}년 {mo_c}월" # 예: '25.8'
+        lbl = f"{str(yr_c)[2:]}.{mo_c}월" # 예: '25.8'
         
         # 구분2 명칭에 맞춰 값 추출
         in_val = raw('원재료입고①', yr_c, mo_c) 
@@ -1219,10 +1220,10 @@ def _build_PSI_html_table(rows):
     """
     # 테이블 헤더
     th_html = (
-        f'<tr><th style="{_TH}; width: 20%;"></th>'
-        f'<th style="{_TH}; width: 16%;">원재료 입고①</th>'
-        f'<th style="{_TH}; width: 16%;">매출②</th>'
-        f'<th style="{_TH}; width: 16%;">총재고③</th>'
+        f'<tr><th style="{_TH}; width: 20%;">구분</th>'
+        f'<th style="{_TH}; width: 16%;">원재료 입고 ①</th>'
+        f'<th style="{_TH}; width: 16%;">매출 ②</th>'
+        f'<th style="{_TH}; width: 16%;">총재고 ③</th>'
         f'<th style="{_TH}; width: 16%;">출고율(②/①)</th>'
         f'<th style="{_TH}; width: 16%;">재고율(③/②)</th></tr>'
     )
