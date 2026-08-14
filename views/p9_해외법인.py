@@ -802,9 +802,10 @@ def _build_해외판매구성_table(year, month):
     # 연도, 월, 사업장, 구분1, 구분2 기준으로 값 합산
     val_map = df.groupby(['연도', '월', '사업장', '구분1', '구분2'])['값'].sum().to_dict()
 
+    # 💡 [수정] mo가 None인 경우(년도 전용 열)에만 1~12월 전체 합산, mo가 지정되면 해당 월 데이터만 조회
     def get_v(yr, mo, corp, g1, g2):
-        if yr == year - 1:
-            # 전년도는 1~12월 전체 합산
+        if mo is None:
+            # 월이 지정되지 않은 년도 열('24년 등)은 1~12월 전체 합산
             return sum(val for (k_y, k_m, k_c, k_g1, k_g2), val in val_map.items() 
                        if k_y == yr and k_c == corp and k_g1 == g1 and k_g2 == g2)
         return val_map.get((yr, mo, corp, g1, g2), 0.0)
@@ -835,10 +836,11 @@ def _build_해외판매구성_table(year, month):
         def get_series(g1, g2):
             return [get_v(y, m, corp, g1, g2) for y, m in cols_periods]
         
+        # 💡 [수정] B급 데이터도 m이 None일 때만 연간 합산 처리
         def get_b_series():
             res = []
             for y, m in cols_periods:
-                if y == year - 1:
+                if m is None:
                     v = sum(val for (k_y, k_m, k_c, k_g1, k_g2), val in val_map.items() if k_y == y and k_c == corp and k_g1 == 'B급')
                 else:
                     v = sum(val for (k_y, k_m, k_c, k_g1, k_g2), val in val_map.items() if k_y == y and k_m == m and k_c == corp and k_g1 == 'B급')
@@ -943,8 +945,9 @@ def _build_세부판매현황_base_table(year, month, sheet_info, g1_name, g3_it
     # 구분2: 사업장(중국, 태국), 구분3: 상세항목
     val_map = df.groupby(['연도', '월', '구분2', '구분3'])['값'].sum().to_dict()
 
+    # 💡 [수정] yr == year - 1 대신 mo가 None인 열('24년 등)만 1~12월 전체 합산하도록 조건 변경
     def get_v(yr, mo, corp, item):
-        if yr == year - 1:
+        if mo is None:
             return sum(val for (k_y, k_m, k_c, k_item), val in val_map.items() 
                        if k_y == yr and k_c == corp and k_item == item)
         return val_map.get((yr, mo, corp, item), 0.0)

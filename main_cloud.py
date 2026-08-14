@@ -129,7 +129,7 @@ _REFRESH_STATES = {page: vl.State(f"refresh_status_{page}", "idle") for page in 
 _REFRESH_LOCK = threading.Lock()
 
 def _get_연도_목록():
-    df = load_sheet(Sheets.손익_DB)
+    df = load_sheet(Sheets.등급별판매구성_메모)
     return sorted(pd.to_numeric(df['연도'], errors='coerce').dropna().astype(int).unique().tolist())
 
 

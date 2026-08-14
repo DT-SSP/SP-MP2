@@ -1597,7 +1597,8 @@ def _판관비_to_html(df) -> str:
             if c == '구분':
                 padding = lv * 16
                 text = f'<span style="padding-left:{padding}px">{label}</span>'
-                body_html += f'<td style="border: 1px solid #aaa; padding: 8px 16px; font-size: 15px; text-align: left; white-space: pre;{fw_style}">{text}</td>'
+                # ✅ white-space: pre; -> nowrap; 으로 수정
+                body_html += f'<td style="border: 1px solid #aaa; padding: 8px 16px; font-size: 15px; text-align: left; white-space: nowrap; {fw_style}">{text}</td>'
             else:
                 if pd.isna(val) or str(val).strip() == "":
                     text = ""
@@ -1774,17 +1775,13 @@ def _성과급_to_html(rows) -> str:
     col_keys = ['전년', '당월', '누적', '%', '연간', '월']
 
     # % 컬럼 추가에 따른 실적 colspan 변경 (3 -> 4)
-    th_html = f'''
-    <tr>
-        <th rowspan="2" style="{_TH}">구분</th>
-        <th colspan="4" style="{_TH}">실적</th>
-        <th colspan="2" style="{_TH}">성과급 100% (자사)</th>
-    </tr>
-    <tr>
-        <th style="{_TH}">전년</th><th style="{_TH}">당월</th><th style="{_TH}">누적</th><th style="{_TH}">%</th>
-        <th style="{_TH}">연간</th><th style="{_TH}">월</th>
-    </tr>
-    '''
+    th_html = (
+        f'<tr><th rowspan="2" style="{_TH}">구분</th>'
+        f'<th colspan="4" style="{_TH}">실적</th>'
+        f'<th colspan="2" style="{_TH}">성과급 100% (자사)</th></tr>'
+        f'<tr><th style="{_TH}">전년</th><th style="{_TH}">당월</th><th style="{_TH}">누적</th><th style="{_TH}">%</th>'
+        f'<th style="{_TH}">연간</th><th style="{_TH}">월</th></tr>'
+    )
 
     body_html = ''
     n_cols = 1 + len(col_keys)

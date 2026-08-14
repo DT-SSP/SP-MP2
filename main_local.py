@@ -22,7 +22,7 @@ from views_local.common import prev_month
 
 
 # 데이터 새로고침 버튼을 볼 수 있는 관리자 아이디 목록
-_ADMIN_USERS: set[str] = {"gawon.yi", "jaeseok.heo", "daeseong.kang", "sejong.hyun"}
+_ADMIN_USERS: set[str] = {"gawon.yi", "jaeseok.heo", "daeseong.kang", "sejong.hyun", "sangwoo.ryu"}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 
@@ -114,7 +114,7 @@ _REFRESH_STATES = {page: vl.State(f"refresh_status_{page}", "idle") for page in 
 _REFRESH_LOCK = threading.Lock()
 
 def _get_연도_목록():
-    df = load_sheet(Sheets.손익_DB)
+    df = load_sheet(Sheets.등급별판매구성_메모)
     return sorted(pd.to_numeric(df['연도'], errors='coerce').dropna().astype(int).unique().tolist())
 
 

@@ -195,68 +195,60 @@ def html_table(th_html, body_html):
     )
 
 '''
-def html_table(th_html, body_html):
-    return (
-        # 1. 표 전체를 감싸는 박스의 높이를 제한하고 스크롤이 생기도록 설정
-        '<div style="max-height: 800px; overflow-y: auto; overflow-x: auto;">'
-        '<table style="border-collapse: collapse; width: 100%; font-family: sans-serif;">'
-        
-        # 2. 헤더(thead)에 position: sticky; top: 0; 을 주어 스크롤을 내려도 천장에 붙어있게 설정
-        # 3. z-index: 10을 주어 데이터가 헤더 밑으로 숨어서 지나가게 설정
-        f'<thead style="position: sticky; top: 0; z-index: 10; background: {C_NAVY}; border-top: 2px solid {C_NAVY};">'
-        f'{th_html}'
-        '</thead>'
-        
-        # 4. 실제 데이터 영역 (이 부분만 스크롤됨)
-        f'<tbody>{body_html}</tbody>'
-        
-        '</table>'
-        '</div>'
-    )
 
 def memo_html(memo):
     return (f'<p style="margin:0;font-size:0.9em;line-height:1.6;white-space:pre-wrap">{memo}</p>'
             if memo else '')
 
-def layout64(title, content_html, memo, unit='[단위: 만개, 백만원]'):
+def html_table(th_html, body_html):
     return (
-        '<div style="margin:0">'
-        '<div style="display:flex;gap:16px;margin:0 0 8px 0;border-bottom:1px solid #dee2e6;padding-bottom:4px">'
-        f'<div style="flex:6;min-width:0;display:flex;justify-content:space-between;align-items:baseline">'
-        f'<h3 style="margin:0;font-size:1.1em;font-weight:700;color:{C_NAVY}">{title}</h3>'
-        f'<span style="font-size:0.8em;color:gray">{unit}</span>'
-        '</div>'
-        '<div style="flex:4;min-width:0">'
-        '</div>'
-        '</div>'
-        '<div style="display:flex;gap:16px;align-items:flex-start">'
-        # 💡 수정된 부분: flex:6 래퍼에 width:100%; max-width:100%; overflow:hidden; 속성 추가
-        f'<div style="flex:6; min-width:0; width:100%; max-width:100%; overflow:hidden;">{content_html}</div>'
-        f'<div style="flex:4;min-width:0">{memo_html(memo)}</div>'
-        '</div>'
+        # max-width: 100% 및 box-sizing 설정으로 부모 컨테이너 폭을 초과하지 못하도록 제한
+        '<div style="max-height: 800px; max-width: 100%; width: 100%; overflow-y: auto; overflow-x: auto; box-sizing: border-box;">'
+        '<table style="border-collapse: collapse; width: 100%; min-width: max-content; font-family: sans-serif;">'
+        f'<thead style="position: sticky; top: 0; z-index: 10; background: {C_NAVY}; border-top: 2px solid {C_NAVY};">'
+        f'{th_html}'
+        '</thead>'
+        f'<tbody>{body_html}</tbody>'
+        '</table>'
         '</div>'
     )
 
+def html_table(th_html, body_html):
+    return (
+        # 표를 감싸는 래퍼: 스크롤 설정 및 너비 100% 고정
+        '<div style="max-height: 800px; max-width: 100%; width: 100%; overflow-y: auto; overflow-x: auto; box-sizing: border-box;">'
+        
+        # 💡 table 스타일: width를 100%로 설정하여 화면 전체를 꽉 채우도록 함 (min-width 제한 해제)
+        '<table style="border-collapse: collapse; width: 100%; font-family: sans-serif;">'
+        
+        f'<thead style="position: sticky; top: 0; z-index: 10; background: {C_NAVY}; border-top: 2px solid {C_NAVY};">'
+        f'{th_html}'
+        '</thead>'
+        f'<tbody>{body_html}</tbody>'
+        '</table>'
+        '</div>'
+    )
+
+
 def layout100(title, content_html, memo='', unit=''):
-    """layout64와 동일한 Flexbox 메커니즘을 적용하여 리사이징 시 비율이 유지되는 100% 레이아웃."""
-    
     title_section = (
         '<div style="display:flex; justify-content:space-between; align-items:baseline; '
-        'margin:0 0 8px 0; border-bottom:1px solid #dee2e6; padding-bottom:4px; width:100%">'
+        'margin:0 0 8px 0; border-bottom:1px solid #dee2e6; padding-bottom:4px; width:100%; box-sizing:border-box;">'
         f'<h3 style="margin:0; font-size:1.1em; font-weight:700; color:{C_NAVY}">{title}</h3>'
         f'<span style="font-size:0.8em; color:gray">{unit}</span>'
         '</div>'
     )
     
     memo_content = memo_html(memo)
-    memo_section = f'<div style="flex:1; min-width:0; width:100%; margin-top:10px">{memo_content}</div>' if memo_content else ''
+    memo_section = f'<div style="width:100%; margin-top:10px">{memo_content}</div>' if memo_content else ''
 
     return (
-        '<div style="margin:0 0 20px 0; width:100%; box-sizing:border-box">'
+        '<div style="margin:0 0 20px 0; width:100%; max-width:100%; box-sizing:border-box;">'
         f'{title_section}'
-        # layout64와 완전히 동일하게 flex 및 min-width:0 조합 적용
-        '<div style="display:flex; flex-direction:column; width:100%; min-width:0">'
-            f'<div style="flex:1; min-width:0; width:100%; max-width:100%; overflow:hidden">{content_html}</div>'
+        
+        '<div style="display:flex; flex-direction:column; width:100%; max-width:100%; box-sizing:border-box;">'
+            # 💡 표가 렌더링될 영역. width: 100% 보장
+            f'<div style="width:100%; max-width:100%; overflow-x:auto; box-sizing:border-box;">{content_html}</div>'
             f'{memo_section}'
         '</div>'
         '</div>'

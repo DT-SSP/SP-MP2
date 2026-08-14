@@ -463,7 +463,7 @@ def _수출환율차이_to_html(df, prev_lab, curr_lab) -> str:
                     if is_neg:
                         text = f'<span style="color:#d32f2f;">-{text}</span>'
 
-            td_style = f'border: 1px solid #aaa; padding: 8px 16px; font-size: 15px; text-align: {align}; {border_st}'
+            td_style = f'border: 1px solid #aaa; padding: 6px 8px; font-size: 14px; text-align: {align}; {border_st}'
             body_html += f'<td style="{td_style}">{text}</td>'
         body_html += '</tr>'
 
@@ -711,7 +711,7 @@ def _QD실적차이_to_html(df) -> str:
                     if val_div < 0:
                         text = f'<span style="color:#d32f2f;">-{text}</span>'
 
-            td_style = f'border: 1px solid #aaa; padding: 8px 16px; font-size: 15px; text-align: {align};'
+            td_style = f'border: 1px solid #aaa; padding: 6px 8px; font-size: 14px; text-align: {align};'
             body_html += f'<td style="{td_style}">{text}</td>'
         body_html += '</tr>'
 
@@ -876,8 +876,8 @@ def _포스코_JFE_입고가격_to_html(df) -> str:
             val = row[c]
             
             # 셀 기본 테두리 및 여백 설정
-            td_base_style = f'border: 1px solid #d3d3d3; border-top: {border_top}; border-bottom: {border_bottom}; padding: 8px 16px; font-size: 15px; white-space: nowrap;'
-            
+            td_base_style = f'border: 1px solid #d3d3d3; border-top: {border_top}; border-bottom: {border_bottom}; padding: 6px 8px; font-size: 14px; white-space: nowrap;'
+
             if c == '구분':
                 td_style = f'{td_base_style} text-align: left;'
                 body_html += f'<td style="{td_style}">{label}</td>'
@@ -1362,7 +1362,7 @@ def _제조가공비_to_html(df) -> str:
                     font_weight = '400'
                 
                 text = f'<span style="padding-left:{padding}px; font-weight:{font_weight};">{label}</span>'
-                body_html += f'<td style="border: 1px solid #aaa; padding: 8px 16px; font-size: 15px; text-align: left; white-space: nowrap;">{text}</td>'
+                body_html += f'<td style="border: 1px solid #aaa; padding: 6px 8px; font-size: 14px; text-align: left; white-space: nowrap;">{text}</td>'
             else:
                 if pd.isna(val) or str(val).strip() == "":
                     text = ""
@@ -1563,7 +1563,7 @@ def _판관비_to_html(df) -> str:
             if c == '구분':
                 padding = lv * 16
                 text = f'<span style="padding-left:{padding}px">{label}</span>'
-                body_html += f'<td style="border: 1px solid #aaa; padding: 8px 16px; font-size: 15px; text-align: left; white-space: pre;{fw_style}">{text}</td>'
+                body_html += f'<td style="border: 1px solid #aaa; padding: 6px 8px; font-size: 14px; text-align: left; white-space: nowrap; {fw_style}">{text}</td>'
             else:
                 if pd.isna(val) or str(val).strip() == "":
                     text = ""
@@ -1739,17 +1739,13 @@ def _성과급_to_html(rows) -> str:
     col_keys = ['전년', '당월', '누적', '%', '연간', '월']
 
     # % 컬럼 추가에 따른 실적 colspan 변경 (3 -> 4)
-    th_html = f'''
-    <tr>
-        <th rowspan="2" style="{_TH}">구분</th>
-        <th colspan="4" style="{_TH}">실적</th>
-        <th colspan="2" style="{_TH}">성과급 100% (자사)</th>
-    </tr>
-    <tr>
-        <th style="{_TH}">전년</th><th style="{_TH}">당월</th><th style="{_TH}">누적</th><th style="{_TH}">%</th>
-        <th style="{_TH}">연간</th><th style="{_TH}">월</th>
-    </tr>
-    '''
+    th_html = (
+        f'<tr><th rowspan="2" style="{_TH}">구분</th>'
+        f'<th colspan="4" style="{_TH}">실적</th>'
+        f'<th colspan="2" style="{_TH}">성과급 100% (자사)</th></tr>'
+        f'<tr><th style="{_TH}">전년</th><th style="{_TH}">당월</th><th style="{_TH}">누적</th><th style="{_TH}">%</th>'
+        f'<th style="{_TH}">연간</th><th style="{_TH}">월</th></tr>'
+    )
 
     body_html = ''
     n_cols = 1 + len(col_keys)
@@ -1919,6 +1915,7 @@ def render_page(app, year_state, month_state):
     tabs = app.tabs(["손익요약", "전월대비 손익차이", "원재료", "제조가공비", "판매비와 관리비", "성과급 및 격려금"])
 
     with tabs[0]:
+        # p2_손익분석.py 하단 _render_손익요약 함수
         def _render_손익요약():
             year, month = int(year_state.value), int(month_state.value)
 
@@ -1926,7 +1923,7 @@ def render_page(app, year_state, month_state):
             df_table = _build_손익요약표_table(year, month)
             html = _손익요약표_to_html_table(df_table)
             
-            html = f"<div style='overflow-x: auto; width: 100%;'>{html}</div>"
+            # (중복 div 감싸기 제거)
             
             # 2. 구글 시트에서 해당 연/월의 메모 가져오기
             memo = _get_memo(Sheets.손익요약표_메모, year, month)
