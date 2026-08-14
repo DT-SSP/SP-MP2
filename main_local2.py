@@ -375,8 +375,11 @@ function downloadAllTables() {
     finally:
         layout_ctx.reset(_token)
 
+
+
 with app.sidebar:
     app.If(app.auth.is_authenticated, _sidebar_controls)
+
 
 def login_page():
     _, col, _ = app.columns([1, 2, 1])
@@ -448,4 +451,4 @@ app.navigation([
 
 
 if __name__ == "__main__":
-    app.run(port=int(os.environ.get("PORT", 8001)))
+    app.run(port=int(os.environ.get("PORT", 8002)))
