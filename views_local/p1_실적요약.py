@@ -1460,12 +1460,12 @@ def _build_수익성_대표이사_table(year, month):
     col_prev_accum = f"'{yr_prev_str}.누적"
     col_goal = f"'{yr_str}.목표"
     
-    # [수정] 1월 조회 시 '0월' 생성 방지 처리
+    # 월 컬럼명 지정 ('26.6월 누적)
     if month == 1:
-        col_months = [f"'{yr_str}.1월"]
+        col_months = [f"'{yr_str}.1월 누적"]
     else:
-        col_months = [f"'{yr_str}.{m}월" for m in range(month - 1, month + 1)]
-        
+        col_months = [f"'{yr_str}.{m}월 누적" for m in range(month - 1, month + 1)]
+
     col_mom = '전월대비'
     col_vs_goal = '목표대비'
 
@@ -1482,7 +1482,7 @@ def _build_수익성_대표이사_table(year, month):
         if v < 0: return f"↓{abs(v):.1f}%p"
         return f"{v:.1f}%p"
 
-    # 행 단위 데이터 산출 (ROE, ROA 등)
+    # 행 단위 데이터 산출 (ROE)
     for label in ["ROE"]:
         v_prev_accum = 값(year - 1, 12, label, '실적')
         v_goal = 값(year, 0, label, '목표')
@@ -1498,8 +1498,8 @@ def _build_수익성_대표이사_table(year, month):
 
         for m in range(1, month + 1):
             v_m = 값(year, m, label, '실적')
-            # [수정] Key 값에 작은따옴표(') 포함하여 컬럼명과 일치시킴
-            row[f"'{yr_str}.{m}월"] = fmt_pct(v_m)
+            # [수정] row의 Key에도 ' 누적'을 붙여 col_months와 동일하게 맞춤
+            row[f"'{yr_str}.{m}월 누적"] = fmt_pct(v_m)
             
             if m == month:
                 v_curr = v_m
