@@ -307,6 +307,15 @@ def _build_단가추이_chart(사업장, rows, col_hdrs):
 
 # ── 클레임 현황 (월 평균 & 당월) ──────────────────────────────────────────
 
+# 매핑 사전 정의
+_NAME_MAP = {
+    '선재': '선재영업팀',
+    '봉강': '봉강영업팀',
+    '부산': '부산영업소',
+    '대구': '대구영업소',
+    '글로벌': '글로벌영업팀'
+}
+
 def _build_월평균클레임_data(year, month):
     df = load_sheet(Sheets.월평균클레임_DB) 
     df.columns = df.columns.str.strip()
@@ -314,7 +323,7 @@ def _build_월평균클레임_data(year, month):
     required_cols = ['구분1', '연도', '월', '값']
     for col in required_cols:
         if col not in df.columns:
-            return [('item', f'오류: [{col}] 없음', [0.0] * 4)], [f"'{str(year-3)[2:]}년", f"'{str(year-2)[2:]}년", f"'{str(year-1)[2:]}년", f"'{str(year)[2:]}년"]
+            return [('item', f'오류: [{col}] 없음', [0.0] * 4)], [f"'{str(year-3)[2:]}.평균", f"'{str(year-2)[2:]}.평균", f"'{str(year-1)[2:]}.평균", f"'{str(year)[2:]}.평균"]
 
     years = [year - 3, year - 2, year - 1, year]
     col_hdrs = [f"'{str(y)[2:]}년" for y in years]
@@ -344,7 +353,8 @@ def _build_월평균클레임_data(year, month):
 
     for item in items:
         vals = [vm.get((item, y), 0.0) for y in years]
-        rows.append(('item', item, vals))
+        display_name = _NAME_MAP.get(item, item)
+        rows.append(('item', display_name, vals))
         for i, v in enumerate(vals):
             totals[i] += v
 
@@ -395,7 +405,7 @@ def _build_당월클레임_data(year, month):
         recent.insert(0, (curr_y, curr_m))
         curr_y, curr_m = _prev(curr_y, curr_m)
 
-    col_hdrs = [f"'{str(y)[2:]}년 {m}월" for y, m in recent] + ['증감']
+    col_hdrs = [f"'{str(y)[2:]}.{m}월" for y, m in recent] + ['증감']
 
     items = ['선재', '봉강', '부산', '대구', '글로벌']
     sub_items = ['선별비', '불량 보상']
@@ -417,7 +427,8 @@ def _build_당월클레임_data(year, month):
             sub_rows.append(('sub', sub, vals + [diff]))
 
         diff_total = item_totals[-1] - item_totals[-2] if len(item_totals) >= 2 else 0.0
-        rows.append(('item', item, item_totals + [diff_total]))
+        display_name = _NAME_MAP.get(item, item)
+        rows.append(('item', display_name, item_totals + [diff_total]))
         rows.extend(sub_rows)
 
     diff_g = grand_totals['total'][-1] - grand_totals['total'][-2]
@@ -430,7 +441,7 @@ def _build_당월클레임_data(year, month):
     return rows, col_hdrs
 
 def _build_당월클레임_table_html(rows, col_hdrs):
-    th = f'<th style="{_TH}">클레임비용</th>' + ''.join(f'<th style="{_TH}">{h}</th>' for h in col_hdrs)
+    th = f'<th style="{_TH}">구분</th>' + ''.join(f'<th style="{_TH}">{h}</th>' for h in col_hdrs)
     body = ''
     for kind, label, vals in rows:
         if kind in ('total', 'item'):
@@ -490,15 +501,17 @@ def _build_영업외비용_data(year, month):
         recent.insert(0, (curr_y, curr_m))
         curr_y, curr_m = _prev(curr_y, curr_m)
         
-    col_hdrs = [f"'{str(y)[2:]}년 {m}월" for y, m in recent] + ['증감']
+    col_hdrs = [f"'{str(y)[2:]}.{m}월" for y, m in recent] + ['증감']
     
-    rows = []
     grand_totals = [0.0] * 3
+    g1_blocks = []  # 상위 계층 데이터를 임시 저장할 리스트
     
     g1_list = df[df['구분1'] != '']['구분1'].unique()
     
+    # 1. 데이터 집계 및 계산 (임시 저장)
     for g1 in g1_list:
         g1_totals = [0.0] * 3
+        g2_blocks = []
         g2_list = df[df['구분1'] == g1]['구분2'].unique()
         
         for g2 in g2_list:
@@ -522,17 +535,29 @@ def _build_영업외비용_data(year, month):
                     sub_rows.append(('sub', label, vals + [diff]))
                     
             diff_g2 = g2_totals[2] - g2_totals[1] if len(g2_totals) == 3 else 0.0
-            rows.append(('item', g2, g2_totals + [diff_g2]))
+            g2_row = ('item', g2, g2_totals + [diff_g2])
+            g2_blocks.append((g2_row, sub_rows if has_sub else []))
             
-            if has_sub:
-                rows.extend(sub_rows)
-                
         diff_g1 = g1_totals[2] - g1_totals[1] if len(g1_totals) == 3 else 0.0
-        rows.append(('total', f'{g1} 합계', g1_totals + [diff_g1]))
+        g1_row = ('total', f'{g1}', g1_totals + [diff_g1])
+        g1_blocks.append((g1_row, g2_blocks))
         
     diff_grand = grand_totals[2] - grand_totals[1] if len(grand_totals) == 3 else 0.0
-    rows.append(('total', '총 합계', grand_totals + [diff_grand]))
+    grand_row = ('total', '총 합계', grand_totals + [diff_grand])
+
+    # 2. 원하는 행 순서대로 rows 배치 (위에서 아래로)
+    rows = []
     
+    # ① 맨 위에 '총 합계' 배치
+    rows.append(grand_row)
+    
+    # ② 구분1 합계(예: 금융비용) -> 구분2(예: 기타비용) -> 구분3(세부사항) 순 배치
+    for g1_row, g2_blocks in g1_blocks:
+        rows.append(g1_row)  # 구분1 합계
+        for g2_row, sub_rows in g2_blocks:
+            rows.append(g2_row)  # 구분2 항목 (기타비용 등)
+            rows.extend(sub_rows)  # 세부사항 (구분3)
+            
     return rows, col_hdrs
 
 def _build_영업외비용_table_html(rows, col_hdrs):
