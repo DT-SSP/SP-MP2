@@ -174,7 +174,12 @@ def _build_단가추이_data(year, month):
     df = load_sheet(Sheets.부재료단가추이_DB) 
     df.columns = df.columns.str.strip()
     
+    # [추가] '구분' 컬럼이 존재하면 '구분1'로 자동 변경
+    if '구분' in df.columns and '구분1' not in df.columns:
+        df = df.rename(columns={'구분': '구분1'})
+    
     recent = []
+    
     curr_y, curr_m = year, month
     for _ in range(12):
         recent.insert(0, (curr_y, curr_m))

@@ -170,10 +170,23 @@ def _build_부재료_chart(사업장, rows, col_hdrs):
 
 # ── 1-2) 주요 부재료 단가 추이 ───────────────────────────
 
+# 수정 후
 def _build_단가추이_data(year, month):
     df = load_sheet(Sheets.부재료단가추이_DB) 
-    df.columns = df.columns.str.strip()
     
+    # 컬럼명의 숨겨진 유니코드/BOM/공백 완벽 제거 및 표준화
+    df.columns = (
+        df.columns.astype(str)
+        .str.replace('\ufeff', '', regex=False)
+        .str.replace('\xa0', '', regex=False)
+        .str.replace(' ', '', regex=False)
+        .str.strip()
+    )
+    
+    # '구분' 컬럼 호환 처리
+    if '구분' in df.columns and '구분1' not in df.columns:
+        df = df.rename(columns={'구분': '구분1'})
+
     recent = []
     curr_y, curr_m = year, month
     for _ in range(12):
