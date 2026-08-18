@@ -1445,7 +1445,6 @@ def _build_수익성_대표이사_table(year, month):
 
     def 값(yr, mo, g1, g2):
         if g2 == '목표':
-            # 목표는 월(mo) 구분 없이 연도와 구분만 일치하면 가져옴
             for k, v in val_map.items():
                 if k[0] == yr and k[2] == g1 and k[3] == g2:
                     return float(v) * 100 if v else None
@@ -1460,7 +1459,13 @@ def _build_수익성_대표이사_table(year, month):
     # 컬럼 동적 생성
     col_prev_accum = f"'{yr_prev_str}.누적"
     col_goal = f"'{yr_str}.목표"
-    col_months = [f"'{yr_str}.{m}월" for m in range(month - 1, month + 1)]
+    
+    # [수정] 1월 조회 시 '0월' 생성 방지 처리
+    if month == 1:
+        col_months = [f"'{yr_str}.1월"]
+    else:
+        col_months = [f"'{yr_str}.{m}월" for m in range(month - 1, month + 1)]
+        
     col_mom = '전월대비'
     col_vs_goal = '목표대비'
 
@@ -1477,7 +1482,7 @@ def _build_수익성_대표이사_table(year, month):
         if v < 0: return f"↓{abs(v):.1f}%p"
         return f"{v:.1f}%p"
 
-    # 행 단위 데이터 산출 (ROE, ROA)
+    # 행 단위 데이터 산출 (ROE, ROA 등)
     for label in ["ROE"]:
         v_prev_accum = 값(year - 1, 12, label, '실적')
         v_goal = 값(year, 0, label, '목표')
@@ -1493,7 +1498,9 @@ def _build_수익성_대표이사_table(year, month):
 
         for m in range(1, month + 1):
             v_m = 값(year, m, label, '실적')
-            row[f"{yr_str}.{m}월"] = fmt_pct(v_m)
+            # [수정] Key 값에 작은따옴표(') 포함하여 컬럼명과 일치시킴
+            row[f"'{yr_str}.{m}월"] = fmt_pct(v_m)
+            
             if m == month:
                 v_curr = v_m
             if m == month - 1:
@@ -1952,7 +1959,8 @@ def render_page(app, year_state, month_state):
                          unsafe_allow_html=True)
 
             df_수익성_대표이사 = _build_수익성_대표이사_table(year, month)
-            app.markdown(_section("6) 수익성 (연결, 대표이사 SPS)", df_수익성_대표이사, "", ''),
+            memo6 = _get_memo(Sheets.수익성_대표이사_메모, year, month)
+            app.markdown(_section("6) 수익성 (연결, 대표이사 SPS)", df_수익성_대표이사, memo6, ''),
                          unsafe_allow_html=True)
 
         app.If(lambda: True, _render_포함)

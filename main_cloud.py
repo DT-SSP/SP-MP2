@@ -44,16 +44,16 @@ _BASE_URL = os.environ.get("BASE_URL", "").rstrip("/")
 # ── 2. 페이지 및 시트 매핑 설정 ──────────────────────────────────────────
 PAGE_SHEETS_MAP = {
     "1. 실적요약": [
-        Sheets.손익_DB, Sheets.손익_메모, Sheets.손익_국내_메모,
-        Sheets.현금흐름표_연결_DB, Sheets.현금흐름표_연결_메모,
-        Sheets.재무상태표_DB, Sheets.재무상태표_메모, Sheets.재무상태표_국내_메모,
-        Sheets.회전일_DB, Sheets.회전일_메모, Sheets.회전일_국내_메모,
-        Sheets.품목손익_DB, Sheets.품목손익_메모, Sheets.수정원가기준손익_DB, Sheets.수정원가기준손익_메모,
-        Sheets.원재료입고기초단가차이_DB, Sheets.원재료입고단가차이_거래처기준_DB,
-        Sheets.제품수불표_DB, Sheets.현금흐름표_별도_DB, Sheets.현금흐름표_별도_메모,
-        Sheets.안정성_DB, Sheets.안정성_메모, Sheets.수익성_DB, Sheets.수익성_메모, Sheets.수익성_대표이사_DB,
-        Sheets.판매계획및실적_DB, Sheets.판매계획및실적_메모, Sheets.이익계획및실적_DB
-    ],
+            Sheets.손익_DB, Sheets.손익_메모, Sheets.손익_국내_메모,
+            Sheets.현금흐름표_연결_DB, Sheets.현금흐름표_연결_메모,
+            Sheets.재무상태표_DB, Sheets.재무상태표_메모, Sheets.재무상태표_국내_메모,
+            Sheets.회전일_DB, Sheets.회전일_메모, Sheets.회전일_국내_메모,
+            Sheets.품목손익_DB, Sheets.품목손익_메모, Sheets.수정원가기준손익_DB,Sheets.수정원가기준손익_메모,
+            Sheets.원재료입고기초단가차이_DB, Sheets.원재료입고단가차이_거래처기준_DB,
+            Sheets.제품수불표_DB, Sheets.현금흐름표_별도_DB, Sheets.현금흐름표_별도_메모,
+            Sheets.안정성_DB, Sheets.안정성_메모, Sheets.수익성_DB, Sheets.수익성_메모, Sheets.수익성_대표이사_DB, Sheets.수익성_대표이사_메모,
+            Sheets.판매계획및실적_DB, Sheets.판매계획및실적_메모
+        ],
     "2. 손익분석": [
         Sheets.손익요약표_DB, Sheets.손익요약표_메모,
         Sheets.수출환율차이_DB, Sheets.수출환율차이_메모,
@@ -64,7 +64,8 @@ PAGE_SHEETS_MAP = {
         Sheets.메이커별입고추이_DB, Sheets.메이커별입고추이_메모,
         Sheets.제조가공비_DB, Sheets.제조가공비_메모,
         Sheets.판매비와관리비_DB, Sheets.판매비와관리비_메모,
-        Sheets.성과급및격려금_DB, Sheets.성과급및격려금_메모
+        Sheets.성과급및격려금_DB, Sheets.성과급및격려금_메모,
+        Sheets.전월대비손익차이_DB, Sheets.전월대비손익차이_메모,
     ],
     "3. 매출분석": [
         Sheets.계획대비매출실적_DB, Sheets.계획대비매출실적_메모,
@@ -83,10 +84,10 @@ PAGE_SHEETS_MAP = {
         Sheets.부적합발생추이_포항_메모, Sheets.부적합발생추이_충주_충주2_메모
     ],
     "5. 비용분석": [
-        Sheets.부재료단가추이_DB, Sheets.부재료사용량_포항_메모, Sheets.부재료사용량_충주_메모, Sheets.부재료사용량_충주2_메모,
+        Sheets.부재료사용량_DB, Sheets.부재료사용량_포항_메모, Sheets.부재료사용량_충주_메모, Sheets.부재료사용량_충주2_메모,
         Sheets.월평균클레임_DB, Sheets.당월클레임_메모,
         Sheets.당월클레임_DB,
-        Sheets.영업외비용_DB, Sheets.영업외비용_메모
+        Sheets.영업외비용_DB, Sheets.영업외비용_메모, 
     ],
     "6. 재고자산분석": [ 
         Sheets.재고현황_DB, Sheets.재고현황_메모,
@@ -117,13 +118,13 @@ PAGE_SHEETS_MAP = {
         Sheets.해외인원_DB, Sheets.해외인원_메모, Sheets.해외인원_생산량_메모
     ],
     "10. 별첨" : [
-        Sheets.전체실적요약_DB, Sheets.환율_DB, Sheets.손익계산서_DB,Sheets.산업군별영업이익_DB,
-        Sheets.메이커별영업이익_DB, Sheets.실수요유통영업이익_DB,
-        Sheets.산업군별영업이익_메모, Sheets.실수요유통영업이익_메모, Sheets.메이커별영업이익_메모,
-        Sheets.부서메이커별영업이익_메모, Sheets.부서사업장메이커별영업이익_메모, Sheets.부서별인당영업이익_메모,
-        Sheets.부서메이커별영업이익_DB, Sheets.부서사업장메이커별영업이익_DB, Sheets.부서별인당영업이익_DB
-        ]
-}
+            Sheets.전체실적요약_DB, Sheets.환율_DB, Sheets.손익계산서_DB,Sheets.산업군별영업이익_DB,
+            Sheets.메이커별영업이익_DB, Sheets.실수요유통영업이익_DB,
+            Sheets.산업군별영업이익_메모, Sheets.실수요유통영업이익_메모, Sheets.메이커별영업이익_메모,
+            Sheets.부서메이커별영업이익_메모, Sheets.부서사업장메이커별영업이익_메모, Sheets.부서별인당영업이익_메모,
+            Sheets.부서메이커별영업이익_DB, Sheets.부서사업장메이커별영업이익_DB, Sheets.부서별인당영업이익_DB
+            ]
+    }
 
 _REFRESH_STATES = {page: vl.State(f"refresh_status_{page}", "idle") for page in PAGE_SHEETS_MAP}
 _REFRESH_LOCK = threading.Lock()

@@ -929,7 +929,8 @@ def _build_포스코_JFE_투입비중_table(year: int, month: int):
         try: return float(s)
         except: return np.nan
 
-    d["val"] = d["실적"].apply(to_num)
+    val_col = "값" if "값" in d.columns else "실적"
+    d["val"] = d[val_col].apply(to_num)
     
     is_valid_g2 = d["구분2"].notna() & (d["구분2"].astype(str).str.strip() != "")
     d["kpi_src"] = np.where(is_valid_g2, d["구분2"], d["구분1"])

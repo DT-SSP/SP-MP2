@@ -998,7 +998,7 @@ def render_page(app, year_state, month_state):
             # 4) 종합 현황 
             rows_종합 = _build_종합_rows(df, col_spec)
             제품_v, 재공품_v, 원재료_v, 장기_v, pct_v = _build_종합_chart_data(df, col_spec)
-            memo_종합 = _get_memo(Sheets.연령별재고현황_메모, year, month, gubun='종합')
+            memo_종합 = _get_memo(Sheets.총재고_메모, year, month, gubun='종합')
 
             col_l4, col_r4 = app.columns([6, 4])
             with col_l4: # 6: 표 및 차트
