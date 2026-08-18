@@ -124,7 +124,7 @@ def _build_재고현황(year, month):
         return v
 
     sum_rows = [
-        (kw if i == 0 else f'{kw} 계', make_sum_vals(kw), decimal_for(kw))
+        (kw if i == 0 else f'{kw}', make_sum_vals(kw), decimal_for(kw))
         for i, kw in enumerate(active_kws)
     ]
 
@@ -145,8 +145,8 @@ def _재고현황_to_html(group_rows, sum_rows, col_spec):
         label = f"'{str(yr_c)[2:]}년 {mo_c}월말"
         th += f'<th style="{_TH}">{label}</th>'
         last_yr = yr_c
-    th += f'<th style="{_TH}">전월대비<br>증감</th>'
-    th += f'<th style="{_TH}">전월대비<br>증감률</th>'
+    th += f'<th style="{_TH}">전월대비<br></th>'
+    th += f'<th style="{_TH}">전월대비<br>(%)</th>'
     thead = f'<tr>{th}</tr>'
 
     def val_cells(vals, decimal, num_s=_TD_NUM, red_s=_TD_RED):
@@ -238,9 +238,9 @@ def _load_연령별(year, month):
 
 def _col_labels(col_spec):
     # ⭕ 요청하신 컬럼명 포맷 ('23년말, '25년 5월 형식)
-    labels = [f"'{str(yr)[2:]}년말" for yr in col_spec['past_years']]
+    labels = [f"'{str(yr)[2:]}.12월" for yr in col_spec['past_years']]
     for yr_c, mo_c in col_spec['recent_curr']:
-        labels.append(f"'{str(yr_c)[2:]}년 {mo_c}월")
+        labels.append(f"'{str(yr_c)[2:]}.{mo_c}월")
     return labels
 
 
@@ -385,7 +385,7 @@ def _build_종합_rows(df, col_spec):
 # ── 차트 함수 생략 (기존 _build_단품_chart_data, _build_종합_chart_data, _chart_단품, _chart_종합은 그대로 유지) ──
 
 def _단품_to_html(rows, col_spec, g1_label):
-    th = f'<th style="{_TH}">{g1_label}</th>'
+    th = f'<th style="{_TH}">구분</th>'
     for lbl in _col_labels(col_spec):
         th += f'<th style="{_TH}">{lbl}</th>'
     th += f'<th style="{_TH}">전월대비</th>'
@@ -463,8 +463,6 @@ def _build_단품_chart_data(g1, df, col_spec):
     for i, k in enumerate(cols):
         계_val = agg_계.get(k, 0.0)
         매입_val = 매입_vals[i]
-
-        # ⭕ 정상재 = 계 - 매입매출
         정상_vals.append(계_val - 매입_val)
 
     return 정상_vals, 매입_vals, 장기_vals
@@ -640,7 +638,7 @@ def _원재료_to_html(rows, col_spec):
     col_lbls = _col_labels(col_spec)
     n_cols   = len(col_lbls) + 2
 
-    th = f'<th style="{_TH}">원재료</th>'
+    th = f'<th style="{_TH}">구분</th>'
     for lbl in col_lbls:
         th += f'<th style="{_TH}">{lbl}</th>'
     th += f'<th style="{_TH}">전월대비</th>'
@@ -725,14 +723,14 @@ def _build_등급별_rows(df, col_spec):
     rows = []
     
     # 1. 재공품 (맨위로 이동, kind='total' 및 <b> 적용으로 합계처럼 배경/볼드 처리)
-    rows.append({'label': '<b>재공품 (재공품)</b>', 'kind': 'total', 'vals': cvs('재공품', '재공품')})
+    rows.append({'label': '<b>재공품 계</b>', 'kind': 'total', 'vals': cvs('재공품', '재공품')})
     
     # 2. 제품 개별 등급
     for g2 in grades:
         rows.append({'label': f'제품 ({g2})', 'kind': 'detail', 'vals': cvs('제품', g2)})
     
     # 3. 제품 합계
-    rows.append({'label': '<b>제품 (합계)</b>', 'kind': 'total', 'vals': cvs_제품합계()})
+    rows.append({'label': '<b>제품 계</b>', 'kind': 'total', 'vals': cvs_제품합계()})
 
     return rows
 
@@ -917,7 +915,6 @@ def render_page(app, year_state, month_state):
             )
         app.If(lambda: True, _render_재고현황)
 
-    # ── 탭 1: 연령별 재고현황 ────────────────────────────────────────────
     # ── 탭 1: 연령별 재고현황 ────────────────────────────────────────────
     with tabs[1]:
         def _render_연령별():
