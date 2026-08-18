@@ -78,7 +78,7 @@ def build_col_hdrs(연도_in_db, recent, annual_suffix='년'):
         hdrs.append(f"'{str(yr)[2:]}{annual_suffix}")
     last_yr = None
     for yr_c, mo_c in recent:
-        hdrs.append(f"'{str(yr_c)[2:]}.{mo_c}월" if yr_c != last_yr else f"{mo_c}월")
+        hdrs.append(f"'{str(yr_c)[2:]}.{mo_c}월")
         last_yr = yr_c
     return hdrs
 

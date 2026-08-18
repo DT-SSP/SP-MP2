@@ -53,7 +53,7 @@ def _build_생산실적(year, month):
 
     연도_in_db = sorted(df['연도'].unique().tolist())
     recent = _recent_months(year, month)
-    col_hdrs = _build_col_hdrs(연도_in_db, recent, annual_suffix='년 평균')
+    col_hdrs = _build_col_hdrs(연도_in_db, recent, annual_suffix='.평균')
 
     prev_yr, prev_mo = _prev(year, month)
     
@@ -106,7 +106,7 @@ def _build_생산실적(year, month):
         # 상위구분(CHQ, CD) 소계 계산
         mom_소계 = 소계_당월 - 소계_전월
         pct_소계 = (mom_소계 / 소계_전월 * 100) if 소계_전월 else 0.0
-        rows.append(('total', f'{g1} 소계', 소계_main, mom_소계, pct_소계))
+        rows.append(('total', f'{g1}', 소계_main, mom_소계, pct_소계))
 
         합계_main = [a + b for a, b in zip(합계_main, 소계_main)]
         합계_당월 += 소계_당월
@@ -171,10 +171,10 @@ def _build_부적합_포항(year, month):
     # 헤더 생성: ['25년 월평균, '26년 목표, '25년 12월, '26년 1월, '26년 2월, 합계, 월평균]
     prev_yr_str = str(prev_year)[-2:]
     curr_yr_str = str(year)[-2:]
-    col_hdrs = [f"'{prev_yr_str}년 월평균", f"'{curr_yr_str}년 목표"]
+    col_hdrs = [f"'{prev_yr_str}.평균", f"'{curr_yr_str}.목표"]
     for y, m in recent:
-        col_hdrs.append(f"'{str(y)[-2:]}년 {m}월")
-    col_hdrs.extend(["누적 합계", "월평균"])
+        col_hdrs.append(f"'{str(y)[-2:]}.{m}월")
+    col_hdrs.extend(["누적", "평균"])
 
     rows = []
     num_cols = 2 + len(recent) + 2
@@ -245,10 +245,10 @@ def _build_부적합_충주(year, month):
     
     prev_yr_str = str(prev_year)[-2:]
     curr_yr_str = str(year)[-2:]
-    col_hdrs = [f"'{prev_yr_str}년 월평균", f"'{curr_yr_str}년 목표"]
+    col_hdrs = [f"'{prev_yr_str}.평균", f"'{curr_yr_str}.목표"]
     for y, m in recent:
-        col_hdrs.append(f"'{str(y)[-2:]}년 {m}월")
-    col_hdrs.extend(["누적 합계", "월평균"])
+        col_hdrs.append(f"'{str(y)[-2:]}.{m}월")
+    col_hdrs.extend(["누적", "평균"])
 
     rows = []
     num_cols = 2 + len(recent) + 2
@@ -282,7 +282,7 @@ def _build_부적합_충주(year, month):
             else:
                 grand_total_소재성 = [a + b for a, b in zip(grand_total_소재성, row_data)]
                 
-        rows.append(('total', g2, subtotal))
+        rows.append(('total', 'CHQ(충주)', subtotal))
         grand_total = [a + b for a, b in zip(grand_total, subtotal)]
 
     # 수정된 부분: 하단 총계를 계산하기 위해 변수 3개 추가 반환
@@ -308,10 +308,10 @@ def _build_부적합_충주2(year, month):
     
     prev_yr_str = str(prev_year)[-2:]
     curr_yr_str = str(year)[-2:]
-    col_hdrs = [f"'{prev_yr_str}년 월평균", f"'{curr_yr_str}년 목표"]
+    col_hdrs = [f"'{prev_yr_str}.평균", f"'{curr_yr_str}.목표"]
     for y, m in recent:
-        col_hdrs.append(f"'{str(y)[-2:]}년 {m}월")
-    col_hdrs.extend(["누적 합계", "월평균"])
+        col_hdrs.append(f"'{str(y)[-2:]}.{m}월")
+    col_hdrs.extend(["누적", "평균"])
 
     rows = []
     num_cols = 2 + len(recent) + 2
@@ -345,7 +345,7 @@ def _build_부적합_충주2(year, month):
             else:
                 grand_total_소재성 = [a + b for a, b in zip(grand_total_소재성, row_data)]
                 
-        rows.append(('total', g2, subtotal))
+        rows.append(('total', '마봉강(충주2)', subtotal))
         grand_total = [a + b for a, b in zip(grand_total, subtotal)]
 
     # 수정된 부분: 하단 총계를 계산하기 위해 변수 3개 추가 반환
@@ -417,21 +417,20 @@ def render_page(app, year_state, month_state):
             # 3) 두 공장의 데이터를 하나의 리스트로 통합하며 행 이름(Label) 변경
             combined_rows = []
             for kind, label, vals in rows1:
-                new_label = f"{label}" if kind == 'item' else f"충주 계 ({label})"
+                new_label = f"{label}" if kind == 'item' else f"{label}"
                 combined_rows.append((kind, new_label, vals))
                 
             for kind, label, vals in rows2:
-                new_label = f"{label}" if kind == 'item' else f"충주2 계 ({label})"
+                new_label = f"{label}" if kind == 'item' else f"{label}"
                 combined_rows.append((kind, new_label, vals))
 
-            # --- 🌟 추가된 부분: 충주 전체(1+2공장) 합계 3줄 하단 추가 ---
             final_공정성 = [a + b for a, b in zip(g1_공, g2_공)]
             final_소재성 = [a + b for a, b in zip(g1_소, g2_소)]
             final_총계 = [a + b for a, b in zip(g1_합, g2_합)]
             
             combined_rows.append(('item', '공정성', final_공정성))
             combined_rows.append(('item', '소재성', final_소재성))
-            combined_rows.append(('total', '충주 총계', final_총계))
+            combined_rows.append(('total', '충주', final_총계))
             # -----------------------------------------------------------------
                 
             # 통합된 메모 (기존 충주 1공장 메모 사용)
