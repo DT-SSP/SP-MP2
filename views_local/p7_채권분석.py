@@ -21,7 +21,7 @@ def _get_memo(sheet_info, year, month):
     return str(row.iloc[0]['메모']) if not row.empty else ''
 
 
-# ── 외상매출금 및 받을어음 현황 ───────────────────────────────────────────
+# ── 매출채권 현황 ───────────────────────────────────────────
 
 def _build_외상매출받을어음_현황(year, month):
     # DB 시트 로드 (Sheets.채권_DB는 설정 파일에 맞게 수정 필요)
@@ -44,10 +44,10 @@ def _build_외상매출받을어음_현황(year, month):
     # 헤더 생성
     prev2_yr_str = str(prev2_year)[-2:]
     prev1_yr_str = str(prev1_year)[-2:]
-    col_hdrs = [f"'{prev2_yr_str}년말", f"'{prev1_yr_str}년말"]
+    col_hdrs = [f"'{prev2_yr_str}.12월", f"'{prev1_yr_str}.12월"]
     for y, m in recent:
-        col_hdrs.append(f"'{str(y)[-2:]}년 {m}월")
-    col_hdrs.append("구성")
+        col_hdrs.append(f"'{str(y)[-2:]}.{m}월")
+    col_hdrs.append("비율")
 
     structure = {
         '외상매출금': ['원화', '외화'],
@@ -89,7 +89,7 @@ def _build_외상매출받을어음_현황(year, month):
         합계_vals = [a + b for a, b in zip(합계_vals, 소계_vals)]
 
     # 최종 합계 행 추가
-    rows.append(('total', '합계', 합계_vals, 100.0 if grand_total_target else 0.0))
+    rows.append(('total', '매출채권 계', 합계_vals, 100.0 if grand_total_target else 0.0))
 
     return rows, col_hdrs
 
@@ -151,11 +151,11 @@ def _build_부서별_채권기일_현황(year, month):
     # 컬럼 헤더 생성
     col_headers = [
         '구분',
-        f"'{str(y_p2)[-2:]}년말",
-        f"'{str(y_p1)[-2:]}년말",
-        f"'{str(y_m2)[-2:]}년 {m_m2}월",
-        f"'{str(y_m1)[-2:]}년 {m_m1}월",
-        f"'{str(year)[-2:]}년 {month}월"
+        f"'{str(y_p2)[-2:]}.12월",
+        f"'{str(y_p1)[-2:]}.12월",
+        f"'{str(y_m2)[-2:]}.{m_m2}월",
+        f"'{str(y_m1)[-2:]}.{m_m1}월",
+        f"'{str(year)[-2:]}.{month}월"
     ]
 
     부서_list = [
@@ -268,9 +268,9 @@ def _build_초과채권_내수(year, month):
     y_p1 = year - 1
     
     # 컬럼 헤더 생성
-    col_hdrs = [f"'{str(y_p2)[-2:]}년말", f"'{str(y_p1)[-2:]}년말"]
+    col_hdrs = [f"'{str(y_p2)[-2:]}.12월", f"'{str(y_p1)[-2:]}.12월"]
     for y, m in recent:
-        col_hdrs.append(f"'{str(y)[-2:]}년 {m}월")
+        col_hdrs.append(f"'{str(y)[-2:]}.{m}월")
     col_hdrs.append("전월대비")
 
     rows = []
@@ -350,13 +350,13 @@ def _build_부서별_초과채권(year, month):
     y_p1 = year - 1
     
     col_hdrs = [
-        f"'{str(y_p1)[-2:]}년말", 
-        f"'{str(prev_y)[-2:]}년 {prev_m}월말", 
+        f"'{str(y_p1)[-2:]}.12월", 
+        f"'{str(prev_y)[-2:]}.{prev_m}월", 
         "발생", 
         "수금", 
-        f"'{str(year)[-2:]}년 {month}월말", 
+        f"'{str(year)[-2:]}.{month}월", 
         "증감", 
-        "이자비용 (월)"
+        "이자비용(월)"
     ]
     
     depts = ['선재영업팀', '봉강영업팀', '부산영업소', '대구영업소', 'STS서울영업팀', 'STS부산영업팀', '글로벌구매팀']
@@ -415,7 +415,7 @@ def render_page(app, year_state, month_state):
         )
     app.If(lambda: True, _render_title)
 
-    tabs = app.tabs(["외상매출금 및 받을어음 현황", "부서별 채권기일 현황", "결제조건 초과채권 현황"])
+    tabs = app.tabs(["매출채권", "부서별 채권기일 현황", "결제조건 초과채권 현황"])
 
     with tabs[0]:
         def _render_외상매출금_현황():
@@ -425,7 +425,7 @@ def render_page(app, year_state, month_state):
             memo = _get_memo(Sheets.외상매출받을어음_메모, year, month)
             
             app.markdown(
-                _layout64('1) 외상매출금 및 받을어음 현황',
+                _layout64('1) 매출채권',
                           _외상매출받을어음_표_to_html(rows, col_hdrs),
                           memo,
                           unit='(단위 : 억원)'),
