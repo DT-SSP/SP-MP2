@@ -1374,15 +1374,11 @@ def _해외재고자산_to_html(rows, col_spec):
         n = len(vals)
         for i, v in enumerate(vals):
             s = red_s if v < 0 else num_s
-            if i == n - 1: # 증감률(%p) 열 처리 적용
+            if i == n - 1: # 증감률(%) 열 처리 적용
                 if v is None or pd.isna(v):
                     txt = ""
-                elif v > 0:
-                    txt = f"{v:.1f}%"
-                elif v < 0:
-                    txt = f"{abs(v):.1f}%"
                 else:
-                    txt = f"{v:.1f}%p"
+                    txt = f"{v:.1f}%"
             else:
                 txt = _fmt(v, decimal=decimal)
                 s = num_s if i < n - 2 else s
@@ -1463,12 +1459,8 @@ def _build_해외부적합장기재고_flow_table(year, month, corp):
     def calc_pct_str(curr, prev):
         if prev == 0:
             return "0.0%" 
-        
         val = (curr - prev) / abs(prev) * 100
-        
-        if val > 0: return f"{val:.1f}%"
-        if val < 0: return f"{abs(val):.1f}%"
-        return f"{val:.1f}%"
+        return f"{val:.1f}%"  # 음수 기호를 유지해야 HTML에서 빨간색 스타일(_C_RED)이 정상 적용됨
 
     items_in_db = list(dict.fromkeys(df['구분1'].tolist()))
     g1_list = [it for it in _해외부적합장기재고_ITEM_ORDER if it in items_in_db]

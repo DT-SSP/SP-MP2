@@ -1227,6 +1227,7 @@ def _build_회전일_별도_table(year, month):
     
     return pd.DataFrame(rows)
 
+
 def _build_안정성_별도_table(year, month):
     df = load_sheet(Sheets.안정성_DB)
     val_col = '값' if '값' in df.columns else '실적'
@@ -1271,6 +1272,7 @@ def _build_안정성_별도_table(year, month):
         
     def fmt_p(v):
         if v is None: return ""
+        v = round(v, 1)
         if v > 0: return f"↑{v:.1f}%p"
         if v < 0: return f"↓{abs(v):.1f}%p"
         return f"{v:.1f}%p"
@@ -1279,7 +1281,12 @@ def _build_안정성_별도_table(year, month):
         v_end = 값(yr_전기, mo_전기, label)
         v_pre = 값(yr_전월, mo_전월, label)
         v_cur = 값(year, month, label)
-        v_dif = v_cur - v_pre if (v_cur is not None and v_pre is not None) else None
+        
+        # 각 수치를 표 표시용(소수점 첫째 자리)으로 먼저 반올림한 뒤 전월 대비 차이 산출
+        if v_cur is not None and v_pre is not None:
+            v_dif = round(v_cur, 1) - round(v_pre, 1)
+        else:
+            v_dif = None
         
         rows.append({
             '구분': label,

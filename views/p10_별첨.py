@@ -323,10 +323,11 @@ def _build_손익계산서_table(year: int, month: int):
         cond = df["월"].isin(m_list)
         if g1: cond &= (df["구분1"] == g1)
         if g2: cond &= (df["구분2"] == g2)
-        if g3: cond &= (df["구분3"] == g3)
+        if g3 is not None: cond &= (df["구분3"] == g3)  # if g3: 에서 변경
         
         divisor = 1000.0 if g3 == "수량" else 1000000.0
         return df.loc[cond, "실적"].sum() / divisor if cond.any() else 0.0
+    
 
     display_mapping = [
         ("매출액", "매출액", "", "", 0),
