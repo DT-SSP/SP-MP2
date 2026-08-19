@@ -114,12 +114,12 @@ def _build_인원변동내역(year, month):
     prev_mo_yr = year if month > 1 else year - 1
     
     col_headers = [
-        f"'{str(year-1)[2:]}년 연평균",
-        f"{str(year)[2:]}년 계획",
-        f"'{str(year-1)[2:]}년 12월",
-        f"'{str(prev_mo_yr)[2:]}년 {prev_mo}월",
-        f"'{str(year)[2:]}년 {month}월",
-        f"'{str(year)[2:]}년 연평균",
+        f"'{str(year-1)[2:]}.평균",
+        f"{str(year)[2:]}.계획",
+        f"'{str(year-1)[2:]}.12월",
+        f"'{str(prev_mo_yr)[2:]}.{prev_mo}월",
+        f"'{str(year)[2:]}.{month}월",
+        f"'{str(year)[2:]}.평균",
         "전월대비",
         "계획대비"
     ]
@@ -156,11 +156,12 @@ def _build_인원변동내역(year, month):
         rows.append(('level2', '외주', calc_row_vals(site, '외주', None)))
 
     # 하단 총계
-    rows.append(('total1', '자사계', calc_row_vals(None, '자사', None)))
-    rows.append(('total1', '외주계', calc_row_vals(None, '외주', None)))
     rows.append(('total0', '전체', calc_row_vals(None, None, None)))
+    rows.append(('total1', '자사 계', calc_row_vals(None, '자사', None)))
+    rows.append(('total1', '외주 계', calc_row_vals(None, '외주', None)))
 
     return rows, col_headers
+    
 
 
 def _인원변동내역_to_html(rows, col_headers):
@@ -221,7 +222,7 @@ def render_page(app, year_state, month_state):
 
     def _render_title():
         app.markdown(
-            f'<h1 style="color:#404448">{int(year_state.value)}년 {int(month_state.value)}월 인원분석</h1>',
+            f'<h1 style="color:#404448">{int(year_state.value)}년 {int(month_state.value)}월 인원현황</h1>',
             unsafe_allow_html=True,
         )
     app.If(lambda: True, _render_title)
