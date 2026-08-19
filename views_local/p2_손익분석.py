@@ -339,7 +339,7 @@ def _rows_to_html(rows, col_headers):
 # ────────────────────────────────────────────────────────────────────────
 
 def _build_수출환율차이_table(year: int, month: int):
-    # 데이터 로드 (Sheets 설정에 맞게 변경 필요)
+
     df = load_sheet(Sheets.수출환율차이_DB) 
 
     # 1) 기본 전처리
@@ -388,6 +388,13 @@ def _build_수출환율차이_table(year: int, month: int):
     prev_fx_col, curr_fx_col = f"{prev_lab}_환율", f"{curr_lab}_환율"
     curr_amt_col = f"{curr_lab}_외화공급가액"
 
+    # --- [수정 1] 구분이 JPY인 환율 컬럼에 1000 곱하기 ---
+    jpy_mask = body["구분"] == "JPY"
+    body.loc[jpy_mask, prev_fx_col] *= 1000
+    body.loc[jpy_mask, curr_fx_col] *= 1000
+    # ----------------------------------------------------
+
+    # 차이단가와 영향금액은 환율이 1000 곱해진 상태에서 계산됨
     body["차이단가"] = body[curr_fx_col] - body[prev_fx_col]
     body["영향금액"] = body[curr_amt_col] * body["차이단가"]
 
@@ -405,6 +412,10 @@ def _build_수출환율차이_table(year: int, month: int):
     block_curr = [f"{curr_lab}_중량", f"{curr_lab}_외화공급가액", f"{curr_lab}_환율", f"{curr_lab}_원화공급가액"]
     ordered = ["구분"] + [c for c in block_prev if c in disp.columns] + [c for c in block_curr if c in disp.columns] + ["차이단가", "영향금액"]
     disp = disp[ordered]
+
+    numeric_cols = disp.columns.drop("구분")
+    for col in numeric_cols:
+        disp[col] = disp[col].apply(lambda x: f"{int(round(x))}" if pd.notnull(x) else "")
 
     rename_map = {
         f"{prev_lab}_중량": f"{prev_lab} 중량", f"{prev_lab}_외화공급가액": f"{prev_lab} 외화공급가액",
@@ -449,16 +460,16 @@ def _수출환율차이_to_html(df, prev_lab, curr_lab) -> str:
                     text = ""
                 else:
                     is_neg = False
-                    if c.endswith("환율"):
-                        text = f"{abs(val):,.2f}"
-                        is_neg = val < 0
-                    elif c == "환율차이단가":
-                        text = f"{abs(val):,.1f}"
-                        is_neg = val < 0
+                    if c.endswith("환율") or c == "환율차이단가":
+                        # 환율 및 차이단가를 정수로 반올림 후 천 단위 쉼표 적용
+                        v_round = int(round(val))
+                        text = f"{abs(v_round):,}"
+                        is_neg = v_round < 0
                     else: 
                         val_div = val / 1000.0
-                        text = f"{abs(int(round(val_div))):,}"
-                        is_neg = val_div < 0
+                        v_round = int(round(val_div))
+                        text = f"{abs(v_round):,}"
+                        is_neg = v_round < 0
 
                     if is_neg:
                         text = f'<span style="color:#d32f2f;">-{text}</span>'
