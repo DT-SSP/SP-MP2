@@ -1802,20 +1802,31 @@ def _build_포스코지원금_table(year, month):
     for c in ['구분1', '구분2', '구분3']:
         df[c] = df[c].fillna('').astype(str).str.strip()
 
-    # 2. 연도를 기준으로 1~4분기 라벨 고정 생성
+    # 2. 연도를 기준으로 1~4분기 [데이터 조회용 키, 화면 표시용 라벨] 분리 생성
     yy = str(year)[-2:]
-    q_labels = [f"{yy}.1Q", f"{yy}.2Q", f"{yy}.3Q", f"{yy}.4Q(E)"]
+    
+    # 튜플 형태: (실제 DB에 있는 구분값, 표에 보여줄 열 이름)
+    q_mappings = [
+        (f"{yy}.1Q", f"{yy}.1Q"),
+        (f"{yy}.2Q", f"{yy}.2Q"),
+        (f"{yy}.3Q", f"{yy}.3Q"),
+        (f"{yy}.4Q", f"{yy}.4Q(E)")  # 데이터는 .4Q로 찾고, 표시는 .4Q(E)로 출력
+    ]
+    
+    # 최종 리턴을 위해 화면 표시용 라벨만 따로 리스트로 추출
+    q_labels = [mapping[1] for mapping in q_mappings]
 
     # 동일 분기에 대해 매월 동일한 값이 들어있으므로, 중복을 제거하고 최신(last) 데이터만 남겨 합산 방지
     df_unique = df.sort_values(['연도', '월']).drop_duplicates(subset=['구분1', '구분2', '구분3'], keep='last')
     val_map = df_unique.groupby(['구분1', '구분2', '구분3'])['값'].sum().to_dict()
 
-    def get_val(q_label, g2, g3):
-        return val_map.get((q_label, g2, g3), 0.0)
+    # 데이터를 찾을 때는 표시용 라벨이 아닌 '데이터 조회용 키(data_key)'를 사용
+    def get_val(data_key, g2, g3):
+        return val_map.get((data_key, g2, g3), 0.0)
 
-    def calc(lbl, target_items):
-        v_qty_raw = sum(get_val(lbl, it, '주문량') for it in target_items)
-        v_amt_raw = sum(get_val(lbl, it, '할인금액') for it in target_items)
+    def calc(data_key, target_items):
+        v_qty_raw = sum(get_val(data_key, it, '주문량') for it in target_items)
+        v_amt_raw = sum(get_val(data_key, it, '할인금액') for it in target_items)
         
         # 단위 맞추기
         v_qty = v_qty_raw / 1000.0 if v_qty_raw else 0.0
@@ -1830,41 +1841,43 @@ def _build_포스코지원금_table(year, month):
     items_vol = ['수출지원(ES)', '일반재', '특가지원(SP)']
     for item in items_vol:
         row = {'구분': item, '_bold': False, '_type': 'normal'}
-        for lbl in q_labels:
-            v_qty, price, v_amt = calc(lbl, [item])
-            row[f'{lbl}_주문량']  = _fmt(v_qty, decimal=0)
-            row[f'{lbl}_단가']    = _fmt(price/1000, decimal=0)
-            row[f'{lbl}_할인금액'] = _fmt(v_amt, decimal=0)
+        for data_key, display_label in q_mappings:
+            v_qty, price, v_amt = calc(data_key, [item])
+            
+            # Dictionary 키로는 '화면 표시용 라벨(display_label)'을 사용
+            row[f'{display_label}_주문량']  = _fmt(v_qty, decimal=0)
+            row[f'{display_label}_단가']    = _fmt(price/1000, decimal=0)
+            row[f'{display_label}_할인금액'] = _fmt(v_amt, decimal=0)
         rows.append(row)
 
     # 물량 할인 = 수출지원(ES) + 일반재 + 특가지원(SP)
     total_vol_row = {'구분': '물량 할인', '_bold': True, '_type': 'normal'}
-    for lbl in q_labels:
-        v_qty, price, v_amt = calc(lbl, items_vol)
-        total_vol_row[f'{lbl}_주문량']  = _fmt(v_qty, decimal=0)
-        total_vol_row[f'{lbl}_단가']    = _fmt(price/1000, decimal=0)
-        total_vol_row[f'{lbl}_할인금액'] = _fmt(v_amt, decimal=0)
+    for data_key, display_label in q_mappings:
+        v_qty, price, v_amt = calc(data_key, items_vol)
+        total_vol_row[f'{display_label}_주문량']  = _fmt(v_qty, decimal=0)
+        total_vol_row[f'{display_label}_단가']    = _fmt(price/1000, decimal=0)
+        total_vol_row[f'{display_label}_할인금액'] = _fmt(v_amt, decimal=0)
     rows.append(total_vol_row)
 
     # 4. 신규 추가 항목 (주문량만 산출, 단가/할인금액 제외)
     items_other = ['연계 할인', '중국 대응재']
     for item in items_other:
         row = {'구분': item, '_bold': False, '_type': 'qty_only'}
-        for lbl in q_labels:
-            v_qty, _, _ = calc(lbl, [item])
-            row[f'{lbl}_주문량']  = _fmt(v_qty, decimal=0)
-            row[f'{lbl}_단가']    = ''
-            row[f'{lbl}_할인금액'] = ''
+        for data_key, display_label in q_mappings:
+            v_qty, _, _ = calc(data_key, [item])
+            row[f'{display_label}_주문량']  = _fmt(v_qty, decimal=0)
+            row[f'{display_label}_단가']    = ''
+            row[f'{display_label}_할인금액'] = ''
         rows.append(row)
 
     # 총계 = 물량할인 + 연계할인 + 중국대응재 (주문량 합산)
     all_items = items_vol + items_other
     total_all_row = {'구분': '총계', '_bold': True, '_type': 'qty_only'}
-    for lbl in q_labels:
-        v_qty, _, _ = calc(lbl, all_items)
-        total_all_row[f'{lbl}_주문량']  = _fmt(v_qty, decimal=0)
-        total_all_row[f'{lbl}_단가']    = ''
-        total_all_row[f'{lbl}_할인금액'] = ''
+    for data_key, display_label in q_mappings:
+        v_qty, _, _ = calc(data_key, all_items)
+        total_all_row[f'{display_label}_주문량']  = _fmt(v_qty, decimal=0)
+        total_all_row[f'{display_label}_단가']    = ''
+        total_all_row[f'{display_label}_할인금액'] = ''
     rows.append(total_all_row)
 
     return rows, q_labels
