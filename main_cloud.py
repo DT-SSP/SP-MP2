@@ -28,7 +28,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 
 # ── 1. 인증 및 권한 설정 ────────────────────────────────────────────────
 # 데이터 새로고침 버튼을 볼 수 있는 관리자 이메일 목록
-_ADMIN_USERS: set[str] = {"gawon.yi@seah.co.kr", "jaeseok.heo@seah.co.kr", "daeseong.kang@seah.co.kr", "sejong.hyun@seah.co.kr"}
+_ADMIN_USERS: set[str] = {"gawon.yi@seah.co.kr", "jaeseok.heo@seah.co.kr", "daeseong.kang@seah.co.kr", "sejong.hyun@seah.co.kr", "sangwoo.ryu"}
 
 # 접근 허용 이메일 목록 (환경변수 ALLOWED_EMAILS에 쉼표로 구분해 등록)
 _ALLOWED_EMAILS: set[str] = {
