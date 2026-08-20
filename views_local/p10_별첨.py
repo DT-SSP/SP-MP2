@@ -67,7 +67,7 @@ def _f95_period_layout(month: int):
             q_months = list(range(q * 3 - 2, q * 3 + 1))
             periods.append((f"{q}분기", q_months))
     if month >= 4:
-        periods.append(("누계", list(range(1, month + 1))))
+        periods.append(("누적", list(range(1, month + 1))))
     return periods
 
 
@@ -94,7 +94,7 @@ def _build_실적요약_data(site_filter, year, month, n_months=12):
     K_VOL = 1_000
 
     for yr_c, mo_c in recent_months:
-        lbl = f"'{str(yr_c)[2:]}년 {mo_c}월"
+        lbl = f"'{str(yr_c)[2:]}.{mo_c}월"
         x_labels.append(lbl)
 
         s_val = vm.get(('매출액', yr_c, mo_c), 0.0) / M_SALES
@@ -204,7 +204,7 @@ def _build_환율추이_data(year, month):
     last_yr = None
     for yr_c, mo_c in recent_13:
         # 연도가 바뀔 때만 'YY년 M월' 형태로 표시하고, 같은 연도면 'M월'만 표시
-        lbl = f"'{str(yr_c)[2:]}년 {mo_c}월" if yr_c != last_yr else f"{mo_c}월"
+        lbl = f"'{str(yr_c)[2:]}.{mo_c}월"
         time_slots.append((yr_c, mo_c, lbl))
         last_yr = yr_c
 
@@ -350,7 +350,7 @@ def _build_손익계산서_table(year: int, month: int):
         ("국내 운반비", "", "", "국내 운반비", 2),
 
         ("한계이익", "한계이익", "", "", 0),
-        ("한계이익율", "", "(이익율)", "", 1),
+        ("한계이익율", "", "(%)", "", 1),
 
         ("고정비", "고정비", "", "", 0),
         ("고정비 가공비", "", "가공비", "", 1),
@@ -361,7 +361,7 @@ def _build_손익계산서_table(year: int, month: int):
         ("재고자산평가", "재고자산평가, X등급 매출 등", "", "", 0),
 
         ("영업이익", "영업이익", "", "", 0),
-        ("영업이익율", "", "(이익율)", "", 1),
+        ("영업이익율", "", "(%)", "", 1),
 
         ("기타수익", "기타수익", "", "", 0),
         ("기타비용", "기타비용", "", "", 0),
@@ -369,10 +369,10 @@ def _build_손익계산서_table(year: int, month: int):
         ("금융비용", "금융비용", "", "", 0),
 
         ("경상이익", "경상이익", "", "", 0),
-        ("경상이익율", "", "(이익율)", "", 1),
+        ("경상이익율", "", "(%)", "", 1),
 
         ("재경마감", "경상이익_재경마감", "", "", 0),
-        ("재경마감 이익율", "", "(이익율)", "", 1),
+        ("재경마감 이익율", "", "(%)", "", 1),
     ]
 
     out_data = []
@@ -504,8 +504,11 @@ def _손익계산서_to_html_table(df):
         style_lbl = ROW_HDR_LBL if is_bold else ROW_ITEM
         style_num = ROW_HDR_NUM if is_bold else _TD_NUM
 
-        padding = depth * 16
-        cells = f'<td style="{style_lbl}; padding-left:{padding}px;">{label}</td>'
+        padding = 8 + (depth * 16)
+        # depth에 따라 HTML 공백 문자(&nbsp;)를 추가하여 시각적 들여쓰기 강제 적용
+        prefix = "&nbsp;&nbsp;&nbsp;" * depth
+        # !important를 추가하여 기본 스타일(ROW_ITEM)에 의해 들여쓰기가 무시되지 않도록 방지
+        cells = f'<td style="{style_lbl}; padding-left:{padding}px !important;">{prefix}{label}</td>'
 
         for col in data_cols:
             val = row[col]
@@ -573,10 +576,10 @@ def _build_산업군별_영업이익_table(year: int, month: int) -> pd.DataFram
         total_amt = sum(a for _, a, _ in prod_sums.values())
         total_op = sum(o for _, _, o in prod_sums.values())
 
-        row["총계_판매중량"] = total_qty
-        row["총계_영업이익_단가"] = total_op / total_qty if total_qty != 0 else 0.0
-        row["총계_영업이익_금액"] = total_op
-        row["총계_영업이익_%"] = (total_op / total_amt * 100.0) if total_amt != 0 else 0.0
+        row["전체_판매중량"] = total_qty
+        row["전체_영업이익_단가"] = total_op / total_qty if total_qty != 0 else 0.0
+        row["전체_영업이익_금액"] = total_op
+        row["전체_영업이익_%"] = (total_op / total_amt * 100.0) if total_amt != 0 else 0.0
         return row
 
     industry_order = ["자동차", "산업기계", "건설", "전자", "기타", "조선", "항공"]
@@ -600,7 +603,7 @@ def _build_산업군별_영업이익_table(year: int, month: int) -> pd.DataFram
         r_ind["_depth"] = 1
         rows.append(r_ind)
 
-    r_tot = make_row(tmp, "총계")
+    r_tot = make_row(tmp, "전체")
     r_tot["_depth"] = 0
     rows.append(r_tot)
     for ind in industry_order:
@@ -609,7 +612,7 @@ def _build_산업군별_영업이익_table(year: int, month: int) -> pd.DataFram
         rows.append(r_ind)
 
     df_out = pd.DataFrame(rows)
-    cols = ["구분", "_depth"] + [f"{prod}_{m}" for prod in ["총계"] + products for m in ["판매중량", "영업이익_단가", "영업이익_금액", "영업이익_%"]]
+    cols = ["구분", "_depth"] + [f"{prod}_{m}" for prod in ["전체"] + products for m in ["판매중량", "영업이익_단가", "영업이익_금액", "영업이익_%"]]
     cols = [c for c in cols if c in df_out.columns]
     df_out = df_out[cols]
 
@@ -651,7 +654,7 @@ def _유형별_영업이익_to_html_table(df: pd.DataFrame) -> str:
     for (_, row), depth in zip(render_df.iterrows(), depths):
         d = int(depth) if str(depth).lstrip('-').isdigit() else 1
         label = str(row.iloc[0])
-        is_sub = (d == 0) or label in ["내수", "수출", "총계", "합계", "계", "포항공장", "충주공장", "충주2공장", "총합계", "정상", "매입매출"]
+        is_sub = (d == 0) or label in ["내수", "수출", "전체", "합계", "계", "포항공장", "충주공장", "충주2공장", "총합계", "정상", "매입매출"]
         pad = _pad.get(d, '20px')
         prefix = _prefix.get(d, '&nbsp;&nbsp;&nbsp;')
 
@@ -770,10 +773,10 @@ def _build_실수요유통영업이익_table(year: int, month: int) -> pd.DataFr
         total_amt = sum(a for _, a, _ in prod_sums.values())
         total_op = sum(o for _, _, o in prod_sums.values())
 
-        row["총계_판매중량"] = total_qty
-        row["총계_영업이익_단가"] = total_op / total_qty if total_qty != 0 else 0.0
-        row["총계_영업이익_금액"] = total_op
-        row["총계_영업이익_%"] = (total_op / total_amt * 100.0) if total_amt != 0 else 0.0
+        row["전체_판매중량"] = total_qty
+        row["전체_영업이익_단가"] = total_op / total_qty if total_qty != 0 else 0.0
+        row["전체_영업이익_금액"] = total_op
+        row["전체_영업이익_%"] = (total_op / total_amt * 100.0) if total_amt != 0 else 0.0
         return row
 
     # 구분3 기준 (실수요, 유통)
@@ -798,7 +801,7 @@ def _build_실수요유통영업이익_table(year: int, month: int) -> pd.DataFr
         r_type["_depth"] = 1
         rows.append(r_type)
 
-    r_tot = make_row(tmp, "총계")
+    r_tot = make_row(tmp, "전체")
     r_tot["_depth"] = 0
     rows.append(r_tot)
     for t_type in type_order:
@@ -807,7 +810,7 @@ def _build_실수요유통영업이익_table(year: int, month: int) -> pd.DataFr
         rows.append(r_type)
 
     df_out = pd.DataFrame(rows)
-    cols = ["구분", "_depth"] + [f"{prod}_{m}" for prod in ["총계"] + products for m in ["판매중량", "영업이익_단가", "영업이익_금액", "영업이익_%"]]
+    cols = ["구분", "_depth"] + [f"{prod}_{m}" for prod in ["전체"] + products for m in ["판매중량", "영업이익_단가", "영업이익_금액", "영업이익_%"]]
     cols = [c for c in cols if c in df_out.columns]
     df_out = df_out[cols]
 
@@ -864,10 +867,10 @@ def _build_메이커별영업이익_table(year: int, month: int) -> pd.DataFrame
         total_amt = sum(a for _, a, _ in prod_sums.values())
         total_op = sum(o for _, _, o in prod_sums.values())
 
-        row["총계_판매중량"] = total_qty
-        row["총계_영업이익_단가"] = total_op / total_qty if total_qty != 0 else 0.0
-        row["총계_영업이익_금액"] = total_op
-        row["총계_영업이익_%"] = (total_op / total_amt * 100.0) if total_amt != 0 else 0.0
+        row["전체_판매중량"] = total_qty
+        row["전체_영업이익_단가"] = total_op / total_qty if total_qty != 0 else 0.0
+        row["전체_영업이익_금액"] = total_op
+        row["전체_영업이익_%"] = (total_op / total_amt * 100.0) if total_amt != 0 else 0.0
         return row
 
     # 구분3 기준 메이커 명단
@@ -892,7 +895,7 @@ def _build_메이커별영업이익_table(year: int, month: int) -> pd.DataFrame
         r_maker["_depth"] = 1
         rows.append(r_maker)
 
-    r_tot = make_row(tmp, "총계")
+    r_tot = make_row(tmp, "전체")
     r_tot["_depth"] = 0
     rows.append(r_tot)
     for maker in maker_order:
@@ -901,7 +904,7 @@ def _build_메이커별영업이익_table(year: int, month: int) -> pd.DataFrame
         rows.append(r_maker)
 
     df_out = pd.DataFrame(rows)
-    cols = ["구분", "_depth"] + [f"{prod}_{m}" for prod in ["총계"] + products for m in ["판매중량", "영업이익_단가", "영업이익_금액", "영업이익_%"]]
+    cols = ["구분", "_depth"] + [f"{prod}_{m}" for prod in ["전체"] + products for m in ["판매중량", "영업이익_단가", "영업이익_금액", "영업이익_%"]]
     cols = [c for c in cols if c in df_out.columns]
     df_out = df_out[cols]
 
@@ -957,10 +960,10 @@ def _build_부서_메이커별_영업이익_table(year: int, month: int) -> pd.D
         total_amt = sum(a for _, a, _ in team_sums.values())
         total_op = sum(o for _, _, o in team_sums.values())
 
-        row["총계_판매중량"] = total_qty
-        row["총계_영업이익_단가"] = total_op / total_qty if total_qty != 0 else 0.0
-        row["총계_영업이익_금액"] = total_op
-        row["총계_영업이익_%"] = (total_op / total_amt * 100.0) if total_amt != 0 else 0.0
+        row["전체_판매중량"] = total_qty
+        row["전체_영업이익_단가"] = total_op / total_qty if total_qty != 0 else 0.0
+        row["전체_영업이익_금액"] = total_op
+        row["전체_영업이익_%"] = (total_op / total_amt * 100.0) if total_amt != 0 else 0.0
         return row
 
     industry_order = ["포스코", "JFE STEEL(S)", "세아창원특수강", "현대제철", "세아베스틸", "기타"]
@@ -976,7 +979,7 @@ def _build_부서_메이커별_영업이익_table(year: int, month: int) -> pd.D
     rows.append(total_row)
 
     df_out = pd.DataFrame(rows)
-    cols = ["구분", "_depth"] + [f"{grp}_{m}" for grp in ["총계"] + teams for m in ["판매중량", "영업이익_단가", "영업이익_금액", "영업이익_%"]]
+    cols = ["구분", "_depth"] + [f"{grp}_{m}" for grp in ["전체"] + teams for m in ["판매중량", "영업이익_단가", "영업이익_금액", "영업이익_%"]]
     cols = [c for c in cols if c in df_out.columns]
     df_out = df_out[cols]
 
@@ -1030,10 +1033,10 @@ def _build_부서_사업장_메이커별_영업이익_table(year: int, month: in
         total_amt = sum(a for _, a, _ in team_sums.values())
         total_op = sum(o for _, _, o in team_sums.values())
 
-        row["총계_판매중량"] = total_qty
-        row["총계_영업이익_단가"] = total_op / total_qty if total_qty != 0 else 0.0
-        row["총계_영업이익_금액"] = total_op
-        row["총계_영업이익_%"] = (total_op / total_amt * 100.0) if total_amt != 0 else 0.0
+        row["전체_판매중량"] = total_qty
+        row["전체_영업이익_단가"] = total_op / total_qty if total_qty != 0 else 0.0
+        row["전체_영업이익_금액"] = total_op
+        row["전체_영업이익_%"] = (total_op / total_amt * 100.0) if total_amt != 0 else 0.0
         return row
 
     industry_order_default = ["포스코", "JFE STEEL(S)", "세아창원특수강", "현대제철", "세아베스틸", "기타"]
@@ -1053,12 +1056,14 @@ def _build_부서_사업장_메이커별_영업이익_table(year: int, month: in
             r_ind["_depth"] = 1
             rows.append(r_ind)
 
-    r_tot = make_row(tmp, "총합계")
+
+    r_tot = make_row(tmp, "합계")
     r_tot["_depth"] = 0
     rows.append(r_tot)
 
+
     df_out = pd.DataFrame(rows)
-    cols = ["구분", "_depth"] + [f"{grp}_{m}" for grp in ["총계"] + teams for m in ["판매중량", "영업이익_단가", "영업이익_금액", "영업이익_%"]]
+    cols = ["구분", "_depth"] + [f"{grp}_{m}" for grp in ["전체"] + teams for m in ["판매중량", "영업이익_단가", "영업이익_금액", "영업이익_%"]]
     cols = [c for c in cols if c in df_out.columns]
     df_out = df_out[cols]
 
@@ -1115,7 +1120,7 @@ def _build_부서별_인당_영업이익_table(year: int, month: int) -> pd.Data
     sales_cur, staff_cur = prepare_period(sub_cur)
 
     def _metrics_for_period(sales_df: pd.DataFrame, staff_map: dict, section: str, team: str | None) -> dict:
-        if section == "중계": section = "총계"
+        if section == "중계": section = "전체"
         if sales_df.empty:
             qty = amt = op = 0.0
         else:
@@ -1123,7 +1128,7 @@ def _build_부서별_인당_영업이익_table(year: int, month: int) -> pd.Data
                 cond = (sales_df["구분1"] == section)
                 if team is not None: cond &= (sales_df["구분2"] == team)
                 d = sales_df.loc[cond]
-            elif section in ("총계", "종합계"):
+            elif section in ("전체", "종합계"):
                 d = sales_df[sales_df["구분2"] == team] if team is not None else sales_df
             else:
                 d = sales_df
@@ -1169,17 +1174,19 @@ def _build_부서별_인당_영업이익_table(year: int, month: int) -> pd.Data
         r_t["_depth"] = 1
         rows.append(r_t)
 
-    r_tot = make_row("중계", None, "총계")
+    r_tot = make_row("중계", None, "전체")
     r_tot["_depth"] = 0
     rows.append(r_tot)
     for t in teams: 
-        r_t = make_row("총계", t, t)
+        r_t = make_row("전체", t, t)
         r_t["_depth"] = 1
         rows.append(r_t)
 
-    r_all = make_row("총계", None, "총합계")
+    '''
+    r_all = make_row("전체", None, "총합계")
     r_all["_depth"] = 0
     rows.append(r_all)
+    '''
 
     df_out = pd.DataFrame(rows)
     metrics_order = ["판매중량", "판매단가", "영업이익", "영업이익율", "인원", "인당중량", "인당영업이익"]
@@ -1301,13 +1308,13 @@ def render_page(app, year_state, month_state):
     with tabs[3]:
         def _render_유형별손익분석_탭():
             year, month = int(year_state.value), int(month_state.value)
-            teams_labels = ["총계", "선재영업팀", "봉강영업팀", "부산영업소", "대구영업소", "글로벌영업팀"]
+            teams_labels = ["전체", "선재영업팀", "봉강영업팀", "부산영업소", "대구영업소", "글로벌영업팀"]
 
             # 1) 산업군별 영업이익
             try:
                 df1 = _build_산업군별_영업이익_table(year, month)
-                per_item_dfs1 = _build_개별_그룹_dfs(df1, ["총계", "CHQ", "CD", "STS", "BTB", "PB"])
-                item_labels1 = ["총계", "CHQ", "CD", "STS", "BTB", "PB"]
+                per_item_dfs1 = _build_개별_그룹_dfs(df1, ["전체", "CHQ", "CD", "STS", "BTB", "PB"])
+                item_labels1 = ["전체", "CHQ", "CD", "STS", "BTB", "PB"]
                 memo1 = _get_memo(Sheets.산업군별영업이익_메모, year, month)
                 app.markdown(_라디오_선택_section("1) 산업군별 영업이익 (국내, B급 제외)", per_item_dfs1, item_labels1, prefix="ind_op", memo=memo1, unit="(단위: 톤, 백만원, %)"), unsafe_allow_html=True)
                 app.markdown("<br>", unsafe_allow_html=True)
@@ -1317,8 +1324,8 @@ def render_page(app, year_state, month_state):
             # 2) 실수요/유통 영업이익
             try:
                 df2 = _build_실수요유통영업이익_table(year, month)
-                per_item_dfs2 = _build_개별_그룹_dfs(df2, ["총계", "CHQ", "CD", "STS", "BTB", "PB"])
-                item_labels2 = ["총계", "CHQ", "CD", "STS", "BTB", "PB"]
+                per_item_dfs2 = _build_개별_그룹_dfs(df2, ["전체", "CHQ", "CD", "STS", "BTB", "PB"])
+                item_labels2 = ["전체", "CHQ", "CD", "STS", "BTB", "PB"]
                 memo2 = _get_memo(Sheets.실수요유통영업이익_메모, year, month)
                 app.markdown(_라디오_선택_section("2) 실수요/유통 영업이익 (국내, B급 제외)", per_item_dfs2, item_labels2, prefix="usage_op", memo=memo2, unit="(단위: 톤, 백만원, %)"), unsafe_allow_html=True)
                 app.markdown("<br>", unsafe_allow_html=True)
@@ -1328,8 +1335,8 @@ def render_page(app, year_state, month_state):
             # 3) 메이커별 영업이익
             try:
                 df3 = _build_메이커별영업이익_table(year, month)
-                per_item_dfs3 = _build_개별_그룹_dfs(df3, ["총계", "CHQ", "CD", "STS", "BTB", "PB"])
-                item_labels3 = ["총계", "CHQ", "CD", "STS", "BTB", "PB"]
+                per_item_dfs3 = _build_개별_그룹_dfs(df3, ["전체", "CHQ", "CD", "STS", "BTB", "PB"])
+                item_labels3 = ["전체", "CHQ", "CD", "STS", "BTB", "PB"]
                 memo3 = _get_memo(Sheets.메이커별영업이익_메모, year, month)
                 app.markdown(_라디오_선택_section("3) 메이커별 영업이익 (국내, B급 제외)", per_item_dfs3, item_labels3, prefix="maker_op", memo=memo3, unit="(단위: 톤, 백만원, %)"), unsafe_allow_html=True)
                 app.markdown("<br>", unsafe_allow_html=True)
