@@ -293,7 +293,6 @@ def _build_회전일_table(year, month):
 
     return rows, sub_labels
 
-
 def _회전일_to_html_table(rows, sub_labels):
     # 헤더: _TH 상수를 그대로 사용하여 폰트/패딩 통일
     headers = (f'<th style="{_TH}; white-space: nowrap;">사업장</th>'
@@ -985,7 +984,7 @@ def _build_원재료입고기초단가차이_table(year, month):
     if '합계' in target['구분1'].values:
         makers.append('합계')
 
-    columns = ['메이커', '입고중량', '금액', '단가']
+    columns = ['메이커', '입고중량', '단가', '금액']
     rows = []
 
     for m in makers:
@@ -996,8 +995,8 @@ def _build_원재료입고기초단가차이_table(year, month):
         rows.append({
             '메이커': m,
             '입고중량': _fmt(w, decimal=0),
-            '금액': _fmt(a, decimal=0),
             '단가': _fmt(p, decimal=0),
+            '금액': _fmt(a, decimal=0),
         })
 
     return pd.DataFrame({col: [r.get(col, '') for r in rows] for col in columns})
@@ -1227,7 +1226,6 @@ def _build_회전일_별도_table(year, month):
     
     return pd.DataFrame(rows)
 
-
 def _build_안정성_별도_table(year, month):
     df = load_sheet(Sheets.안정성_DB)
     val_col = '값' if '값' in df.columns else '실적'
@@ -1297,7 +1295,6 @@ def _build_안정성_별도_table(year, month):
         })
     
     return pd.DataFrame(rows)
-
 
 def _build_수익성_별도_table(year, month):
     df = load_sheet(Sheets.수익성_DB)
@@ -1577,7 +1574,7 @@ def _build_판매계획및실적_html(year, month):
     k_중국계 = k_포스세아 + k_기차배건
     
     k_태국계 = [('태국', '태국', '태국')]
-    k_멕시코계 = [('멕시코', 'SGAM', 'AT_멕시코')]
+    k_멕시코계 = [('멕시코', '멕시코', 'AT_멕시코')]
 
     k_Total = k_국내계 + k_중국계 + k_태국계 + k_멕시코계
     k_선재계 = k_국내선재 + k_포스세아 + k_태국계
@@ -1969,7 +1966,7 @@ def render_page(app, year_state, month_state):
             df_수익성_대표이사 = _build_수익성_대표이사_table(year, month)
             memo6 = _get_memo(Sheets.수익성_대표이사_메모, year, month)
             app.markdown(_section("6) 수익성 (연결, 대표이사 SPS)", df_수익성_대표이사, memo6, ''),
-                            unsafe_allow_html=True)
+                         unsafe_allow_html=True)
 
         app.If(lambda: True, _render_포함)
 
@@ -1988,7 +1985,7 @@ def render_page(app, year_state, month_state):
 
             memo3 = _get_memo(Sheets.수정원가기준손익_메모, year, month)
             app.markdown(_section("3) 수정원가기준손익 (별도)", _build_수정원가기준손익_별도_table(year, month), ""),
-                            unsafe_allow_html=True)
+                         unsafe_allow_html=True)
             app.markdown(f'<div style="font-size:0.85em;color:gray;margin:2px 0 12px 0">{memo3}</div>',
                         unsafe_allow_html=True)
             
@@ -2043,7 +2040,7 @@ def render_page(app, year_state, month_state):
 
             tabs_data = _build_이익계획실적_table(year, month)
             #memo2 = _get_memo(Sheets.이익계획및실적_메모, year, month)
-            app.markdown(_이익계획실적_section("2) 이익계획 및 실적", tabs_data, "", '[단위: 억원]'),
+            app.markdown(_이익계획실적_section("2) 이익계획 및 실적", tabs_data, " ", '[단위: 억원]'),
                          unsafe_allow_html=True)
 
         app.If(lambda: True, _render_연간)

@@ -36,8 +36,8 @@ PAGE_SHEETS_MAP = {
             Sheets.품목손익_DB, Sheets.품목손익_메모, Sheets.수정원가기준손익_DB,Sheets.수정원가기준손익_메모,
             Sheets.원재료입고기초단가차이_DB, Sheets.원재료입고단가차이_거래처기준_DB,
             Sheets.제품수불표_DB, Sheets.현금흐름표_별도_DB, Sheets.현금흐름표_별도_메모,
-            Sheets.안정성_DB, Sheets.안정성_메모, Sheets.수익성_DB, Sheets.수익성_메모, Sheets.수익성_대표이사_DB, Sheets.수익성_대표이사_메모,
-            Sheets.판매계획및실적_DB, Sheets.판매계획및실적_메모
+            Sheets.안정성_DB, Sheets.안정성_메모, Sheets.수익성_DB, Sheets.수익성_메모_연결, Sheets.수익성_대표이사_DB, Sheets.수익성_대표이사_메모,
+            Sheets.판매계획및실적_DB, Sheets.판매계획및실적_메모, Sheets.이익계획및실적_DB
         ],
     "2. 손익분석": [
         Sheets.손익요약표_DB, Sheets.손익요약표_메모,
