@@ -16,7 +16,7 @@ from views.common import (
     ROW_SEC, ROW_HDR_RED, layout_title_only
 )
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots  # 추가
+from plotly.subplots import make_subplots  # 추가dfaddasdassas
 
 # ── 공통 유틸 및 헬퍼 함수 ─────────────────────────────────────────────
 
