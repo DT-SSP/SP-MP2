@@ -18,7 +18,6 @@ from views.common import (
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots  # 추가
 
-
 # ── 공통 유틸 및 헬퍼 함수 ─────────────────────────────────────────────
 
 def _recent_months(year, month, n_months=12, **kwargs):
@@ -289,7 +288,7 @@ def _build_환율추이_chart(x_labels, rates):
 # ── 3) 손익계산서 (수정정상원가 기반) 빌더 ───────────────────────────────
 
 def _build_손익계산서_table(year: int, month: int):
-    df_raw = load_sheet(Sheets.손익계산서_DB) if hasattr(Sheets, '손익계산서_DB') else load_sheet('손익계산서_DB')
+    df_raw = load_sheet(Sheets.손익계산서_DB)
     df = df_raw.copy()
 
     df["연도"] = pd.to_numeric(df["연도"], errors="coerce")
@@ -328,7 +327,6 @@ def _build_손익계산서_table(year: int, month: int):
         divisor = 1000.0 if g3 == "수량" else 1000000.0
         return df.loc[cond, "실적"].sum() / divisor if cond.any() else 0.0
     
-
     display_mapping = [
         ("매출액", "매출액", "", "", 0),
         ("제품 매출", "", "제품 매출", "", 1),
@@ -343,11 +341,11 @@ def _build_손익계산서_table(year: int, month: int):
         ("부재료비", "", "", "부재료비", 2),
         ("외주용역비", "", "", "외주용역비", 2),
         ("수선비", "", "", "수선비", 2),
-        ("변동비 가공비 기타", "", "", "기타", 2),
+        ("변동비 가공비 기타", "", "", "가공비_기타", 2),
 
-        ("운반비", "", "운반비", "", 1),
-        ("C조건 선임", "", "", "C조건 선임", 2),
-        ("수출개별비", "", "", "수출개별비", 2),
+        ("운반비", "", "판매비", "", 1),
+        ("C조건 선임", "", "", "판관_수출개별비", 2),
+        ("수출개별비", "", "", "판관_운반비", 2),
         ("국내 운반비", "", "", "국내 운반비", 2),
 
         ("한계이익", "한계이익", "", "", 0),
@@ -357,8 +355,8 @@ def _build_손익계산서_table(year: int, month: int):
         ("고정비 가공비", "", "가공비", "", 1),
         ("감가상각비", "", "", "감가상각비", 2),
         ("제조노무비", "", "", "제조노무비", 2),
-        ("고정비 가공비 기타", "", "", "기타", 2),
-        ("판관비 기타", "", "기타", "", 1),
+        ("고정비 가공비 기타", "", "", "고정비_기타", 2),
+        ("판관비 기타", "", "판관비_기타", "", 1),
         ("재고자산평가", "재고자산평가, X등급 매출 등", "", "", 0),
 
         ("영업이익", "영업이익", "", "", 0),
@@ -411,8 +409,7 @@ def _build_손익계산서_table(year: int, month: int):
         f_labor = get_val("고정비", "가공비", "제조노무비", m_list)
         f_etc = get_val("고정비", "가공비", "기타", m_list)
         f_process_total = f_deprec + f_labor + f_etc
-
-        f_sgna_etc = get_val("고정비", "판관비", "", m_list)
+        f_sgna_etc = get_val("고정비", "판관비", "판관비", m_list)
         inv_eval = get_val("재고자산평가, X등급 매출 등", "재고자산평가, X등급 매출 등", "", m_list)
 
         fixed_cost_total = f_process_total + f_sgna_etc 

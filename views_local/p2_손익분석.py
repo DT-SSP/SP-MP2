@@ -390,8 +390,8 @@ def _build_수출환율차이_table(year: int, month: int):
 
     # --- [수정 1] 구분이 JPY인 환율 컬럼에 1000 곱하기 ---
     jpy_mask = body["구분"] == "JPY"
-    body.loc[jpy_mask, prev_fx_col] *= 1000
-    body.loc[jpy_mask, curr_fx_col] *= 1000
+    body.loc[jpy_mask, prev_fx_col] *= 100
+    body.loc[jpy_mask, curr_fx_col] *= 100
     # ----------------------------------------------------
 
     # 차이단가와 영향금액은 환율이 1000 곱해진 상태에서 계산됨
@@ -1802,16 +1802,9 @@ def _build_포스코지원금_table(year, month):
     for c in ['구분1', '구분2', '구분3']:
         df[c] = df[c].fillna('').astype(str).str.strip()
 
-    # 2. 데이터에 존재하는 실제 분기(구분1) 추출 (정렬 후 최근 2개)
-    unique_q = sorted([q for q in df['구분1'].unique() if q])
-    q_labels = unique_q[-2:] if len(unique_q) >= 2 else unique_q
-    
-    # 만약 데이터가 하나도 없다면 화면이 깨지지 않도록 기본값 세팅
-    if not q_labels:
-        cur_q = (month - 1) // 3 + 1
-        prev_q = 4 if cur_q == 1 else cur_q - 1
-        prev_y = year - 1 if cur_q == 1 else year
-        q_labels = [f"{str(prev_y)[2:]}.{prev_q}Q", f"{str(year)[2:]}.{cur_q}Q"]
+    # 2. 연도를 기준으로 1~4분기 라벨 고정 생성
+    yy = str(year)[-2:]
+    q_labels = [f"{yy}.1Q", f"{yy}.2Q", f"{yy}.3Q", f"{yy}.4Q"]
 
     # 동일 분기에 대해 매월 동일한 값이 들어있으므로, 중복을 제거하고 최신(last) 데이터만 남겨 합산 방지
     df_unique = df.sort_values(['연도', '월']).drop_duplicates(subset=['구분1', '구분2', '구분3'], keep='last')
@@ -1998,23 +1991,26 @@ def render_page(app, year_state, month_state):
             try:
                 df1 = _build_포스코_JFE_입고가격_table(year, month)
                 html1 = _포스코_JFE_입고가격_to_html(df1)
-                memo1 = _get_memo(Sheets.포스코JFE입고가격_메모, year, month) # config.py 설정 명칭에 맞게 변경 필요
+                memo1 = _get_memo(Sheets.포스코JFE입고가격_메모, year, month)
                 app.markdown(_layout64("1) 포스코 對 JFE 입고가격", html1, memo=memo1, unit="[단위: 천원/톤]"), unsafe_allow_html=True)
             except Exception as e:
                 app.markdown(f"<p style='color:#d32f2f;'>포스코 對 JFE 입고가격 생성 오류: {e}</p>", unsafe_allow_html=True)
 
             app.markdown("<hr/>", unsafe_allow_html=True)
 
-            # 1-2) 포스코 분기별 지원금
+            # 1-2) 포스코 분기별 지원금 (100레이아웃으로 변경)
             try:
                 rows_bs, q_labels_bs = _build_포스코지원금_table(year, month)
                 html_bs = _포스코지원금_to_html(rows_bs, q_labels_bs)
                 memo_bs = _get_memo(Sheets.포스코지원금_메모, year, month)
-                app.markdown(_layout64("1-2) 포스코 분기별 지원금", html_bs, memo=memo_bs, unit="[단위: 톤, 백만원]"), unsafe_allow_html=True)
+                
+                # _layout100을 사용하여 전체 너비 적용 및 메모를 아래로 배치
+                app.markdown(_layout100("1-2) 포스코 분기별 지원금", html_bs, memo=memo_bs, unit="[단위: 톤, 백만원]"), unsafe_allow_html=True)
             except Exception as e:
                 app.markdown(f"<p style='color:#d32f2f;'>포스코 분기별 지원금 생성 오류: {e}</p>", unsafe_allow_html=True)
 
             app.markdown("<hr/>", unsafe_allow_html=True)
+            
 
             # 2) 포스코/JFE 투입비중
             try:
