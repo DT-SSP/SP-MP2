@@ -350,12 +350,81 @@ def _sidebar_controls():
         app.divider()
         
         email = get_current_user() or ""
-        
-        # 관리자 전용 새로고침 로직
-        if email in _ADMIN_USERS:
+        is_admin = email in _ADMIN_USERS
+
+        if is_admin:
+            # 1. 현재 페이지 다운로드 JS 스크립트 추가
+            current_search_period = f"{year_state.value}년{month_state.value:02d}월"
+            download_js = """<style>
+.dl-btn-container { width: 100%; margin-top: 8px; }
+.dl-btn-container p { margin: 0 !important; padding: 0 !important; }
+.custom-dl-btn {
+    width: 100%; padding: 8px 16px; background-color: #ffffff; color: #404448;
+    border: 1px solid #ced4da; border-radius: 4px; font-size: 14px; font-weight: 500;
+    cursor: pointer; transition: all 0.2s ease; box-sizing: border-box; text-align: center;
+}
+.custom-dl-btn:hover { background-color: #f8f9fa; border-color: #adb5bd; }
+</style>
+<div class="dl-btn-container">
+    <button class="custom-dl-btn" onclick="downloadAllTables()">현재 페이지 다운로드</button>
+</div>
+<script>
+function downloadAllTables() {
+    let tables = Array.from(document.querySelectorAll('table'));
+    if (tables.length === 0) { alert("현재 페이지에 다운로드할 표가 없습니다."); return; }
+    
+    let csvContent = "\\uFEFF";
+    let tableCount = 0;
+    
+    tables.forEach((table) => {
+        if (table.rows.length === 0) return;
+        tableCount++;
+        csvContent += `"=== 표 ${tableCount} ==="\\n`;
+        Array.from(table.rows).forEach(row => {
+            let rowData = Array.from(row.cells).map(cell => {
+                let clone = cell.cloneNode(true);
+                let brs = clone.querySelectorAll('br');
+                for(let i=0; i<brs.length; i++) { brs[i].replaceWith(' '); }
+                let text = clone.textContent.replace(/"/g, '""').replace(/\\n/g, ' ').trim();
+                return `"${text}"`;
+            }).join(",");
+            csvContent += rowData + "\\n";
+        });
+        csvContent += "\\n\\n";
+    });
+    
+    let pageName = "다운로드";
+    if (window.location.hash) {
+        pageName = decodeURIComponent(window.location.hash.substring(1));
+        pageName = pageName.replace(/[^a-zA-Z0-9가-힣_\\-\\. ]/g, '').trim();
+    }
+    if (!pageName) pageName = document.title || "선재경영실적";
+    
+    let now = new Date();
+    let yyyy = now.getFullYear();
+    let MM = String(now.getMonth() + 1).padStart(2, '0');
+    let dd = String(now.getDate()).padStart(2, '0');
+    let hh = String(now.getHours()).padStart(2, '0');
+    let mm = String(now.getMinutes()).padStart(2, '0');
+    let ss = String(now.getSeconds()).padStart(2, '0');
+    let timeStr = `${yyyy}${MM}${dd}_${hh}${mm}${ss}`;
+    let searchPeriod = "__SEARCH_PERIOD__";
+    
+    let blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    let link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `${pageName}_${searchPeriod}_${timeStr}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+</script>""".replace("__SEARCH_PERIOD__", current_search_period)
+            
+            app.markdown(download_js, unsafe_allow_html=True)
             app.markdown('<style>.nav-container{display:none}</style>', unsafe_allow_html=True)
             app.divider()
 
+            # 2. 관리자 전용 새로고침 및 네비게이션 버튼
             def make_refresh_callback(t_sheets, p_name):
                 def _do_refresh():
                     if _REFRESH_LOCK.acquire(blocking=False):
@@ -395,8 +464,8 @@ def _sidebar_controls():
                         app.button("✅", on_click=make_refresh_callback(target_sheets, page_name), key=f"done_{page_name}")
                     elif status == "error":
                         app.button("❌", on_click=lambda p=page_name: _REFRESH_STATES[p].set("idle"), key=f"err_{page_name}")
-        
-        # 로그아웃 버튼
+
+        # 3. OAuth 로그아웃 버튼
         app.markdown(_LOGOUT_BTN, unsafe_allow_html=True)
 
     finally:
