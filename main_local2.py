@@ -192,15 +192,16 @@ def _sidebar_controls():
         if is_admin:
             # 1. 상단: 로그아웃 버튼
             app.button("로그아웃", on_click=_do_logout)
-
+            
             # 2. 하단: 전체 다운로드 버튼 (로그아웃 버튼 바로 밑에 깔끔하게 배치)
             current_search_period = f"{year_state.value}년{month_state.value:02d}월"
             
-            download_js = """<style>
-/* p 태그 마크다운 여백 제거 및 버튼 깔끔한 디자인 정의 */
+            # r을 붙여 이스케이프 문자 경고 방지 및 동적 스크립트 로딩 적용
+            download_js = r"""<style>
+/* 기존 스타일 그대로 유지 */
 .dl-btn-container {
     width: 100%;
-    margin-top: 8px; /* 로그아웃 버튼과의 간격 */
+    margin-top: 8px;
 }
 .dl-btn-container p {
     margin: 0 !important;
@@ -225,11 +226,28 @@ def _sidebar_controls():
     border-color: #adb5bd;
 }
 </style>
+
 <div class="dl-btn-container">
     <button class="custom-dl-btn" onclick="downloadAllTables()">현재 페이지 다운로드</button>
 </div>
+
 <script>
+// 메인 다운로드 함수: 라이브러리가 없으면 로드 후 실행
 function downloadAllTables() {
+    if (typeof XLSX === 'undefined') {
+        let script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+        script.onload = function() {
+            executeExcelDownload();
+        };
+        document.head.appendChild(script);
+    } else {
+        executeExcelDownload();
+    }
+}
+
+// 실제 엑셀 데이터를 만들고 다운로드하는 함수
+function executeExcelDownload() {
     let tables = Array.from(document.querySelectorAll('table'));
     
     if (tables.length === 0) {
@@ -237,14 +255,22 @@ function downloadAllTables() {
         return;
     }
     
-    let csvContent = "\\uFEFF";
+    let wb = XLSX.utils.book_new();
+    let ws_data = []; // 모든 표 데이터를 담을 단일 배열
     let tableCount = 0;
     
     tables.forEach((table) => {
         if (table.rows.length === 0) return;
         tableCount++;
-        csvContent += `"=== 표 ${tableCount} ==="\\n`;
         
+        // 표와 표 사이에 간격을 두고 제목을 추가 (이전 CSV 방식과 동일)
+        if (tableCount > 1) {
+            ws_data.push([]); // 빈 줄
+            ws_data.push([]); // 빈 줄
+        }
+        ws_data.push([`=== 표 ${tableCount} ===`]);
+        
+        // 현재 표의 행 데이터를 읽어서 단일 배열(ws_data)에 추가
         Array.from(table.rows).forEach(row => {
             let rowData = Array.from(row.cells).map(cell => {
                 let clone = cell.cloneNode(true);
@@ -252,13 +278,10 @@ function downloadAllTables() {
                 for(let i=0; i<brs.length; i++) {
                     brs[i].replaceWith(' ');
                 }
-                
-                let text = clone.textContent.replace(/"/g, '""').replace(/\\n/g, ' ').trim();
-                return `"${text}"`;
-            }).join(",");
-            csvContent += rowData + "\\n";
+                return clone.textContent.trim();
+            });
+            ws_data.push(rowData);
         });
-        csvContent += "\\n\\n";
     });
     
     if(tableCount === 0) {
@@ -266,15 +289,20 @@ function downloadAllTables() {
         return;
     }
     
-    // 1. 현재 페이지명 추출
+    // 모아진 단일 배열(ws_data)을 하나의 엑셀 시트로 변환
+    let ws = XLSX.utils.aoa_to_sheet(ws_data);
+    
+    // 워크북에 "데이터"라는 이름의 탭 1개만 추가
+    XLSX.utils.book_append_sheet(wb, ws, "데이터");
+    
+    // 파일명 추출 로직
     let pageName = "다운로드";
     if (window.location.hash) {
         pageName = decodeURIComponent(window.location.hash.substring(1));
-        pageName = pageName.replace(/[^a-zA-Z0-9가-힣_\\-\\. ]/g, '').trim();
+        pageName = pageName.replace(/[^a-zA-Z0-9가-힣_\-\. ]/g, '').trim();
     }
     if (!pageName) pageName = document.title || "선재경영실적";
     
-    // 2. 현재 시간 추출 (YYYYMMDD_HHMMSS)
     let now = new Date();
     let yyyy = now.getFullYear();
     let MM = String(now.getMonth() + 1).padStart(2, '0');
@@ -284,19 +312,10 @@ function downloadAllTables() {
     let ss = String(now.getSeconds()).padStart(2, '0');
     let timeStr = `${yyyy}${MM}${dd}_${hh}${mm}${ss}`;
     
-    // 3. 조회년월 플레이스홀더
     let searchPeriod = "__SEARCH_PERIOD__";
+    let fileName = `${pageName}_${searchPeriod}_${timeStr}.xlsx`;
     
-    let blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    let link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    
-    // 최종 파일명 조합: 페이지이름_조회한년월_현재시간
-    link.download = `${pageName}_${searchPeriod}_${timeStr}.csv`;
-    
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    XLSX.writeFile(wb, fileName);
 }
 </script>"""
             

@@ -1804,7 +1804,7 @@ def _build_포스코지원금_table(year, month):
 
     # 2. 연도를 기준으로 1~4분기 라벨 고정 생성
     yy = str(year)[-2:]
-    q_labels = [f"{yy}.1Q", f"{yy}.2Q", f"{yy}.3Q", f"{yy}.4Q"]
+    q_labels = [f"{yy}.1Q", f"{yy}.2Q", f"{yy}.3Q", f"{yy}.4Q(E)"]
 
     # 동일 분기에 대해 매월 동일한 값이 들어있으므로, 중복을 제거하고 최신(last) 데이터만 남겨 합산 방지
     df_unique = df.sort_values(['연도', '월']).drop_duplicates(subset=['구분1', '구분2', '구분3'], keep='last')

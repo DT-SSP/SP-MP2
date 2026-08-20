@@ -353,9 +353,9 @@ def _sidebar_controls():
         is_admin = email in _ADMIN_USERS
 
         if is_admin:
-            # 1. 현재 페이지 다운로드 JS 스크립트 추가
+            # 1. 현재 페이지 다운로드 JS 스크립트 추가 (xlsx 단일 시트 다운로드 적용)
             current_search_period = f"{year_state.value}년{month_state.value:02d}월"
-            download_js = """<style>
+            download_js = r"""<style>
 .dl-btn-container { width: 100%; margin-top: 8px; }
 .dl-btn-container p { margin: 0 !important; padding: 0 !important; }
 .custom-dl-btn {
@@ -369,34 +369,59 @@ def _sidebar_controls():
     <button class="custom-dl-btn" onclick="downloadAllTables()">현재 페이지 다운로드</button>
 </div>
 <script>
+// 라이브러리 동적 로드 후 실행
 function downloadAllTables() {
+    if (typeof XLSX === 'undefined') {
+        let script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+        script.onload = function() {
+            executeExcelDownload();
+        };
+        document.head.appendChild(script);
+    } else {
+        executeExcelDownload();
+    }
+}
+
+function executeExcelDownload() {
     let tables = Array.from(document.querySelectorAll('table'));
     if (tables.length === 0) { alert("현재 페이지에 다운로드할 표가 없습니다."); return; }
     
-    let csvContent = "\\uFEFF";
+    let wb = XLSX.utils.book_new();
+    let ws_data = []; 
     let tableCount = 0;
     
     tables.forEach((table) => {
         if (table.rows.length === 0) return;
         tableCount++;
-        csvContent += `"=== 표 ${tableCount} ==="\\n`;
+        
+        // 표 구분을 위한 빈 줄과 제목 추가
+        if (tableCount > 1) {
+            ws_data.push([]);
+            ws_data.push([]);
+        }
+        ws_data.push([`=== 표 ${tableCount} ===`]);
+        
         Array.from(table.rows).forEach(row => {
             let rowData = Array.from(row.cells).map(cell => {
                 let clone = cell.cloneNode(true);
                 let brs = clone.querySelectorAll('br');
                 for(let i=0; i<brs.length; i++) { brs[i].replaceWith(' '); }
-                let text = clone.textContent.replace(/"/g, '""').replace(/\\n/g, ' ').trim();
-                return `"${text}"`;
-            }).join(",");
-            csvContent += rowData + "\\n";
+                return clone.textContent.trim();
+            });
+            ws_data.push(rowData);
         });
-        csvContent += "\\n\\n";
     });
+    
+    if(tableCount === 0) { alert("다운로드할 데이터가 없습니다."); return; }
+    
+    let ws = XLSX.utils.aoa_to_sheet(ws_data);
+    XLSX.utils.book_append_sheet(wb, ws, "데이터");
     
     let pageName = "다운로드";
     if (window.location.hash) {
         pageName = decodeURIComponent(window.location.hash.substring(1));
-        pageName = pageName.replace(/[^a-zA-Z0-9가-힣_\\-\\. ]/g, '').trim();
+        pageName = pageName.replace(/[^a-zA-Z0-9가-힣_\-\. ]/g, '').trim();
     }
     if (!pageName) pageName = document.title || "선재경영실적";
     
@@ -408,15 +433,11 @@ function downloadAllTables() {
     let mm = String(now.getMinutes()).padStart(2, '0');
     let ss = String(now.getSeconds()).padStart(2, '0');
     let timeStr = `${yyyy}${MM}${dd}_${hh}${mm}${ss}`;
-    let searchPeriod = "__SEARCH_PERIOD__";
     
-    let blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    let link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `${pageName}_${searchPeriod}_${timeStr}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    let searchPeriod = "__SEARCH_PERIOD__";
+    let fileName = `${pageName}_${searchPeriod}_${timeStr}.xlsx`;
+    
+    XLSX.writeFile(wb, fileName);
 }
 </script>""".replace("__SEARCH_PERIOD__", current_search_period)
             
@@ -470,7 +491,6 @@ function downloadAllTables() {
 
     finally:
         layout_ctx.reset(_token)
-
 
 with app.sidebar:
     app.If(lambda: True, _sidebar_controls)
