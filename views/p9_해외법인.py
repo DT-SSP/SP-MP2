@@ -1732,7 +1732,7 @@ def _build_해외연령별재고_table(year, month, corp):
                 g3_totals[c_p1] += v_p1
                 g3_totals[c_c] += v_c
                 
-                dec = 1 if '중량' in g3 else 0
+                dec = 0
                 g2_rows.append({
                     '구분': g2,
                     '_depth': 2,
@@ -1743,7 +1743,7 @@ def _build_해외연령별재고_table(year, month, corp):
                     c_diff: calc_pct_str(v_c, v_p1, dec)
                 })
                 
-            dec = 1 if '중량' in g3 else 0
+            dec = 0
             
             # 2. 단위별 소계 (중량, 금액) - Depth 1[cite: 4]
             rows.append({
@@ -1772,7 +1772,7 @@ def _build_해외연령별재고_table(year, month, corp):
         })
         for g3 in _해외연령별_UNIT_ORDER:
             if g3 in grand_totals:
-                dec = 1 if '중량' in g3 else 0
+                dec = 0
                 rows.append({
                     '구분': f'{g3}',
                     '_depth': 1,

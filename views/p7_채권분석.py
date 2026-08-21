@@ -47,7 +47,7 @@ def _build_외상매출받을어음_현황(year, month): # = 매출채권
     col_hdrs = [f"'{prev2_yr_str}.12월", f"'{prev1_yr_str}.12월"]
     for y, m in recent:
         col_hdrs.append(f"'{str(y)[-2:]}.{m}월")
-    col_hdrs.append("비율")
+    col_hdrs.append("비중(%)")
 
     structure = {
         '외상매출금': ['원화', '외화'],

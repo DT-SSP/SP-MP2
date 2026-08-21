@@ -213,6 +213,7 @@ def _build_환율추이_data(year, month):
     for yr_c, mo_c, _ in time_slots:
         for currency in ['USD', 'CNH', 'THB', 'MXN']:
             val = vm.get((currency, yr_c, mo_c), 0.0)
+            val = round(val)
             rates[currency].append(val)
 
     return x_labels, rates
@@ -238,7 +239,7 @@ def _build_환율추이_chart(x_labels, rates):
 
         vals = rates.get(currency, [])
         color = color_map.get(currency, '#334155')
-        text_labels = [f"<b>{v:,.1f}</b>" if v > 0 else '' for v in vals]
+        text_labels = [f"<b>{v:,.0f}</b>" if v > 0 else '' for v in vals]
 
         fig.add_trace(go.Scatter(
             name=currency, x=x_labels, y=vals,

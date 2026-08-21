@@ -684,16 +684,15 @@ def _load_등급별(year, month):
         if c in df.columns:
             df[c] = df[c].astype(str).str.strip()
 
-    # ⭕ 두번째 탭과 동일하게 2년전말, 1년전말 고정
     past_years = [year - 2, year - 1]
-    
-    # ⭕ 최근 3개월(2개월 전, 1개월 전, 당월) 고정
     recent_curr = _recent_months(year, month, n=_N_RECENT)
-    
+    prev_yr, prev_mo = _prev(year, month) # 전월 계산 추가
+
     col_spec = {
         'past_years':  past_years,
         'recent_curr': recent_curr,
         'curr': (year, month),
+        'prev': (prev_yr, prev_mo), # col_spec에 prev 추가
     }
     return df, col_spec
 
@@ -701,6 +700,8 @@ def _load_등급별(year, month):
 def _build_등급별_rows(df, col_spec):
     past_years  = col_spec['past_years']
     recent_curr = col_spec['recent_curr']
+    curr_yr, curr_mo = col_spec['curr']
+    prev_yr, prev_mo = col_spec['prev']
 
     agg = df.groupby(['구분1', '구분2', '연도', '월'])['값'].sum().to_dict()
 
@@ -710,54 +711,72 @@ def _build_등급별_rows(df, col_spec):
     def cvs(g1, g2):
         return ([v(g1, g2, yr, 12) for yr in past_years]
                 + [v(g1, g2, yr_c, mo_c) for yr_c, mo_c in recent_curr])
+    
+    # 전월대비 계산 함수 추가
+    def mom(g1, g2):
+        return v(g1, g2, curr_yr, curr_mo) - v(g1, g2, prev_yr, prev_mo)
 
-    # 제품 합계 계산용
     grades = ['B급', 'C급', 'D급', 'D2급', 'X급']
+    
     def v_제품합계(yr, mo):
         return sum(v('제품', g, yr, mo) for g in grades)
 
     def cvs_제품합계():
         return ([v_제품합계(yr, 12) for yr in past_years]
                 + [v_제품합계(yr_c, mo_c) for yr_c, mo_c in recent_curr])
+                
+    # 제품합계 전월대비 계산 함수 추가
+    def mom_제품합계():
+        return v_제품합계(curr_yr, curr_mo) - v_제품합계(prev_yr, prev_mo)
 
     rows = []
     
-    # 1. 재공품 (맨위로 이동, kind='total' 및 <b> 적용으로 합계처럼 배경/볼드 처리)
-    rows.append({'label': '<b>재공품 계</b>', 'kind': 'total', 'vals': cvs('재공품', '재공품')})
+    # 재공품 (mom 값 추가)
+    rows.append({'label': '<b>재공품 계</b>', 'kind': 'total', 'vals': cvs('재공품', '재공품'), 'mom': mom('재공품', '재공품')})
     
-    # 2. 제품 개별 등급
+    # 제품 개별 등급 (mom 값 추가)
     for g2 in grades:
-        rows.append({'label': f'제품 ({g2})', 'kind': 'detail', 'vals': cvs('제품', g2)})
+        rows.append({'label': f'제품 ({g2})', 'kind': 'detail', 'vals': cvs('제품', g2), 'mom': mom('제품', g2)})
     
-    # 3. 제품 합계
-    rows.append({'label': '<b>제품 계</b>', 'kind': 'total', 'vals': cvs_제품합계()})
+    # 제품 합계 (mom 값 추가)
+    rows.append({'label': '<b>제품 계</b>', 'kind': 'total', 'vals': cvs_제품합계(), 'mom': mom_제품합계()})
 
     return rows
 
 def _등급별_to_html(rows, col_spec):
     col_lbls = _col_labels(col_spec)
-    n_cols   = len(col_lbls) + 1  # 구분 + 날짜 컬럼들
+    n_cols   = len(col_lbls) + 2  # 전월대비 컬럼을 위해 +1 추가
 
     th = f'<th style="{_TH}">구분</th>'
     for lbl in col_lbls:
         th += f'<th style="{_TH}">{lbl}</th>'
+    
+    # 전월대비 헤더 추가
+    th += f'<th style="{_TH}">전월대비</th>'
 
     body = ''
     for row in rows:
         kind  = row['kind']
         vals  = row['vals']
+        mom_v = row['mom']  # 전월대비 값 가져오기
         
         if kind == 'detail':
-            lbl_s, num_s = ROW_ITEM, _TD_NUM
+            lbl_s, num_s, red_s = ROW_ITEM, _TD_NUM, _TD_RED
         else:
-            lbl_s, num_s = ROW_HDR_LBL, ROW_HDR_NUM
+            lbl_s, num_s, red_s = ROW_HDR_LBL, ROW_HDR_NUM, ROW_HDR_RED
 
         cells = f'<td style="{lbl_s}">{row["label"]}</td>'
         for val in vals:
             cells += f'<td style="{num_s}">{_fmt(val, decimal=0)}</td>'
+            
+        # 전월대비 값 셀 추가 (음수일 경우 빨간색 처리)
+        m_s = red_s if mom_v < 0 else num_s
+        cells += f'<td style="{m_s}">{_fmt(mom_v, decimal=0)}</td>'
+        
         body += f'<tr>{cells}</tr>'
 
     return _html_table(f'<tr>{th}</tr>', body)
+
 
 
 def _build_등급별_chart_data(df, col_spec):
