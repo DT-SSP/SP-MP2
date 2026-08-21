@@ -586,7 +586,7 @@ def _build_산업군별_영업이익_table(year: int, month: int) -> pd.DataFram
     rows = []
     
     base_내수 = tmp[tmp["구분2"] == "내수"]
-    r_내수 = make_row(base_내수, "내수")
+    r_내수 = make_row(base_내수, "내수 계")
     r_내수["_depth"] = 0
     rows.append(r_내수)
     for ind in industry_order:
@@ -595,7 +595,7 @@ def _build_산업군별_영업이익_table(year: int, month: int) -> pd.DataFram
         rows.append(r_ind)
 
     base_수출 = tmp[tmp["구분2"] == "수출"]
-    r_수출 = make_row(base_수출, "수출")
+    r_수출 = make_row(base_수출, "수출 계")
     r_수출["_depth"] = 0
     rows.append(r_수출)
     for ind in industry_order:
@@ -603,7 +603,7 @@ def _build_산업군별_영업이익_table(year: int, month: int) -> pd.DataFram
         r_ind["_depth"] = 1
         rows.append(r_ind)
 
-    r_tot = make_row(tmp, "전체")
+    r_tot = make_row(tmp, "합계")
     r_tot["_depth"] = 0
     rows.append(r_tot)
     for ind in industry_order:
@@ -784,7 +784,7 @@ def _build_실수요유통영업이익_table(year: int, month: int) -> pd.DataFr
     rows = []
     
     base_내수 = tmp[tmp["구분2"] == "내수"]
-    r_내수 = make_row(base_내수, "내수")
+    r_내수 = make_row(base_내수, "내수 계")
     r_내수["_depth"] = 0
     rows.append(r_내수)
     for t_type in type_order:
@@ -793,7 +793,7 @@ def _build_실수요유통영업이익_table(year: int, month: int) -> pd.DataFr
         rows.append(r_type)
 
     base_수출 = tmp[tmp["구분2"] == "수출"]
-    r_수출 = make_row(base_수출, "수출")
+    r_수출 = make_row(base_수출, "수출 계")
     r_수출["_depth"] = 0
     rows.append(r_수출)
     for t_type in type_order:
@@ -801,7 +801,7 @@ def _build_실수요유통영업이익_table(year: int, month: int) -> pd.DataFr
         r_type["_depth"] = 1
         rows.append(r_type)
 
-    r_tot = make_row(tmp, "전체")
+    r_tot = make_row(tmp, "합계")
     r_tot["_depth"] = 0
     rows.append(r_tot)
     for t_type in type_order:
@@ -878,7 +878,7 @@ def _build_메이커별영업이익_table(year: int, month: int) -> pd.DataFrame
     rows = []
     
     base_내수 = tmp[tmp["구분2"] == "내수"]
-    r_내수 = make_row(base_내수, "내수")
+    r_내수 = make_row(base_내수, "내수 계")
     r_내수["_depth"] = 0
     rows.append(r_내수)
     for maker in maker_order:
@@ -887,7 +887,7 @@ def _build_메이커별영업이익_table(year: int, month: int) -> pd.DataFrame
         rows.append(r_maker)
 
     base_수출 = tmp[tmp["구분2"] == "수출"]
-    r_수출 = make_row(base_수출, "수출")
+    r_수출 = make_row(base_수출, "수출 계")
     r_수출["_depth"] = 0
     rows.append(r_수출)
     for maker in maker_order:
@@ -895,7 +895,7 @@ def _build_메이커별영업이익_table(year: int, month: int) -> pd.DataFrame
         r_maker["_depth"] = 1
         rows.append(r_maker)
 
-    r_tot = make_row(tmp, "전체")
+    r_tot = make_row(tmp, "합계")
     r_tot["_depth"] = 0
     rows.append(r_tot)
     for maker in maker_order:
@@ -1045,7 +1045,7 @@ def _build_부서_사업장_메이커별_영업이익_table(year: int, month: in
     rows = []
     for ch in ["포항공장", "충주공장", "충주2공장"]:
         base_ch = tmp[tmp["구분2"] == ch]
-        r_ch = make_row(base_ch, ch)
+        r_ch = make_row(base_ch, f"{ch} 계")
         r_ch["_depth"] = 0
         rows.append(r_ch)
         
@@ -1158,7 +1158,7 @@ def _build_부서별_인당_영업이익_table(year: int, month: int) -> pd.Data
     teams = ["선재영업팀", "봉강영업팀", "부산영업소", "대구영업소", "글로벌영업팀"]
     rows = []
 
-    r_norm = make_row("정상", None, "정상")
+    r_norm = make_row("정상", None, "정상 계")
     r_norm["_depth"] = 0
     rows.append(r_norm)
     for t in teams: 
@@ -1174,7 +1174,7 @@ def _build_부서별_인당_영업이익_table(year: int, month: int) -> pd.Data
         r_t["_depth"] = 1
         rows.append(r_t)
 
-    r_tot = make_row("중계", None, "전체")
+    r_tot = make_row("중계", None, "합계")
     r_tot["_depth"] = 0
     rows.append(r_tot)
     for t in teams: 
