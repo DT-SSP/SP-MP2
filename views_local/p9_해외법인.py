@@ -520,6 +520,94 @@ def _build_태국_table(get, year, month, 사업장='태국'):
 
     return pd.DataFrame({col: [r.get(col, '') for r in rows] for col in columns})
 
+def _build_태국대손상각비_table(year, month):
+    # 동적 컬럼명 생성
+    yr_prev, mo_prev = _prev(year, month, 1)
+    
+    c1 = f"'{str(year-1)[2:]}.12월 누적"
+    c2 = f"'{str(year)[2:]}년 계획"
+    c3 = f"'{str(yr_prev)[2:]}.{mo_prev}월"
+    c4 = f"'{str(year)[2:]}.{month}월"
+    c5 = f"{str(year)[2:]}년 누적"
+    c6 = "과부족"
+    
+    columns = ['구분', c1, c2, c3, c4, c5, c6]
+    
+    # DB 데이터 로드
+    df = load_sheet(Sheets.태국대손상각비_DB)
+    if df.empty or '연도' not in df.columns:
+        return pd.DataFrame(columns=columns)
+        
+    df.columns = df.columns.str.strip()
+    df['연도'] = pd.to_numeric(df['연도'], errors='coerce').fillna(0).astype(int)
+    df['월'] = pd.to_numeric(df['월'], errors='coerce').fillna(0).astype(int)
+    
+    # 숫자형 변환 및 결측치 처리
+    df['계획'] = df['계획'].apply(_parse).fillna(0)
+    df['실적'] = df['실적'].apply(_parse).fillna(0)
+    df['계획환율'] = df['계획환율'].apply(_parse).replace(0, pd.NA).ffill().fillna(40) # 빈 값은 앞의 값으로 채우거나 40으로 기본값 설정
+    df['월평균환율'] = df['월평균환율'].apply(_parse).fillna(0)
+
+    # 1. 적용환율 계산: 월평균환율이 존재하면(0보다 크면) 우선 적용, 없으면 계획환율 적용
+    df['적용환율'] = df.apply(lambda r: r['월평균환율'] if r['월평균환율'] > 0 else r['계획환율'], axis=1)
+
+    # 2. 억원 단위 환산 (원화 환산 후 1억으로 나눔)
+    df['환산_실적'] = (df['실적'] * df['적용환율']) / 100_000_000
+    df['환산_계획'] = (df['계획'] * df['적용환율']) / 100_000_000
+
+    # 3. 지표별 값 계산
+    # 전년도 말 누적 실적
+    v_prev_accum = df[df['연도'] <= year - 1]['환산_실적'].sum()
+    
+    # 당해 연도 계획 총합
+    v_curr_plan = df[df['연도'] == year]['환산_계획'].sum()
+    
+    # 전월 실적
+    v_prev_mo = df[(df['연도'] == yr_prev) & (df['월'] == mo_prev)]['환산_실적'].sum()
+    
+    # 당월 실적
+    v_curr_mo = df[(df['연도'] == year) & (df['월'] == month)]['환산_실적'].sum()
+    
+    # 당해 연도 누적 실적 (당월까지 합산)
+    v_curr_accum = df[(df['연도'] == year) & (df['월'] <= month)]['환산_실적'].sum()
+    
+    # 과부족 (당해 연도 계획 - 당해 연도 누적 실적)
+    v_diff = v_curr_plan - v_curr_accum
+    
+    rows = [{
+        '구분': '대손상각비',
+        c1: _fmt(v_prev_accum, decimal=0),
+        c2: _fmt(v_curr_plan, decimal=0),
+        c3: _fmt(v_prev_mo, decimal=0),
+        c4: _fmt(v_curr_mo, decimal=0),
+        c5: _fmt(v_curr_accum, decimal=0),
+        c6: _fmt(v_diff, decimal=0)
+    }]
+    
+    return pd.DataFrame(rows, columns=columns)
+
+def _태국대손상각비_to_html_table(df):
+    if df.empty:
+        return ""
+        
+    rows_html = ''
+    for _, row in df.iterrows():
+        cells = ''
+        for i, val in enumerate(row):
+            s = str(val)
+            if i == 0:
+                # 공통 텍스트 스타일(_TD_LBL)을 적용 (폰트 15px 포함) 후, 가운데 정렬만 덧씌움
+                cells += f'<td style="{_TD_LBL}; text-align:center;">{s}</td>'
+            else:
+                # 음수이면 _TD_RED, 아니면 _TD_NUM 공통 숫자 스타일 적용 (폰트 15px 포함)
+                style = _TD_RED if s.startswith('-') else _TD_NUM
+                cells += f'<td style="{style}">{s}</td>'
+        
+        rows_html += f'<tr style="vertical-align:middle">{cells}</tr>'
+    
+    headers = ''.join(f'<th style="{_TH}">{c}</th>' for c in df.columns)
+    return _html_table(f'<tr>{headers}</tr>', rows_html)
+
 def _build_해외현금흐름표_base(year, month, corp):
     df = load_sheet(Sheets.해외현금흐름_DB)
     
@@ -2255,8 +2343,20 @@ def render_page(app, year_state, month_state):
             memo1 = _get_memo(Sheets.해외손익요약_중국_메모, year, month)
             app.markdown(_section("1) 손익 (중국)", _build_중국_table(get, year, month), memo1),
                          unsafe_allow_html=True)
+            
             memo2 = _get_memo(Sheets.해외손익요약_태국_메모, year, month)
             app.markdown(_section("2) 손익 (태국)", _build_태국_table(get, year, month), memo2),
+                         unsafe_allow_html=True)
+            
+            # --- 대손 설정 현황 (태국) 추가 영역 ---
+            df_th_daeson = _build_태국대손상각비_table(year, month)
+            html_th_daeson = _태국대손상각비_to_html_table(df_th_daeson)
+            
+            # 이미지와 동일한 하드코딩 메모 텍스트 사용 (DB가 별도로 있다면 교체 가능)
+            memo3 = "※ 월평균 환율 적용, 미도래 월은 계획 환율(@40.00) 적용"
+            
+            # 다른 표들과 동일하게 6/4 비율의 레이아웃(_layout64)을 사용합니다.
+            app.markdown(_layout64("3) 대손 설정 현황(태국)", html_th_daeson, memo3, '[단위 : 억원]'),
                          unsafe_allow_html=True)
             
         app.If(lambda: True, _render_해외손익)

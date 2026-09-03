@@ -100,7 +100,7 @@ PAGE_SHEETS_MAP = {
         Sheets.해외부적합장기재고_DB, Sheets.해외부적합장기재고_중국_메모, Sheets.해외부적합장기재고_태국_메모,
         Sheets.해외연령별재고_DB, Sheets.해외연령별재고_중국_메모, Sheets.해외연령별재고_태국_메모,
         Sheets.해외채권_DB, Sheets.해외채권_중국_메모, Sheets.해외채권_태국_메모,
-        Sheets.해외인원_DB, Sheets.해외인원_메모, Sheets.해외인원_생산량_메모
+        Sheets.해외인원_DB, Sheets.해외인원_메모, Sheets.해외인원_생산량_메모, Sheets.태국대손상각비_DB
     ],
     "10. 별첨" : [
             Sheets.전체실적요약_DB, Sheets.환율_DB, Sheets.손익계산서_DB,Sheets.산업군별영업이익_DB,
