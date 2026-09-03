@@ -521,17 +521,17 @@ def _build_태국_table(get, year, month, 사업장='태국'):
     return pd.DataFrame({col: [r.get(col, '') for r in rows] for col in columns})
 
 def _build_태국대손상각비_table(year, month):
-    # 동적 컬럼명 생성
+    # 동적 컬럼명 생성 (이미지 포맷과 동일하게 맞춤)
     yr_prev, mo_prev = _prev(year, month, 1)
     
-    c1 = f"'{str(year-1)[2:]}.12월 누적"
-    c2 = f"'{str(year)[2:]}년 계획"
+    c1 = f"'{str(year-1)[2:]}.12월_누적"
+    c2 = f"'{str(year)[2:]}년_계획"
     c3 = f"'{str(yr_prev)[2:]}.{mo_prev}월"
     c4 = f"'{str(year)[2:]}.{month}월"
-    c5 = f"{str(year)[2:]}년 누적"
-    c6 = "과부족"
+    c5 = f"{str(year)[2:]}년_누적"
     
-    columns = ['구분', c1, c2, c3, c4, c5, c6]
+    # 과부족 컬럼 제외
+    columns = ['구분', c1, c2, c3, c4, c5]
     
     # DB 데이터 로드
     df = load_sheet(Sheets.태국대손상각비_DB)
@@ -545,44 +545,56 @@ def _build_태국대손상각비_table(year, month):
     # 숫자형 변환 및 결측치 처리
     df['계획'] = df['계획'].apply(_parse).fillna(0)
     df['실적'] = df['실적'].apply(_parse).fillna(0)
-    df['계획환율'] = df['계획환율'].apply(_parse).replace(0, pd.NA).ffill().fillna(40) # 빈 값은 앞의 값으로 채우거나 40으로 기본값 설정
+    df['계획환율'] = df['계획환율'].apply(_parse).replace(0, pd.NA).ffill().fillna(40)
     df['월평균환율'] = df['월평균환율'].apply(_parse).fillna(0)
 
-    # 1. 적용환율 계산: 월평균환율이 존재하면(0보다 크면) 우선 적용, 없으면 계획환율 적용
+    # 적용환율 계산 및 억원 단위 환산
     df['적용환율'] = df.apply(lambda r: r['월평균환율'] if r['월평균환율'] > 0 else r['계획환율'], axis=1)
-
-    # 2. 억원 단위 환산 (원화 환산 후 1억으로 나눔)
-    df['환산_실적'] = (df['실적'] * df['적용환율']) / 100_000_000
+    df['환산_실적'] = (df['실적'] * df['월평균환율']) / 100_000_000
     df['환산_계획'] = (df['계획'] * df['적용환율']) / 100_000_000
 
-    # 3. 지표별 값 계산
-    # 전년도 말 누적 실적
+    # ----------------------------------------------------
+    # [1] 회계기준 로직 (기존과 동일)
+    # ----------------------------------------------------
     v_prev_accum = df[df['연도'] <= year - 1]['환산_실적'].sum()
-    
-    # 당해 연도 계획 총합
     v_curr_plan = df[df['연도'] == year]['환산_계획'].sum()
-    
-    # 전월 실적
     v_prev_mo = df[(df['연도'] == yr_prev) & (df['월'] == mo_prev)]['환산_실적'].sum()
-    
-    # 당월 실적
     v_curr_mo = df[(df['연도'] == year) & (df['월'] == month)]['환산_실적'].sum()
-    
-    # 당해 연도 누적 실적 (당월까지 합산)
     v_curr_accum = df[(df['연도'] == year) & (df['월'] <= month)]['환산_실적'].sum()
+
+    # ----------------------------------------------------
+    # [2] 경영보고 로직 (당해 연도 1월 이후 실적 0 처리)
+    # ----------------------------------------------------
+    v_prev_accum_mgmt = v_prev_accum
+    v_curr_plan_mgmt = v_curr_plan
     
-    # 과부족 (당해 연도 계획 - 당해 연도 누적 실적)
-    v_diff = v_curr_plan - v_curr_accum
+    # 전월 실적: 전월이 금년도이고 1월보다 크면 0, 아니면 그대로 적용
+    v_prev_mo_mgmt = 0.0 if (yr_prev == year and mo_prev > 1) else v_prev_mo
     
-    rows = [{
-        '구분': '대손상각비',
-        c1: _fmt(v_prev_accum, decimal=0),
-        c2: _fmt(v_curr_plan, decimal=0),
-        c3: _fmt(v_prev_mo, decimal=0),
-        c4: _fmt(v_curr_mo, decimal=0),
-        c5: _fmt(v_curr_accum, decimal=0),
-        c6: _fmt(v_diff, decimal=0)
-    }]
+    # 당월 실적: 당월이 1월보다 크면 0
+    v_curr_mo_mgmt = 0.0 if month > 1 else v_curr_mo
+    
+    # 금년 누적: 1월 실적만 고정 합산 (2월 이후 발생건 무시)
+    v_curr_accum_mgmt = df[(df['연도'] == year) & (df['월'] == 1)]['환산_실적'].sum() if month >= 1 else 0.0
+    
+    rows = [
+        {
+            '구분': '회계기준',
+            c1: _fmt(v_prev_accum, decimal=0),
+            c2: _fmt(v_curr_plan, decimal=0),
+            c3: _fmt(v_prev_mo, decimal=0),
+            c4: _fmt(v_curr_mo, decimal=0),
+            c5: _fmt(v_curr_accum, decimal=0)
+        },
+        {
+            '구분': '경영보고',
+            c1: _fmt(v_prev_accum_mgmt, decimal=0),
+            c2: _fmt(v_curr_plan_mgmt, decimal=0),
+            c3: _fmt(v_prev_mo_mgmt, decimal=0),
+            c4: _fmt(v_curr_mo_mgmt, decimal=0),
+            c5: _fmt(v_curr_accum_mgmt, decimal=0)
+        }
+    ]
     
     return pd.DataFrame(rows, columns=columns)
 
@@ -2353,8 +2365,8 @@ def render_page(app, year_state, month_state):
             df_th_daeson = _build_태국대손상각비_table(year, month)
             html_th_daeson = _태국대손상각비_to_html_table(df_th_daeson)
             
-            # 이미지와 동일한 하드코딩 메모 텍스트 사용 (DB가 별도로 있다면 교체 가능)
-            memo3 = "※ 월평균 환율 적용, 미도래 월은 계획 환율(@40.00) 적용"
+            memo3 = "※ 계획 : 환율(@40.00) 적용, 실적 : 월평균 환율 적용"
+                        
             
             # 다른 표들과 동일하게 6/4 비율의 레이아웃(_layout64)을 사용합니다.
             app.markdown(_layout64("3) 대손 설정 현황(태국)", html_th_daeson, memo3, '[단위 : 억원]'),
