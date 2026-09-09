@@ -730,7 +730,20 @@ def _build_현금흐름표_연결_table(year, month):
 def _build_재무상태표_table(year, month):
     df = load_sheet(Sheets.재무상태표_DB)
     df['값']  = df['값'].apply(_parse)
+    
+    # 연도와 월 컬럼의 텍스트를 강제로 숫자로 변환
+    df['연도'] = pd.to_numeric(df['연도'], errors='coerce').fillna(0).astype(int)
+    df['월'] = pd.to_numeric(df['월'], errors='coerce').fillna(0).astype(int)
+    
     df = _drop_empty(df, '연도', '월')
+
+    # ✅ 1. 빈 탭 방지: 사업장 이름이 비어있는 찌꺼기 행 제거
+    df['사업장'] = df['사업장'].fillna('').astype(str).str.strip()
+    df = df[df['사업장'] != '']
+
+    # ✅ 2. 데이터 단절 방지: 바뀐 구분1 명칭을 과거 명칭과 동일하게 맵핑
+    name_map = {'자산': '자산총계', '부채': '부채총계', '자본': '자본총계'}
+    df['구분1'] = df['구분1'].replace(name_map)
 
     # 천진 사업장 제외
     df = df[df['사업장'] != '천진']
@@ -740,13 +753,8 @@ def _build_재무상태표_table(year, month):
 
     db_corps    = _sort_corps(df['사업장'].unique().tolist(), 재무_CORP_ORDER)
     
-    # 남통 탭의 이름을 선재_중국으로 변경
-    corp_labels = []
-    for c in db_corps:
-        lbl = 재무_사업장_표시명.get(c, c)
-        if c == '남통' or lbl == '선재_남통':
-            lbl = '선재_중국'
-        corp_labels.append(lbl)
+    # 탭 이름 매핑
+    corp_labels = [재무_사업장_표시명.get(c, c) for c in db_corps]
 
     sub_labels = [
         f"'{str(year - 1)[2:]}년",
@@ -756,7 +764,12 @@ def _build_재무상태표_table(year, month):
     ]
 
     anchor  = df[(df['연도'] == year) & (df['월'] == month) & (df['사업장'] == db_corps[0])]
-    행_순서 = list(dict.fromkeys(zip(anchor['구분1'], anchor['구분2'])))
+    
+    # ✅ 3. 안정성 확보: 당월 데이터가 아직 DB에 없을 때 표 구조가 깨지는 현상 방지
+    if anchor.empty:
+        행_순서 = list(dict.fromkeys(zip(df['구분1'], df['구분2'])))
+    else:
+        행_순서 = list(dict.fromkeys(zip(anchor['구분1'], anchor['구분2'])))
 
     # 반복 필터 대신 O(1) 조회 dict
     val_map = df.set_index(['연도', '월', '구분1', '구분2', '사업장'])['값'].to_dict()
@@ -782,15 +795,22 @@ def _build_재무상태표_table(year, month):
         key = (g1, g2)
         행_순서_aug.append((g1, g2))
 
-    # 각 g1 그룹에서 소계행(총계)이 맨 앞으로 오도록 재정렬 (p8 스타일)
-    g1_order = list(dict.fromkeys(t[0] for t in 행_순서_aug))
+    # ✅ 1. DB에 있는 원래 대분류 순서 파악
+    raw_g1_order = list(dict.fromkeys(t[0] for t in 행_순서_aug))
+    
+    # ✅ 2. 요청하신 순서대로 대분류(구분1) 강제 정렬 지정
+    target_g1 = ['자산총계', '부채총계', '자본총계', '부채 및 자본 총계']
+    g1_order = [g for g in target_g1 if g in raw_g1_order] + [g for g in raw_g1_order if g not in target_g1]
+
     g1_groups: dict = {g: [] for g in g1_order}
     for triple in 행_순서_aug:
-        g1_groups[triple[0]].append(triple)
+        if triple[0] in g1_groups:
+            g1_groups[triple[0]].append(triple)
 
     행_순서_final: list = []
     for g1 in g1_order:
         group  = g1_groups[g1]
+        # ✅ 3. 총계(소계행)를 맨 위로 올리고 그 뒤에 세부 항목(others) 배치
         totals = [t for t in group if (t[1] in 소계행 or t[0] == t[1])]
         others = [t for t in group if t not in totals]
         행_순서_final.extend(totals + others)
