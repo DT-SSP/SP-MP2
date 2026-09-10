@@ -147,7 +147,6 @@ def _run_refresh_bg(target_sheets: list, page_name: str):
 app = vl.App(title="선재사업부문 경영실적 대시보드",container_width="100%", db="./app.db")
 app.setup_auth(User, require_auth=False)
 
-
 @app.fastapi.on_event("startup")
 async def _on_startup():
     all_sheets = [v for k, v in vars(Sheets).items()
@@ -331,7 +330,6 @@ function executeExcelDownload() {
             # 일반 사용자는 기존처럼 로그아웃 버튼만 단독 표시
             app.button("로그아웃", on_click=_do_logout)
 
-
         # 관리자 전용: 각 페이지 버튼 옆에 작은 새로고침 버튼 렌더링
         if is_admin:
             # 파이썬 반복문 내에서 콜백 함수 꼬임을 방지하기 위한 클로저 헬퍼
@@ -449,6 +447,7 @@ def _protected(render_fn):
                 unsafe_allow_html=True,
             )
             return
+        
         render_fn(app, year_state, month_state)
     return _page
 

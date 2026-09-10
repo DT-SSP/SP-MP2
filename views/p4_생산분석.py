@@ -140,7 +140,7 @@ def _생산실적_to_html(rows, col_hdrs):
         red_s = ROW_HDR_RED if kind == 'total' else _TD_RED
         cells = f'<td style="{lbl_s}">{label}</td>'
         cells += ''.join(f'<td style="{num_s}">{_fmt(v)}</td>' for v in vals)
-        cells += f'<td style="{red_s if mom < 0 else num_s}">{_fmt(mom, decimal=1)}</td>'
+        cells += f'<td style="{red_s if mom < 0 else num_s}">{_fmt(mom, decimal=0)}</td>'
         cells += f'<td style="{red_s if pct < 0 else num_s}">{_fmt(pct, decimal=1)}%</td>'
         body += f'<tr>{cells}</tr>'
     return _html_table(f'<tr>{th}</tr>', body)
