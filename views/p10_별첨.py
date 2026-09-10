@@ -1129,7 +1129,11 @@ def _build_부서별_인당_영업이익_table(year: int, month: int) -> pd.Data
                 if team is not None: cond &= (sales_df["구분2"] == team)
                 d = sales_df.loc[cond]
             elif section in ("전체", "종합계"):
-                d = sales_df[sales_df["구분2"] == team] if team is not None else sales_df
+                # "정상"과 "매입매출" 데이터만 명시적으로 합산 (DB에 존재하는 소계/합계 더블카운팅 방지)
+                cond = sales_df["구분1"].isin(["정상", "매입매출"])
+                if team is not None: 
+                    cond &= (sales_df["구분2"] == team)
+                d = sales_df.loc[cond]
             else:
                 d = sales_df
 
