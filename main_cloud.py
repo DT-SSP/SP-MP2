@@ -51,7 +51,7 @@ PAGE_SHEETS_MAP = {
             Sheets.품목손익_DB, Sheets.품목손익_메모, Sheets.수정원가기준손익_DB,Sheets.수정원가기준손익_메모,
             Sheets.원재료입고기초단가차이_DB, Sheets.원재료입고단가차이_거래처기준_DB,
             Sheets.제품수불표_DB, Sheets.현금흐름표_별도_DB, Sheets.현금흐름표_별도_메모,
-            Sheets.안정성_DB, Sheets.안정성_메모, Sheets.수익성_DB, Sheets.수익성_메모_연결, Sheets.수익성_대표이사_DB, Sheets.수익성_대표이사_메모,
+            Sheets.안정성_DB, Sheets.안정성_메모, Sheets.수익성_DB, Sheets.수익성_메모_연결, Sheets.수익성_메모, Sheets.수익성_대표이사_DB, Sheets.수익성_대표이사_메모,
             Sheets.판매계획및실적_DB, Sheets.판매계획및실적_메모, Sheets.이익계획및실적_DB
         ],
     "2. 손익분석": [
@@ -87,7 +87,8 @@ PAGE_SHEETS_MAP = {
         Sheets.부재료사용량_DB, Sheets.부재료사용량_포항_메모, Sheets.부재료사용량_충주_메모, Sheets.부재료사용량_충주2_메모,
         Sheets.월평균클레임_DB, Sheets.당월클레임_메모,
         Sheets.당월클레임_DB,
-        Sheets.영업외비용_DB, Sheets.영업외비용_메모, 
+        Sheets.영업외비용_DB, Sheets.영업외비용_메모,
+        Sheets.부재료단가추이_DB, Sheets.부재료단가추이_메모 
     ],
     "6. 재고자산분석": [ 
         Sheets.재고현황_DB, Sheets.재고현황_메모,
