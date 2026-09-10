@@ -331,6 +331,33 @@ function executeExcelDownload() {
             # 일반 사용자는 기존처럼 로그아웃 버튼만 단독 표시
             app.button("로그아웃", on_click=_do_logout)
 
+        idle_timeout_js = r"""<div style="display:none;">
+<script>
+(function() {
+    let idleTimer;
+    const idleWait = 10 * 60 * 1000; // 10분
+
+    function resetIdleTimer() {
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(function() {
+            alert("10분 동안 활동이 없어 자동으로 로그아웃 됩니다.");
+            window.location.href = '/auth/logout';
+        }, idleWait);
+    }
+
+    window.onload = resetIdleTimer;
+    window.onmousemove = resetIdleTimer;
+    window.onmousedown = resetIdleTimer; 
+    window.ontouchstart = resetIdleTimer;
+    window.onclick = resetIdleTimer;
+    window.onkeydown = resetIdleTimer;   
+    window.addEventListener('scroll', resetIdleTimer, true);
+})();
+</script>
+</div>"""
+        app.markdown(idle_timeout_js, unsafe_allow_html=True)
+
+
         # 관리자 전용: 각 페이지 버튼 옆에 작은 새로고침 버튼 렌더링
         if is_admin:
             # 파이썬 반복문 내에서 콜백 함수 꼬임을 방지하기 위한 클로저 헬퍼

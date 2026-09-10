@@ -1085,6 +1085,15 @@ def _build_부서별_인당_영업이익_table(year: int, month: int) -> pd.Data
     df["연도"] = pd.to_numeric(df["연도"], errors='coerce').fillna(0).astype(int)
     df["월"] = pd.to_numeric(df["월"], errors='coerce').fillna(0).astype(int)
 
+    # --- 추가된 데이터 정제 및 중복 방어 로직 ---
+    for c in ["구분1", "구분2", "구분3"]:
+        if c in df.columns:
+            df[c] = df[c].fillna('').astype(str).str.strip()
+            
+    # 동일한 기준의 중복 데이터가 합산(Double Counting)되는 것을 방지
+    df = df.drop_duplicates(subset=["연도", "월", "구분1", "구분2", "구분3"], keep="last")
+    # --------------------------------------------
+
     pivot = df.pivot_table(
         index=["연도", "월", "구분1", "구분2"], columns="구분3", values="실적", aggfunc="sum", fill_value=0.0
     ).reset_index()
