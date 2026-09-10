@@ -513,7 +513,7 @@ def _build_손익차이_table(year, month):
     cost_vals    = [get_val('매출이익차이', '제품수불차이', '원가차이', g4) for g4 in g4_cols]
 
     supply_vals  = [q + p + c for q, p, c in zip(qty_vals, price_vals, cost_vals)]
-    etc_vals     = [get_val('매출이익차이', '기타차이',   '',     g4) for g4 in g4_cols]
+    etc_vals     = [get_val('매출이익차이', '기타차이',   '기타차이',     g4) for g4 in g4_cols]
 
     # 매출이익차이 = 제품수불차이 + 기타차이
     gross_vals   = [s + e for s, e in zip(supply_vals, etc_vals)] 

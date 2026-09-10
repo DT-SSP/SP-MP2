@@ -923,8 +923,8 @@ def _build_부서_메이커별_영업이익_table(year: int, month: int) -> pd.D
     if '값' in df.columns and '실적' not in df.columns:
         df = df.rename(columns={'값': '실적'})
     df["실적"] = df["실적"].apply(_to_number)
-    df["연도"] = df["연도"].astype(int)
-    df["월"] = df["월"].astype(int)
+    df["연도"] = pd.to_numeric(df["연도"], errors='coerce').fillna(0).astype(int)
+    df["월"] = pd.to_numeric(df["월"], errors='coerce').fillna(0).astype(int)
 
     mask = (df["연도"] == int(year)) & (df["월"] == int(month))
     df = df.loc[mask].copy()
@@ -998,8 +998,8 @@ def _build_부서_사업장_메이커별_영업이익_table(year: int, month: in
     if '값' in df.columns and '실적' not in df.columns:
         df = df.rename(columns={'값': '실적'})
     df["실적"] = df["실적"].apply(_to_number)
-    df["연도"] = df["연도"].astype(int)
-    df["월"] = df["월"].astype(int)
+    df["연도"] = pd.to_numeric(df["연도"], errors='coerce').fillna(0).astype(int)
+    df["월"] = pd.to_numeric(df["월"], errors='coerce').fillna(0).astype(int)
 
     mask = (df["연도"] == int(year)) & (df["월"] == int(month))
     df = df.loc[mask].copy()
@@ -1082,8 +1082,8 @@ def _build_부서별_인당_영업이익_table(year: int, month: int) -> pd.Data
     if '값' in df.columns and '실적' not in df.columns:
         df = df.rename(columns={'값': '실적'})
     df["실적"] = df["실적"].apply(_to_number)
-    df["연도"] = df["연도"].astype(int)
-    df["월"] = df["월"].astype(int)
+    df["연도"] = pd.to_numeric(df["연도"], errors='coerce').fillna(0).astype(int)
+    df["월"] = pd.to_numeric(df["월"], errors='coerce').fillna(0).astype(int)
 
     pivot = df.pivot_table(
         index=["연도", "월", "구분1", "구분2"], columns="구분3", values="실적", aggfunc="sum", fill_value=0.0
