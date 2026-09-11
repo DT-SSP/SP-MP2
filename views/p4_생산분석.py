@@ -399,7 +399,7 @@ def render_page(app, year_state, month_state):
                 _layout64('1) 부적합 발생내역 (포항)',
                           _부적합_표_to_html(rows, col_hdrs),
                           memo,
-                          unit='(단위 : 톤, %)'),
+                          unit='(단위 : 톤)'),
                 unsafe_allow_html=True,
             )
         app.If(lambda: True, _render_불량_포항)
@@ -441,7 +441,7 @@ def render_page(app, year_state, month_state):
                 _layout64('1) 부적합 발생내역 (충주)',
                           _부적합_표_to_html(combined_rows, col_hdrs),
                           memo,
-                          unit='(단위 : 톤, %)'),
+                          unit='(단위 : 톤)'),
                 unsafe_allow_html=True,
             )
             

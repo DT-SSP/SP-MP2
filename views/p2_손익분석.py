@@ -1968,18 +1968,27 @@ def render_page(app, year_state, month_state):
             except Exception as e:
                 app.markdown(f"<p style='color:#d32f2f;'>전월대비 손익차이 생성 중 오류: {e}</p>", unsafe_allow_html=True)
 
-            # 2) 수출 환율 차이
+            # 2) 외화매출 총액 기준 환율 영향
             try:
                 df_fx, prev_lab, curr_lab = _build_수출환율차이_table(year, month)
                 html_fx = _수출환율차이_to_html(df_fx, prev_lab, curr_lab)
+                
+                # html_fx (테이블 HTML) 하단에 회색 문구를 추가하여 레이아웃 렌더링 시 표 바로 밑에 붙도록 처리
+                html_fx += (
+                    '<p style="margin:5px 0 0 0; font-size:0.8em; color:gray; text-align:left;">'
+                    '※ 당월 외화공급가액 전체를 기준으로 산출'
+                    '</p>'
+                )
+                
                 memo_fx = _get_memo(Sheets.수출환율차이_메모, year, month)
                 
                 app.markdown(
-                    _layout100("2) 수출 환율 차이", html_fx, memo=memo_fx, unit="[단위: 톤, 천원, 천단위(외화)]"), 
+                    _layout100("2) 외화매출 총액 기준 환율 영향", html_fx, memo=memo_fx, unit="[단위: 톤, 천원, 천단위(외화)]"), 
                     unsafe_allow_html=True
                 )
+                
             except Exception as e:
-                app.markdown(f"<p style='color:#d32f2f;'>수출 환율 차이 생성 중 오류: {e}</p>", unsafe_allow_html=True)
+                app.markdown(f"<p style='color:#d32f2f;'>외화매출 총액 기준 환율 영향 생성 중 오류: {e}</p>", unsafe_allow_html=True)
 
             # 3) QD 실적 차이
             try:

@@ -472,8 +472,16 @@ def render_page(app, year_state, month_state):
                           unit='(단위 : 백만원)'),
                 unsafe_allow_html=True,
             )
+
+            app.markdown(
+                            '<p style="margin:4px 0 0 0; font-size:0.8em; color:gray; text-align:left;">'
+                            '※ 이자비용 : 결제기일 초과일 다음날부터 당월말까지의 누적 경과일을 기준으로 산정한 미회수 추정 금융비용(이자손실 효과)'
+                            '</p>',
+                            unsafe_allow_html=True,
+                        )
             
             app.markdown("<br><hr style='border-top: 1px solid #ddd;'><br>", unsafe_allow_html=True)
+
 
             # 2) 부서별 결제조건 초과채권 발생/수금 현황
             rows2, col_hdrs2 = _build_부서별_초과채권(year, month)
@@ -486,5 +494,12 @@ def render_page(app, year_state, month_state):
                           unit='(단위 : 백만원)'),
                 unsafe_allow_html=True,
             )
+
+            app.markdown(
+                            '<p style="margin:4px 0 0 0; font-size:0.8em; color:gray; text-align:left;">'
+                            '※ 이자비용(월) : 당월 발생한 결제조건 초과채권을 기준으로 산정한 월간 추정 금융비용(이자손실 효과)'
+                            '</p>',
+                            unsafe_allow_html=True,
+                        )
             
         app.If(lambda: True, _render_초과채권)
