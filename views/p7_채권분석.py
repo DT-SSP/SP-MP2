@@ -500,7 +500,7 @@ def render_page(app, year_state, month_state):
     
                 app.markdown(
                                 '<p style="margin:4px 0 0 0; font-size:0.8em; color:gray; text-align:left;">'
-                                '※ 이자비용(월) : 당월 발생한 결제조건 초과채권을 기준으로 산정한 월간 추정 금융비용(이자손실 효과)'
+                                '※ 이자비용(월) : 당월말 결제조건 초과채권을 기준으로 산정한 월간 추정 금융비용(이자손실 효과)'
                                 '</p>',
                                 unsafe_allow_html=True,
                             )
