@@ -745,13 +745,11 @@ def _build_재무상태표_table(year, month):
     name_map = {'자산': '자산총계', '부채': '부채총계', '자본': '자본총계'}
     df['구분1'] = df['구분1'].replace(name_map)
 
-    # 천진 사업장 제외
-    df = df[df['사업장'] != '천진']
-
     yr_전기, mo_전기 = year - 1, 12
     yr_전월, mo_전월 = _prev(year, month, 1)
 
-    db_corps    = _sort_corps(df['사업장'].unique().tolist(), 재무_CORP_ORDER)
+    # 천진은 개별 탭으로 만들지 않음 (데이터는 남겨두고 선재_중국/선재_전체 합산에 사용)
+    db_corps    = [c for c in _sort_corps(df['사업장'].unique().tolist(), 재무_CORP_ORDER) if c != '천진']
     
     # 탭 이름 매핑
     corp_labels = [재무_사업장_표시명.get(c, c) for c in db_corps]
@@ -802,8 +800,6 @@ def _build_재무상태표_table(year, month):
         행_순서_final.extend(totals + others)
 
     # ✅ 4. 총계 = 하위 구분 합산 (DB 총계값 미사용)
-    #    자산/부채/자본총계: 같은 구분1 아래 세부 항목 합산
-    #    부채 및 자본 총계: 부채총계 + 자본총계
     _하위 = {g: [d for gg, d in 행_순서_final if gg == g and d != g and d not in 소계행]
             for g in ('자산총계', '부채총계', '자본총계')}
 
@@ -815,8 +811,12 @@ def _build_재무상태표_table(year, month):
                     + 값_계(yr, mo, '자본총계', '자본총계', 장))
         return 값(yr, mo, g1, g2, 장)
 
-    # 선재(연결) 탭을 선재_국내 앞에 추가 — 사업장 전체 합산
-    tab_groups = [('선재_전체', db_corps)] + [(corp_disp, [db_corp]) for db_corp, corp_disp in zip(db_corps, corp_labels)]
+    # ✅ 5. 탭 구성: 선재_중국(남통) 탭과 선재_전체 탭에는 천진을 함께 합산
+    #    (천진 데이터가 없는 연도는 0으로 조회되어 자연스럽게 빠짐)
+    tab_groups = [('선재_전체', db_corps + ['천진'])] + [
+        (corp_disp, [db_corp, '천진'] if db_corp == '남통' else [db_corp])
+        for db_corp, corp_disp in zip(db_corps, corp_labels)
+    ]
 
     per_corp_dfs = {}
     for tab_label, target_corps in tab_groups:
@@ -844,7 +844,6 @@ def _build_재무상태표_table(year, month):
     corp_labels = ['선재_전체'] + corp_labels
 
     return per_corp_dfs, 소계행, 헤더행, corp_labels
-
 
 def _build_품목손익_별도_table(year, month):
     df = load_sheet(Sheets.품목손익_DB)
