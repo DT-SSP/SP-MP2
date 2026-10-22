@@ -392,11 +392,12 @@ def _build_수출환율차이_table(year: int, month: int):
     jpy_mask = body["구분"] == "JPY"
     body.loc[jpy_mask, prev_fx_col] *= 100
     body.loc[jpy_mask, curr_fx_col] *= 100
+    body.loc[jpy_mask, "영향금액"] /= 100
     # ----------------------------------------------------
 
     # 차이단가와 영향금액은 환율이 1000 곱해진 상태에서 계산됨
     body["차이단가"] = body[curr_fx_col] - body[prev_fx_col]
-    body["영향금액"] = body[curr_amt_col] * body["차이단가"] / 100
+    body["영향금액"] = body[curr_amt_col] * body["차이단가"]
 
     # 5) 총계 행
     sum_cols = [c for c in body.columns if c.endswith("_중량") or c.endswith("_외화공급가액") or c.endswith("_원화공급가액") or c == "영향금액"]
