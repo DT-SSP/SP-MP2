@@ -777,43 +777,43 @@ def _build_재무상태표_table(year, month):
     def 값(yr, mo, g1, g2, 장):
         return val_map.get((yr, mo, g1, g2, 장), 0.0)
 
-    # 자본총계의 '기타'는 DB 원본 값 대신 자본총계 - 자본금 - 이익잉여금으로 계산
-    def 자본총계_기타(yr, mo, 장):
-        총계     = 값(yr, mo, '자본총계', '자본총계', 장)
-        자본금   = 값(yr, mo, '자본총계', '자본금',   장)
-        이익잉여금 = 값(yr, mo, '자본총계', '이익잉여금', 장)
-        return 총계 - 자본금 - 이익잉여금
-
     columns = ['구분', '_depth'] + sub_labels
     소계행  = 재무_소계행
     헤더행  = set()
-    빈행    = {col: '' for col in columns}
 
-    _SUM = '__SUM__'
-    행_순서_aug, seen = [], set()
-    for g1, g2 in 행_순서:
-        key = (g1, g2)
-        행_순서_aug.append((g1, g2))
-
-    # ✅ 1. DB에 있는 원래 대분류 순서 파악
-    raw_g1_order = list(dict.fromkeys(t[0] for t in 행_순서_aug))
+    #1. DB에 있는 원래 대분류 순서 파악
+    raw_g1_order = list(dict.fromkeys(t[0] for t in 행_순서))
     
-    # ✅ 2. 요청하신 순서대로 대분류(구분1) 강제 정렬 지정
+    #2. 대분류(구분1) 지정
     target_g1 = ['자산총계', '부채총계', '자본총계', '부채 및 자본 총계']
     g1_order = [g for g in target_g1 if g in raw_g1_order] + [g for g in raw_g1_order if g not in target_g1]
 
     g1_groups: dict = {g: [] for g in g1_order}
-    for triple in 행_순서_aug:
-        if triple[0] in g1_groups:
-            g1_groups[triple[0]].append(triple)
+    for pair in 행_순서:
+        if pair[0] in g1_groups:
+            g1_groups[pair[0]].append(pair)
 
     행_순서_final: list = []
     for g1 in g1_order:
         group  = g1_groups[g1]
-        # ✅ 3. 총계(소계행)를 맨 위로 올리고 그 뒤에 세부 항목(others) 배치
+        # 3. 총계(소계행)를 맨 위로 올리고 그 뒤에 세부 항목(others) 배치
         totals = [t for t in group if (t[1] in 소계행 or t[0] == t[1])]
         others = [t for t in group if t not in totals]
         행_순서_final.extend(totals + others)
+
+    # ✅ 4. 총계 = 하위 구분 합산 (DB 총계값 미사용)
+    #    자산/부채/자본총계: 같은 구분1 아래 세부 항목 합산
+    #    부채 및 자본 총계: 부채총계 + 자본총계
+    _하위 = {g: [d for gg, d in 행_순서_final if gg == g and d != g and d not in 소계행]
+            for g in ('자산총계', '부채총계', '자본총계')}
+
+    def 값_계(yr, mo, g1, g2, 장):
+        if g1 == g2 and g1 in _하위:
+            return sum(값(yr, mo, g1, d, 장) for d in _하위[g1])
+        if g2 == '부채 및 자본 총계':
+            return (값_계(yr, mo, '부채총계', '부채총계', 장)
+                    + 값_계(yr, mo, '자본총계', '자본총계', 장))
+        return 값(yr, mo, g1, g2, 장)
 
     # 선재(연결) 탭을 선재_국내 앞에 추가 — 사업장 전체 합산
     tab_groups = [('선재_전체', db_corps)] + [(corp_disp, [db_corp]) for db_corp, corp_disp in zip(db_corps, corp_labels)]
@@ -823,20 +823,11 @@ def _build_재무상태표_table(year, month):
         rows = []
         for g1, g2 in 행_순서_final:
             label = g2
+            depth = 0 if (label in 소계행 or g1 == g2) else 1
 
-            if label in 소계행 or g1 == g2:
-                depth = 0
-            else:
-                depth = 1
-
-            if g1 == '자본총계' and g2 == '기타':
-                전기_v = sum(자본총계_기타(yr_전기, mo_전기, c) for c in target_corps)
-                전월_v = sum(자본총계_기타(yr_전월, mo_전월, c) for c in target_corps)
-                당월_v = sum(자본총계_기타(year,    month,   c) for c in target_corps)
-            else:
-                전기_v = sum(값(yr_전기, mo_전기, g1, g2, c) for c in target_corps)
-                전월_v = sum(값(yr_전월, mo_전월, g1, g2, c) for c in target_corps)
-                당월_v = sum(값(year,    month,   g1, g2, c) for c in target_corps)
+            전기_v = sum(값_계(yr_전기, mo_전기, g1, g2, c) for c in target_corps)
+            전월_v = sum(값_계(yr_전월, mo_전월, g1, g2, c) for c in target_corps)
+            당월_v = sum(값_계(year,    month,   g1, g2, c) for c in target_corps)
 
             rows.append({
                 '구분':        label,
