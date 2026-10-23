@@ -468,7 +468,7 @@ def _손익계산서_to_html_table(df):
     data_cols = [c for c in df.columns if c not in ('구분', '_depth', '_key', '구분1', '구분2', '구분3')]
 
     bold_labels = {"매출액", "변동비", "한계이익", "고정비", "영업이익", "경상이익", "경상이익_재경마감"}
-    pct_labels = {"DM%", "(이익율)"}
+    pct_labels = {"DM%", "(%)"}
     qty_labels = {"수량"}
 
     def fmt_num(v):
