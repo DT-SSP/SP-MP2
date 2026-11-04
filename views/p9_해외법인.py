@@ -580,19 +580,19 @@ def _build_태국대손상각비_table(year, month):
     rows = [
         {
             '구분': '회계기준',
-            c1: _fmt(v_prev_accum, decimal=0),
-            c2: _fmt(v_curr_plan, decimal=0),
-            c3: _fmt(v_prev_mo, decimal=0),
-            c4: _fmt(v_curr_mo, decimal=0),
-            c5: _fmt(v_curr_accum, decimal=0)
+            c1: _fmt(v_prev_accum, decimal=1),
+            c2: _fmt(v_curr_plan, decimal=1),
+            c3: _fmt(v_prev_mo, decimal=1),
+            c4: _fmt(v_curr_mo, decimal=1),
+            c5: _fmt(v_curr_accum, decimal=1)
         },
         {
             '구분': '경영보고',
-            c1: _fmt(v_prev_accum_mgmt, decimal=0),
-            c2: _fmt(v_curr_plan_mgmt, decimal=0),
-            c3: _fmt(v_prev_mo_mgmt, decimal=0),
-            c4: _fmt(v_curr_mo_mgmt, decimal=0),
-            c5: _fmt(v_curr_accum_mgmt, decimal=0)
+            c1: _fmt(v_prev_accum_mgmt, decimal=1),
+            c2: _fmt(v_curr_plan_mgmt, decimal=1),
+            c3: _fmt(v_prev_mo_mgmt, decimal=1),
+            c4: _fmt(v_curr_mo_mgmt, decimal=1),
+            c5: _fmt(v_curr_accum_mgmt, decimal=1)
         }
     ]
     
